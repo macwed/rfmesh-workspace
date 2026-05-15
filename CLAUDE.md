@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Quick reference for Claude Code working on rfmesh. The full agent rules are in @AGENTS.md — read that file in full at session start.
 
 ## Commands
 
@@ -19,72 +19,30 @@ uv run pytest -m hardware        # hardware-only tests (requires physical SDR)
 
 Paste `just verify` output into the conversation when declaring a ticket done.
 
-## Architecture
+## Architecture (one-paragraph orientation)
 
-rfmesh is a cooperative bearing mesh for RF emitter geolocation. Distributed nodes compute bearings locally and ship them to a fusion server, which cross-fixes them into emitter positions surfaced in ATAK.
+rfmesh is a cooperative bearing mesh for RF emitter geolocation. Distributed nodes compute bearings locally, ship them via contracts, fusion server cross-fixes positions. Star dependency graph: every workstream imports only from `rfmesh-contracts`. See @ARCHITECTURE.md §1 for binding architectural invariants and @INTERFACES.md for the semantic dictionary of contracts.
 
-**Three capability layers** (what a node does with its samples, not hardware tiers):
-- **L1** — RSSI sweep with a servo-rotated directional antenna → one `BearingReport`/sweep, 5–15° σ
-- **L2** — phase-coherent MUSIC/MVDR on a 2+ element array → 1–3° σ; same covariance matrix R enables null-steering (dual-use)
-- **L3** — edge ML emitter classification (CNN over STFT spectrograms) → label + confidence in [0,1]
+## Binding rules
 
-**Dependency graph is a star.** Every workstream imports from `rfmesh-contracts`. No workstream imports from any other. Three variability axes are each absorbed in exactly one place:
-- SDR hardware differences → absorbed in `rfmesh-sdr` behind the `Receiver`/`CoherentReceiver` Protocols
-- Per-node capability → absorbed in `rfmesh-node` at startup
-- Node count → absorbed in `rfmesh-fusion` (Stansfield weighted-LS, indifferent to N ≥ 2)
+The Five Invariants are defined in @AGENTS.md §1. They are absolute. Read them before doing anything.
 
-**`packages/rfmesh-contracts/`** is the single source of truth for every cross-workstream interface: Pydantic models (`BearingReport`, `FixEvent`, `NodeStatus`, configs), `typing.Protocol` classes, enums, `SCHEMA_VERSION`. It has no runtime logic, no I/O, and depends only on `pydantic` and `numpy`.
+## When to stop
 
-**Simulator-first development.** `SyntheticReceiver` implements `Receiver` Protocol with parameterised noise and multipath. All DSP, fusion, and node-runtime code runs end-to-end in pytest with no hardware. Hardware integration is a config-string swap, not a code change.
+Escalation conditions and the SCRATCHPAD protocol live in @AGENTS.md §6. When in doubt: stop and write a scratchpad note.
 
-## The Five Invariants (absolute — no ticket may override)
+## Working environment
 
-1. **Contracts are frozen.** `packages/rfmesh-contracts/src/**` is editable only by the lead, only via an accepted ADR, only paired with a `SCHEMA_VERSION` bump. If a contract change appears necessary: write `docs/adr/ADR-NNN-<short>.md` (status: PROPOSED), then **stop**.
+- Python 3.12, uv workspaces, ruff line-length 100, mypy strict
+- `extra="forbid"` on every Pydantic model
+- `tests/hardware/` and `@pytest.mark.hardware` are opt-in (never CI)
+- Each ticket runs in its own worktree under `worktree/ws-<x>/<ticket>/`
 
-2. **Inter-workstream communication is via contracts only.** Never import from a sibling workstream's package. If you want to, stop and raise a SCRATCHPAD note.
+## Key documents (read on cold start, in order)
 
-3. **Every new function in `rfmesh-dsp` has a golden-file test in `tests/golden/`.** No exceptions.
-
-4. **No silent fallbacks.** Failures raise; short buffers raise; uncalibrated coherent reads return `is_calibrated=False` and are rejected upstream; `BearingEstimator` that cannot produce a bearing returns `None`; YAML with a typo'd key is rejected at parse time (`extra="forbid"` on every Pydantic model).
-
-5. **`rfmesh-dsp` and `rfmesh-fusion` are pure.** No network calls, no file I/O (beyond loading vendor data tables at import), no subprocess, no SDR access. Both must run fully in pytest on a CI runner with no hardware.
-
-## Governance rules for agents
-
-- **Scope boundary:** software agents work on algorithms, data structures, tests, APIs, config handling, CI, and documentation of code. Do not touch physical hardware decisions, RF physics decisions already made, deployment logistics, or Maciej's operational choices.
-- **Adding a runtime dependency** (`uv add`) is forbidden without lead approval. Write a `/uvadd-request` in the workstream's scratchpad with name, version range, runtime vs dev, rationale, and which Invariants it does not threaten.
-- **`git push`** only to the workstream's own branch, never to `main`. Only the lead merges PRs to `main`.
-- **`git push --force`**, `--no-verify`, `git merge` to `main`, mass deletes: forbidden without explicit lead approval.
-- **Stop conditions for tickets:** produce the diff, paste `just verify` output, do not auto-commit or push. If a contract change appears necessary, write the ADR and stop.
-
-## Escalation — write a SCRATCHPAD and stop
-
-Write `.claude/scratchpad/<workstream>-<date>.md` and stop when:
-- A ticket appears to require a contract change (Invariant 1)
-- A ticket requires cross-workstream code changes (Invariant 2)
-- A physical/hardware assumption is missing or ambiguous
-- A new runtime dependency seems necessary
-- Acceptance criteria appear unreachable as stated
-- A bug surfaces in salvaged code not flagged in `SALVAGE_AUDIT.md` or `INHERITED_CONTEXT.md §5`
-- Any ticket instruction conflicts with `AGENTS.md`, `ARCHITECTURE.md`, or `INTERFACES.md`
-
-## Key documents (read in this order when joining cold)
-
-1. `ARCHITECTURE.md` — the *why*. Binding architectural invariants.
-2. `INTERFACES.md` — the *what*. Semantic dictionary of every contract type.
-3. `INHERITED_CONTEXT.md` — the *what we already learned* from the prior project.
-4. `WORKSTREAMS.md` — the *who*. Ownership and dependencies.
-5. `AGENTS.md` — the *how*. Full agent rules (this file summarises the most critical).
-6. `SALVAGE_AUDIT.md` — disposition of `github.com/macwed/rf-mesh` into this workspace.
-7. Per-workstream onboarding: `docs/bootstrap-A.md`, `docs/bootstrap-B.md`, `docs/bootstrap-CD.md`
-
-## Git worktree workflow
-
-Each active ticket runs in its own worktree under `worktree/ws-<name>/<ticket-short-name>/`. Claude Code instances open in their assigned worktree and never see each other's files. Rebase on `origin/main` once per working session.
-
-## Tool configuration
-
-- **Python 3.12**, strict mypy, ruff line-length 100, `target-version = "py312"`
-- `tests/hardware/` and `@pytest.mark.hardware` tests are opt-in; never run in CI
-- `extra="forbid"` on every Pydantic model — typo'd config keys are fatal at parse time
-- `SCHEMA_VERSION` in `packages/rfmesh-contracts/src/rfmesh_contracts/version.py` is pinned as `Literal[SCHEMA_VERSION]` in every message type — mypy catches drift across workstreams automatically
+1. @ARCHITECTURE.md — the *why*
+2. @AGENTS.md — agent behaviour (binding)
+3. @INTERFACES.md — contract semantics
+4. @INHERITED_CONTEXT.md — prior project lessons
+5. @WORKSTREAMS.md — ownership
+6. @SALVAGE_AUDIT.md — disposition of macwed/rf-mesh

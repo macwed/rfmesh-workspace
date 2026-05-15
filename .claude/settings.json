@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs cat)",
+      "Bash(uv sync *)",
+      "Bash(just verify *)",
+      "Bash(.venv/bin/lint-imports --show-timings)",
+      "Bash(.venv/bin/lint-imports *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git reset *)"
+    ]
+  },
+
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/block-forbidden-commands.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/protect-frozen-paths.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
