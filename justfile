@@ -21,6 +21,7 @@ verify: lint type test
 lint:
     uv run ruff check .
     uv run ruff format --check .
+    uv run lint-imports
 
 # Format in place (use before committing if `just lint` fails on formatting)
 fmt:
@@ -31,13 +32,16 @@ fmt:
 type:
     uv run mypy packages/
 
-# Tests — non-hardware by default
+# Tests — non-hardware by default.
+# Exit 5 (no tests collected) is treated as success during early scaffolding.
 test:
-    uv run pytest -m "not hardware"
+    #!/usr/bin/env bash
+    uv run pytest -m "not hardware"; r=$?; [ $r -eq 0 ] || [ $r -eq 5 ]
 
 # Tests with coverage report
 test-cov:
-    uv run pytest -m "not hardware" --cov --cov-report=term-missing
+    #!/usr/bin/env bash
+    uv run pytest -m "not hardware" --cov --cov-report=term-missing; r=$?; [ $r -eq 0 ] || [ $r -eq 5 ]
 
 # Hardware tests — only when SDR / servo is plugged in. Will fail in CI.
 test-hardware:

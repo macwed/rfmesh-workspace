@@ -21,12 +21,28 @@ requires-python = ">=3.12"
 # AND under [tool.uv.workspace] members.
 dependencies = [
     "rfmesh-contracts",
+    "rfmesh-sdr",
+    "rfmesh-servo",
+    "rfmesh-dsp",
+    "rfmesh-ml",
+    "rfmesh-fusion",
+    "rfmesh-cot",
+    "rfmesh-node",
+    "rfmesh-ops",
 ]
 
 [tool.uv.sources]
 # Each workspace member is sourced from its own subdirectory rather than
 # from a registry. Add a line per package as workstreams deliver them.
 rfmesh-contracts = { workspace = true }
+rfmesh-sdr      = { workspace = true }
+rfmesh-servo    = { workspace = true }
+rfmesh-dsp      = { workspace = true }
+rfmesh-ml       = { workspace = true }
+rfmesh-fusion   = { workspace = true }
+rfmesh-cot      = { workspace = true }
+rfmesh-node     = { workspace = true }
+rfmesh-ops      = { workspace = true }
 
 # The workspace root is a "virtual" project (no source of its own). Members
 # carry the real code. We list the contracts package explicitly above so
@@ -43,6 +59,7 @@ dev = [
     "hypothesis>=6",       # property-based tests in tests/property/
     "ruff>=0.6",
     "mypy>=1.11",
+    "import-linter>=2.11",
 ]
 
 # ----------------------------------------------------------------------------
@@ -114,3 +131,43 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "if __name__ == .__main__.:",
 ]
+
+[tool.importlinter]
+include_external_packages = true
+root_packages = [
+    "rfmesh_contracts",
+    "rfmesh_sdr",
+    "rfmesh_servo",
+    "rfmesh_dsp",
+    "rfmesh_ml",
+    "rfmesh_fusion",
+    "rfmesh_cot",
+    "rfmesh_node",
+    "rfmesh_ops",
+]
+
+[[tool.importlinter.contracts]]
+name = "Star dependency: nothing imports from siblings"
+type = "independence"
+modules = [
+    "rfmesh_sdr",
+    "rfmesh_servo",
+    "rfmesh_dsp",
+    "rfmesh_ml",
+    "rfmesh_fusion",
+    "rfmesh_cot",
+    "rfmesh_node",
+    "rfmesh_ops",
+]
+
+[[tool.importlinter.contracts]]
+name = "DSP is pure"
+type = "forbidden"
+source_modules = ["rfmesh_dsp"]
+forbidden_modules = ["requests", "httpx", "aiohttp", "socket", "subprocess"]
+
+[[tool.importlinter.contracts]]
+name = "Fusion is pure"
+type = "forbidden"
+source_modules = ["rfmesh_fusion"]
+forbidden_modules = ["requests", "httpx", "aiohttp", "socket", "subprocess"]
