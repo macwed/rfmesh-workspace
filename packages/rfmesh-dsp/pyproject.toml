@@ -1,0 +1,24 @@
+# rfmesh-dsp -- Workstream B: L1 RSSI bearing estimation and L2 MUSIC/MVDR subspace DF.
+#
+# Owned by Workstream B (Opus-B). Lead-only changes to this file.
+# Workstream agents: propose dependency additions via /uvadd-request (AGENTS.md §3).
+# Invariant 5: this package must be pure -- no network, no file I/O beyond vendor
+# data tables at import, no subprocess, no SDR access.
+# Invariant 3: every new function requires a golden-file test in tests/golden/.
+
+[project]
+name = "rfmesh-dsp"
+version = "0.1.0"
+description = "L1 RSSI bearing estimation and L2 MUSIC/MVDR subspace DF for rfmesh."
+requires-python = ">=3.12"
+dependencies = [
+    "rfmesh-contracts",
+    "numpy>=2.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rfmesh_dsp"]

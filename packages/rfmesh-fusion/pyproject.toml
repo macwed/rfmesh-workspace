@@ -1,0 +1,23 @@
+# rfmesh-fusion -- Workstream C+D: Stansfield WLS cross-fix, GDOP, and FixEvent publisher.
+#
+# Owned by Workstream C+D (Opus-CD). Lead-only changes to this file.
+# Workstream agents: propose dependency additions via /uvadd-request (AGENTS.md §3).
+# Invariant 5: this package must be pure -- no network, no file I/O, no subprocess,
+# no SDR access. Must run end-to-end in pytest with no hardware.
+
+[project]
+name = "rfmesh-fusion"
+version = "0.1.0"
+description = "Bearing cross-fix (Stansfield WLS + MLE), GDOP, and confidence-ellipse computation for rfmesh."
+requires-python = ">=3.12"
+dependencies = [
+    "rfmesh-contracts",
+    "numpy>=2.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rfmesh_fusion"]
