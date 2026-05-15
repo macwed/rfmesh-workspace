@@ -1,0 +1,116 @@
+# rfmesh — uv workspace root.
+#
+# This file makes the repository a uv workspace: one lockfile, one .venv,
+# many member packages each with their own pyproject.toml. See:
+# https://docs.astral.sh/uv/concepts/projects/workspaces/
+#
+# Adding a new workspace member: drop a new pyproject.toml under packages/
+# and (because the glob below covers packages/*) it is picked up automatically
+# on the next `uv sync`.
+#
+# Editing this file is a lead-only action. Workstream agents do not modify
+# the workspace root; they own only packages/<their-package>/ and below.
+
+[project]
+name = "rfmesh-workspace"
+version = "0.0.0"
+description = "rfmesh — cooperative bearing mesh for RF emitter geolocation (BoTH3 Counter-Jamming Challenge 2)."
+requires-python = ">=3.12"
+# Workspace root depends on its member packages so `uv sync` installs them
+# all editable into the shared .venv. New member packages are added here
+# AND under [tool.uv.workspace] members.
+dependencies = [
+    "rfmesh-contracts",
+]
+
+[tool.uv.sources]
+# Each workspace member is sourced from its own subdirectory rather than
+# from a registry. Add a line per package as workstreams deliver them.
+rfmesh-contracts = { workspace = true }
+
+# The workspace root is a "virtual" project (no source of its own). Members
+# carry the real code. We list the contracts package explicitly above so
+# `uv sync` resolves the editable install for everyone; the glob below
+# makes new workstream packages discoverable.
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+    "hypothesis>=6",       # property-based tests in tests/property/
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+# ----------------------------------------------------------------------------
+# Tool configuration is inherited workspace-wide — same gates everywhere is
+# part of the governance model (AGENTS.md §5: every package passes ruff +
+# mypy + pytest before declaring a ticket done).
+# ----------------------------------------------------------------------------
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = [
+    ".claude/worktrees",
+    "packages/*/vendor/",
+    "firmware/build/",
+]
+
+[tool.ruff.lint]
+# Conservative on day one. Workstreams may propose extending this set via
+# ADR; tightening here is fine, loosening is a lead-only decision.
+extend-select = [
+    "E", "F", "I", "N", "UP", "B", "RUF", "PL", "SIM",
+    "ANN",   # type annotations on public surface
+    "S",     # bandit security checks
+]
+ignore = [
+    "PLR0913",   # too many arguments — Pydantic models legitimately have many
+    "S101",      # assert in tests — pytest needs assert
+    "ANN401",    # Any in protocol return types when unavoidable
+]
+per-file-ignores = { "tests/**" = ["S", "ANN", "PLR2004"] }
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+disallow_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+exclude = ["packages/*/vendor/", "firmware/build/"]
+
+# Per-package overrides go in each package's own pyproject.toml when needed.
+
+[tool.pytest.ini_options]
+testpaths = ["packages", "tests"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+markers = [
+    "hardware: requires real SDR hardware (deselect with -m 'not hardware')",
+    "slow: takes >1s; deselect locally with -m 'not slow'",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["packages"]
+omit = [
+    "*/vendor/*",
+    "*/tests/*",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]

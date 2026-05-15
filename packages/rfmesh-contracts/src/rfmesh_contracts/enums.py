@@ -1,0 +1,160 @@
+"""Enumerations shared across every rfmesh workstream.
+
+Every enum here is a ``str`` enum so that it serializes to a human-readable
+token in YAML configs, JSON-over-the-wire messages, and CoT XML without any
+custom encoder. The string values are part of the frozen contract: renaming a
+value is a MAJOR version bump (see ``version.py``).
+
+Why enums and not bare strings: a bare string ``"l2_music"`` typo'd as
+``"l2_musci"`` in one workstream is a runtime mystery. ``Capability.L2_MUSIC``
+typo'd is an immediate ``AttributeError`` at import time in that workstream's
+own test run, before any integration. Cheap, local, early failure.
+"""
+
+from __future__ import annotations
+
+from enum import StrEnum
+
+
+class Capability(StrEnum):
+    """What a single mesh node can do with the hardware it has.
+
+    A node *declares* a set of capabilities in its ``NodeConfig`` (see
+    ``config.py``). At startup the node runtime intersects the declared set
+    with what the detected SDR + antenna array can physically support. A
+    mismatch is a *fatal* error with a clear message -- never a silent
+    downgrade. (See ``AGENTS.md`` -> Invariant 4: "No silent fallbacks.")
+
+    The three capability layers, as used in the pitch and the architecture:
+
+    * ``L1_RSSI`` -- amplitude-comparison direction finding. A directional
+      antenna (Yagi) on a servo sweeps in azimuth; the RSSI peak gives a
+      bearing. Works on *any* single-channel SDR. Coarse: ~5-15 deg per node.
+    * ``L2_MUSIC`` -- phase-coherent subspace direction finding (MUSIC
+      pseudospectrum) on a 2+ element antenna array. Requires a phase-coherent
+      multi-channel SDR (bladeRF 2.0 micro, ADALM-Pluto+). Fine: ~1-3 deg.
+    * ``L2_MVDR_NULL`` -- the dual-use sibling of ``L2_MUSIC``. The *same*
+      sample covariance matrix that MUSIC eigendecomposes for angle-of-arrival
+      can be inverted (MVDR / Capon) to synthesize a spatial null toward the
+      jammer, protecting own-receiver SNR. A node that can do ``L2_MUSIC`` can
+      usually also do ``L2_MVDR_NULL``; it is a separate capability because the
+      operator may want one without the other.
+    * ``L3_CLASSIFY`` -- edge ML emitter classification (STFT spectrogram into
+      a CNN/ResNet). Labels the emitter (ELRS, Crossfire, GSM jammer, ...).
+      Needs a compute node (Raspberry Pi class) but is SDR-agnostic.
+    """
+
+    L1_RSSI = "l1_rssi"
+    L2_MUSIC = "l2_music"
+    L2_MVDR_NULL = "l2_mvdr_null"
+    L3_CLASSIFY = "l3_classify"
+
+
+class EmitterClass(StrEnum):
+    """Emitter type label produced by the L3 classifier.
+
+    This is the *open, extensible threat library* that is the project's
+    competitive moat: commercial gear (e.g. RfPatrol Mk2) ships a closed
+    library; military systems (e.g. Bukovel-AD) keep theirs classified. Adding
+    a new member here is a MINOR version bump and must be paired with a threat
+    profile module under ``rfmesh-ml/threats/`` plus documentation in
+    ``docs/threat-library.md``.
+
+    ``UNKNOWN`` is mandatory and load-bearing: a classifier that has *not* seen
+    a signature before must say so, never guess. Downstream consumers (fusion,
+    CoT) treat ``UNKNOWN`` as "emitter present, type unconfirmed" and still
+    geolocate it -- detection does not depend on classification.
+
+    Members marked "(stub)" have a profile module that is a documented
+    placeholder pending real IQ capture; they exist in the contract so the
+    pipeline shape is stable, but the classifier will not emit them until the
+    profile is trained. See ``docs/threat-library.md`` for capture status.
+    """
+
+    UNKNOWN = "unknown"
+    #: ExpressLRS R/C control link (868/915 MHz or 2.4 GHz, LoRa-based FHSS).
+    ELRS = "elrs"
+    #: TBS Crossfire R/C control link (868/915 MHz, long-range FHSS).
+    CROSSFIRE = "crossfire"
+    #: GSM-band handset emission -- the analog of an IED command-detonation
+    #: phone. Distinctive in *context* (a lone uplink burst from a static,
+    #: non-infrastructure location), not in waveform.
+    GSM_JAMMER = "gsm_jammer"
+    #: Pole-21 GNSS jamming complex (stub -- profile pending real capture).
+    POLE21 = "pole21"
+    #: Volnorez vehicle-mounted counter-FPV jammer (stub -- profile pending).
+    VOLNOREZ = "volnorez"
+    #: DJI DroneID / OcuSync downlink beacon (Mavic-class platforms).
+    DRONEID = "droneid"
+
+
+class ConfidenceLevel(StrEnum):
+    """Coarse, human-facing confidence band for a fix or a classification.
+
+    This is *not* the quantitative uncertainty -- that lives in
+    ``FixEvent.covariance_m2`` / ``confidence_ellipse_95`` for geometry and in
+    ``BearingReport.classification_confidence`` (a 0..1 float) for the ML
+    label. ``ConfidenceLevel`` is the discretized version for display: an ATAK
+    marker colour, a one-word annotation on the ops dashboard. Keeping the
+    quantitative and the qualitative separate avoids the trap of an operator
+    reading "0.62" as if it were calibrated probability.
+
+    Mapping from quantitative evidence to band is the *fusion* workstream's
+    responsibility and is documented in ``INTERFACES.md`` under ``FixEvent``.
+    """
+
+    #: Geometry is strong (low GDOP, tight ellipse, residuals consistent) or
+    #: classification probability is high. Safe to action.
+    HIGH = "high"
+    #: Usable but caveated -- moderate GDOP, or a single redundant bearing, or
+    #: a mid-probability classification. Cue further collection.
+    MEDIUM = "medium"
+    #: Weak -- near-collinear geometry, an ellipse larger than the operational
+    #: tolerance, or a low-probability label. Report, but do not action alone.
+    LOW = "low"
+
+
+class ArrayGeometry(StrEnum):
+    """Physical layout of a phase-coherent antenna array on an L2 node.
+
+    The geometry determines the steering-vector / array-manifold model that
+    the L2 DSP code uses. It is declared per-node in ``ArrayConfig`` (see
+    ``config.py``); the DSP workstream keys its steering-vector construction
+    off this value and never hard-codes a layout.
+
+    * ``ULA`` -- uniform linear array. Two or more elements, equal spacing
+      along a line. Simplest manifold. Inherent front/back (mirror) ambiguity
+      about the array axis -- resolved by an extra element, a ground-plane /
+      reflector, a coarse L1 bearing from the same node, or platform motion.
+    * ``UCA`` -- uniform circular array. Elements equally spaced on a circle.
+      No front/back ambiguity, 360 deg unambiguous coverage; needs >=3
+      elements. This is the KrakenSDR-style layout.
+    * ``CUSTOM`` -- arbitrary element coordinates supplied explicitly in
+      ``ArrayConfig.element_positions_m``. Escape hatch for whatever hardware
+      the partner pool actually yields on-site.
+    """
+
+    ULA = "ula"
+    UCA = "uca"
+    CUSTOM = "custom"
+
+
+class BearerKind(StrEnum):
+    """Transport used to carry messages between a node and the fusion server.
+
+    Absorbed entirely inside the node-runtime workstream's transport layer;
+    DSP and fusion code never see this. Listed in the contract only because
+    ``NodeConfig`` must declare it.
+
+    * ``WIFI`` -- UDP + msgpack over Wi-Fi / Ethernet. Primary: high bandwidth,
+      low latency, carries optional debug payloads (raw pseudospectra).
+    * ``LORA`` -- compressed bearing reports over a LoRa link. Fallback for
+      EW-contested or long-baseline conditions: bandwidth is tiny, so only the
+      essential ``BearingReport`` fields are sent, debug payloads dropped.
+    * ``BOTH`` -- run both; fusion de-duplicates by ``(node_id, t_unix_ns)``.
+      Wi-Fi preferred when healthy, LoRa as hot standby.
+    """
+
+    WIFI = "wifi"
+    LORA = "lora"
+    BOTH = "both"
