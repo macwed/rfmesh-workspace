@@ -18,6 +18,9 @@ Fixtures:
 * ``snr_scenario_factory`` -- factory that builds a ``peak_test_scenario``
   variant at an arbitrary target SNR; used by the sigma-honesty Monte
   Carlo to sweep SNR in {10, 20, 30} dB.
+* ``golden_dir`` -- session-scoped path to the committed ``.npz`` golden
+  fixtures directory; consumed by array-manifold and array-covariance
+  tests (WS-B-002).
 """
 
 from __future__ import annotations
@@ -34,10 +37,11 @@ from rfmesh_sdr import (  # type: ignore[import-untyped, unused-ignore]
     SimulationScenario,
 )
 
-# Tests live in a package (tests/__init__.py) so pytest does not prepend the
-# tests directory to sys.path. Add it explicitly here so ``test_*.py`` files
-# can ``import golden_generator`` without per-file boilerplate.
-_TESTS_DIR = Path(__file__).parent
+# Per workspace convention (ADR-006: no __init__.py under tests/), pytest's
+# rootdir-based discovery handles test collection; this conftest.py is loaded
+# before any test module. Add the tests dir to sys.path so ``test_*.py``
+# files can ``import golden_generator`` without per-file boilerplate.
+_TESTS_DIR = Path(__file__).resolve().parent
 if str(_TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(_TESTS_DIR))
 
@@ -120,3 +124,9 @@ def flat_scenario() -> SimulationScenario:
 def snr_scenario_factory() -> Callable[[float], SimulationScenario]:
     """Factory: ``snr_scenario_factory(snr_db)`` -> ``SimulationScenario``."""
     return _build_peak_scenario
+
+
+@pytest.fixture(scope="session")
+def golden_dir() -> Path:
+    """Absolute path to the directory holding committed golden ``.npz`` fixtures."""
+    return _TESTS_DIR / "golden"

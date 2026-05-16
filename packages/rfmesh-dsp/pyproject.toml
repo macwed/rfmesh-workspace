@@ -17,6 +17,18 @@ dependencies = [
     "scipy>=1.14",
 ]
 
+# Test-only dependency on rfmesh-sdr (WS-B-002): the simulator convention
+# cross-check imports `rfmesh_sdr.ArraySpec` to compare phases byte-for-byte
+# against this package's `steering_vector`. Package source code must NEVER
+# import rfmesh_sdr (Invariants 2 and 5); the dependency lives in this group
+# so the requirement is captured in metadata even though tests are outside
+# the importable package and pick rfmesh-sdr up transitively from the
+# workspace venv at the moment.
+[dependency-groups]
+test = [
+    "rfmesh-sdr",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

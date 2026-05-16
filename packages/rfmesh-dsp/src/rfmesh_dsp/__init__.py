@@ -7,6 +7,7 @@ have a golden-file test in ``tests/golden/`` (Invariant 3).
 
 from __future__ import annotations
 
+<<<<<<< HEAD
 from rfmesh_dsp.l1 import L1AmplitudeSweepEstimator
 from rfmesh_dsp.rssi import (
     ClippingReport,
@@ -35,4 +36,14 @@ __all__ = [
     "compute_spectrogram",
     "detect_clipping",
     "find_spectral_peak",
+=======
+from .array_covariance import forward_backward_smooth, sample_covariance
+from .array_manifold import steering_matrix, steering_vector
+
+__all__ = [
+    "forward_backward_smooth",
+    "sample_covariance",
+    "steering_matrix",
+    "steering_vector",
+>>>>>>> 9ee2580 (WS-B-002: array manifold + sample covariance + FB smoothing)
 ]
