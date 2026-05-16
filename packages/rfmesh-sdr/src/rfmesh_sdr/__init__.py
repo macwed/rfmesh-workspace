@@ -14,8 +14,10 @@ from __future__ import annotations
 from .exceptions import (
     CalibrationFailedError,
     InvalidReadSizeError,
+    MalformedIQFileError,
     ReceiverNotOpenError,
 )
+from .io import IQMetadata, IQReader, IQRecorder
 from .simulator import (
     AntennaPattern,
     ArraySpec,
@@ -38,7 +40,11 @@ __all__ = [
     "ChannelModel",
     "EmitterSpec",
     "FreeSpaceChannel",
+    "IQMetadata",
+    "IQReader",
+    "IQRecorder",
     "InvalidReadSizeError",
+    "MalformedIQFileError",
     "ReceiverNotOpenError",
     "SimulationScenario",
     "SyntheticReceiver",

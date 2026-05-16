@@ -38,3 +38,23 @@ class CalibrationFailedError(RuntimeError):
     proceeding with an unusable calibration. ``is_calibrated`` remains
     ``False`` after this is raised -- there is no partial-success state.
     """
+
+
+class MalformedIQFileError(ValueError):
+    """Raised when an on-disk ``.iq`` capture cannot be interpreted as uint8 IQ.
+
+    Concrete failure modes the I/O layer surfaces through this exception:
+
+    * Odd byte count -- the rtl_sdr-style format is two bytes per sample
+      (I + Q), so an odd file length cannot be a clean capture.
+    * Payload size disagrees with the sidecar's ``n_samples`` -- the
+      capture was truncated mid-write (disk full / process killed) or
+      the sidecar was authored against a different file.
+    * Sidecar JSON exists but is unparseable / has the wrong
+      ``schema_version`` / fails Pydantic validation.
+
+    Reading from a missing path raises ``FileNotFoundError`` directly --
+    that is the stdlib idiom and any user already handles it. This
+    exception covers the case where the file *exists* but its bytes do
+    not honour the format contract.
+    """
