@@ -12,8 +12,12 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import pytest
+from rfmesh_contracts.enums import Capability  # type: ignore[import-untyped, unused-ignore]
 from rfmesh_contracts.geospatial import (  # type: ignore[import-untyped, unused-ignore]
     GeodeticPosition,
+)
+from rfmesh_contracts.messages import (  # type: ignore[import-untyped, unused-ignore]
+    BearingReport,
 )
 
 # Type alias for the ``make_position`` fixture's return type. ``Callable[..., T]``
@@ -21,6 +25,13 @@ from rfmesh_contracts.geospatial import (  # type: ignore[import-untyped, unused
 # ``make_position(52.0, 21.0)`` positionally and sometimes pass
 # ``hae_m=..`` / ``sigma_m=..`` by name; the runtime closure handles both.
 MakePosition = Callable[..., GeodeticPosition]
+MakeBearing = Callable[..., BearingReport]
+
+# A plausible UTC nanosecond timestamp -- 2026-05-14T00:00:00Z, integer
+# ns since the Unix epoch. ``BearingReport.t_unix_ns`` requires ``> 0``;
+# this constant satisfies the validator while not implying anything
+# operational. Tests that care about ordering set their own values.
+_DEFAULT_T_UNIX_NS: int = 1_778_976_000_000_000_000
 
 
 @pytest.fixture
@@ -60,3 +71,57 @@ def origin(make_position: MakePosition) -> GeodeticPosition:
     later on share one geodetic anchor.
     """
     return make_position(52.0, 21.0)
+
+
+@pytest.fixture
+def make_bearing(make_position: MakePosition) -> MakeBearing:
+    """Return a factory that builds ``BearingReport`` instances.
+
+    Defaults cover every contract-validated field of
+    ``BearingReport`` so a test that cares about geometry can write::
+
+        make_bearing(azimuth_deg=90.0, sigma_deg=1.0, node_position=...)
+
+    and not have to repeat ``node_id`` / ``t_unix_ns`` / ``method`` /
+    etc. on every call. Every keyword on the underlying model is
+    overridable; the factory passes them through verbatim.
+
+    Defaults:
+
+    * ``node_id`` -- ``"test-node"`` (min length 1).
+    * ``t_unix_ns`` -- a fixed plausible 2026 timestamp.
+    * ``node_position`` -- the canonical ENU origin (52 N, 21 E) at
+      ``sigma_m = 5`` to match a smartphone GNSS survey.
+    * ``azimuth_deg`` -- ``0.0`` (due north).
+    * ``sigma_deg`` -- ``1.0`` deg (a representative L2 sigma).
+    * ``method`` -- ``Capability.L2_MUSIC``.
+
+    The factory takes ``sigma_deg`` as a positional-friendly alias for
+    ``azimuth_sigma_deg`` because the latter is awkward at call sites.
+    Optional fields (``snr_db``, ``emitter_class``,
+    ``classification_confidence``, ``raw_pseudospectrum``) default to
+    ``None`` as the contract specifies.
+    """
+    default_position = make_position(52.0, 21.0, sigma_m=5.0)
+
+    def _factory(
+        *,
+        azimuth_deg: float = 0.0,
+        sigma_deg: float = 1.0,
+        node_position: GeodeticPosition | None = None,
+        node_id: str = "test-node",
+        t_unix_ns: int = _DEFAULT_T_UNIX_NS,
+        method: Capability = Capability.L2_MUSIC,
+        snr_db: float | None = None,
+    ) -> BearingReport:
+        return BearingReport(
+            node_id=node_id,
+            t_unix_ns=t_unix_ns,
+            node_position=node_position if node_position is not None else default_position,
+            azimuth_deg=azimuth_deg,
+            azimuth_sigma_deg=sigma_deg,
+            method=method,
+            snr_db=snr_db,
+        )
+
+    return _factory
