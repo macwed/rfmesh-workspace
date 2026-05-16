@@ -141,6 +141,25 @@ escalated.
 
 ---
 
+## §3.5 Repo conventions
+
+Workspace-wide conventions that apply across every package. These exist
+because uniformity prevents subtle cross-workstream conflicts (mypy
+duplicate-module errors, pytest collection clashes) that are expensive to
+debug after the fact. Decided by the lead via ADR.
+
+- **No `__init__.py` under any `tests/` directory.** Test directories are
+  *not* importable packages — pytest discovers tests by file name, not by
+  module import. Adding `__init__.py` makes `tests/` a package, which
+  collides across workstreams whenever two packages have a file with the
+  same name (e.g. `packages/rfmesh-sdr/tests/test_foo.py` and
+  `packages/rfmesh-dsp/tests/test_foo.py`). Standard pytest practice, and
+  the convention the prior repo `macwed/rf-mesh` followed. See ADR-006.
+- Workstreams **may** create `tests/conftest.py` for shared fixtures
+  within their own test tree; that file is not a package marker.
+
+---
+
 ## §4 Ticket format
 
 Tickets are the unit of work the developer pastes into Claude Code. Opus
