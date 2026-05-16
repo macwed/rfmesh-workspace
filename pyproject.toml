@@ -106,7 +106,11 @@ warn_return_any = true
 # soon as two packages add tests/__init__.py). See WS-CD-001b.
 explicit_package_bases = true
 namespace_packages = true
-exclude = ["packages/*/vendor/", "firmware/build/"]
+exclude = [
+    "packages/[^/]+/vendor/",
+    "firmware/build/",
+    "packages/[^/]+/tests/",
+]
 
 # Per-package overrides go in each package's own pyproject.toml when needed.
 
