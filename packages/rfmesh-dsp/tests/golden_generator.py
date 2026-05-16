@@ -33,6 +33,13 @@ WS-B-002 fixtures (array manifold + covariance):
   deterministic ``(4, 1024) complex64`` block generated from a known
   ``default_rng(20260514)`` seed.
 
+WS-B-003 fixtures (L2 MUSIC estimator):
+
+* ``l2_music_pseudospectrum_137deg_uca4_20db.npz`` -- the (720,) MUSIC
+  pseudospectrum P(theta) for the canonical UCA-4 scenario at seed=42.
+* ``l2_music_sigma_table.npz`` -- for SNR in {10, 20, 30} dB, the median
+  claimed sigma over 200 trials with ``receiver.reseed(i)`` per trial.
+
 Each ``.npz`` snapshots the inputs *alongside* the outputs so a future
 divergence can be triaged without re-deriving the geometry from scratch.
 """
@@ -44,10 +51,11 @@ from pathlib import Path
 
 import numpy as np
 from rfmesh_contracts import (  # type: ignore[import-untyped, unused-ignore]
+    ArrayConfig,
     ArrayGeometry,
     GeodeticPosition,
 )
-from rfmesh_dsp import L1AmplitudeSweepEstimator, compute_rssi_dbfs
+from rfmesh_dsp import L1AmplitudeSweepEstimator, L2MusicEstimator, compute_rssi_dbfs
 from rfmesh_dsp.array_covariance import sample_covariance
 from rfmesh_dsp.array_manifold import steering_matrix
 from rfmesh_sdr import (  # type: ignore[import-untyped, unused-ignore]
@@ -89,6 +97,16 @@ _UCA_N = 6
 _COV_N_CHANNELS = 4
 _COV_N_SAMPLES = 1024
 _COV_SEED = 20260514
+
+# --- WS-B-003 (L2 MUSIC) constants ------------------------------------------
+_L2_UCA_N = 4
+_L2_UCA_RADIUS_OVER_LAMBDA = 0.25
+_L2_UCA_RADIUS_M = _L2_UCA_RADIUS_OVER_LAMBDA * _REFERENCE_WAVELENGTH_M
+_L2_COHERENT_BLOCK_SAMPLES = 4096
+_L2_GOLDEN_PSEUDO_SEED = 42
+_L2_GOLDEN_PSEUDO_SNR_DB = 20.0
+_L2_SIGMA_TABLE_SNRS_DB: tuple[float, ...] = (10.0, 20.0, 30.0)
+_L2_SIGMA_TABLE_TRIALS = 200
 
 
 # --- WS-B-001 generators ----------------------------------------------------
@@ -241,6 +259,93 @@ def generate_covariance_golden() -> Path:
     return out
 
 
+# --- WS-B-003 generators ----------------------------------------------------
+
+
+def _l2_uca_array_config() -> ArrayConfig:
+    """The canonical UCA-4 ``ArrayConfig`` matching the conftest scenario."""
+    return ArrayConfig(  # type: ignore[no-any-return, unused-ignore]
+        geometry=ArrayGeometry.UCA,
+        n_elements=_L2_UCA_N,
+        element_spacing_m=_L2_UCA_RADIUS_M,
+    )
+
+
+def _build_l2_estimator(receiver: SyntheticReceiver) -> L2MusicEstimator:
+    """Build the canonical L2 estimator bound to ``receiver``."""
+    return L2MusicEstimator(
+        node_id=_NODE_ID,
+        node_position=_NODE_POSITION,
+        receiver=receiver,
+        array_config=_l2_uca_array_config(),
+        operating_frequency_hz=_REFERENCE_FREQ_HZ,
+    )
+
+
+def claim_l2_sigma_one_trial(scenario: SimulationScenario, seed: int) -> float | None:
+    """One coherent capture + MUSIC bearing; return claimed sigma or ``None``.
+
+    Mirrors L1's ``claim_sigma_one_trial`` but on the L2 path: open the
+    receiver once, calibrate once, reseed (no re-calibrate) per trial,
+    one ``read_coherent`` + ``estimate`` per trial.
+    """
+    receiver = SyntheticReceiver(scenario, seed=seed)
+    receiver.open()
+    receiver.calibrate()
+    estimator = _build_l2_estimator(receiver)
+    estimator.set_timestamp(_T_UNIX_NS)
+    block = receiver.read_coherent(_L2_COHERENT_BLOCK_SAMPLES)
+    report = estimator.estimate(block)
+    receiver.close()
+    if report is None:
+        return None
+    return float(report.azimuth_sigma_deg)
+
+
+def generate_l2_pseudospectrum_golden() -> Path:
+    """Generate the canonical 137 deg / UCA-4 / 20 dB MUSIC pseudospectrum."""
+    scenario = conftest._build_l2_uca_scenario(_L2_GOLDEN_PSEUDO_SNR_DB)
+    receiver = SyntheticReceiver(scenario, seed=_L2_GOLDEN_PSEUDO_SEED)
+    receiver.open()
+    receiver.calibrate()
+    estimator = _build_l2_estimator(receiver)
+    block = receiver.read_coherent(_L2_COHERENT_BLOCK_SAMPLES)
+    pseudo = estimator.pseudospectrum(block)
+    receiver.close()
+
+    _GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
+    out = _GOLDEN_DIR / "l2_music_pseudospectrum_137deg_uca4_20db.npz"
+    np.savez(
+        out,
+        pseudospectrum=pseudo,
+        snr_db=np.float64(_L2_GOLDEN_PSEUDO_SNR_DB),
+        seed=np.int64(_L2_GOLDEN_PSEUDO_SEED),
+        n_elements=np.int64(_L2_UCA_N),
+        radius_m=np.float64(_L2_UCA_RADIUS_M),
+        wavelength_m=np.float64(_REFERENCE_WAVELENGTH_M),
+        n_samples=np.int64(_L2_COHERENT_BLOCK_SAMPLES),
+    )
+    return out
+
+
+def generate_l2_sigma_table_golden() -> Path:
+    """Generate the (SNR, median claimed sigma) golden table for L2 MUSIC."""
+    snrs = np.array(_L2_SIGMA_TABLE_SNRS_DB, dtype=np.float64)
+    median_sigmas = np.empty(snrs.size, dtype=np.float64)
+    for i, snr_db in enumerate(snrs):
+        scenario = conftest._build_l2_uca_scenario(float(snr_db))
+        sigmas: list[float] = []
+        for trial in range(_L2_SIGMA_TABLE_TRIALS):
+            sigma = claim_l2_sigma_one_trial(scenario, seed=trial)
+            if sigma is not None:
+                sigmas.append(sigma)
+        median_sigmas[i] = float(np.median(sigmas)) if sigmas else float("nan")
+    _GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
+    out = _GOLDEN_DIR / "l2_music_sigma_table.npz"
+    np.savez(out, snr_db=snrs, median_claimed_sigma_deg=median_sigmas)
+    return out
+
+
 def main() -> None:
     paths = [
         generate_sweep_golden(),
@@ -248,6 +353,8 @@ def main() -> None:
         generate_manifold_ula_golden(),
         generate_manifold_uca_golden(),
         generate_covariance_golden(),
+        generate_l2_pseudospectrum_golden(),
+        generate_l2_sigma_table_golden(),
     ]
     for p in paths:
         print(f"wrote {p}")
