@@ -301,11 +301,16 @@ class SyntheticReceiver:
         freq_offset_hz = emitter.frequency_hz - scn.center_freq_hz
         phase = math.tau * freq_offset_hz * t + math.radians(emitter.phase_deg)
         base = tx_amplitude * math.sqrt(gain_linear) * np.exp(1j * phase)
+        # Stochastic channels (LogNormalShadowing, future fading) consume
+        # from a dedicated stream so they cannot perturb the main noise
+        # stream's RNG state. Deterministic channels (FreeSpace, TwoRay,
+        # MultipathFIR) accept and ignore the Generator, so for a
+        # WS-A-001/002 scenario this is invisible.
         propagated: np.ndarray = scn.channel.apply(
             base,
             emitter.range_m,
             emitter.frequency_hz,
-            self._rng.noise,
+            self._rng.shadowing,
         )
         return propagated.astype(np.complex128)
 
@@ -321,7 +326,12 @@ class SyntheticReceiver:
         for emitter_index in range(len(scn.emitters)):
             signal += self._emitter_baseband(emitter_index, n_samples)
         noise = complex_awgn(self._rng.noise, n_samples, scn.noise_floor_dbfs)
-        out: np.ndarray = (signal + noise).astype(np.complex64)
+        # Receiver impairments (IQ imbalance, DC offset, ADC quantization)
+        # operate on the post-AWGN accumulator. The default Identity returns
+        # the buffer unchanged so a WS-A-001 scenario produces byte-identical
+        # IQ to before this ticket (test_default_scenario_unchanged).
+        impaired = scn.receiver_impairments.apply(signal + noise, self._rng.receiver_impairments)
+        out: np.ndarray = impaired.astype(np.complex64)
         return out
 
 
@@ -554,5 +564,12 @@ class _CoherentSyntheticReceiver(SyntheticReceiver):
             per_channel += (per_channel_gain * steering_vec)[:, np.newaxis] * base[np.newaxis, :]
 
         adc_noise = complex_awgn_2d(self._rng.noise, n_channels, n_samples, scn.noise_floor_dbfs)
-        out: np.ndarray = (per_channel + adc_noise).astype(np.complex64)
+        # Receiver impairments apply *after* AWGN, across all channels
+        # uniformly (IQ imbalance / DC offset / ADC quantization live on
+        # the I/Q baseband common to every channel). Identity default
+        # preserves WS-A-002 byte-equality.
+        impaired = scn.receiver_impairments.apply(
+            per_channel + adc_noise, self._rng.receiver_impairments
+        )
+        out: np.ndarray = impaired.astype(np.complex64)
         return out
