@@ -681,11 +681,6 @@ test = [
     { name = "rfmesh-sdr" },
 ]
 
-[package.dev-dependencies]
-test = [
-    { name = "rfmesh-sdr" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=2.1" },

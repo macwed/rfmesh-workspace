@@ -35,12 +35,3 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rfmesh_dsp"]
-
-# Test-only dependencies. ``rfmesh_sdr`` is consumed by the simulator-driven
-# tests (peak_test_scenario, sigma-honesty Monte Carlo, golden-file
-# generator) and never by src/. The independence import-linter contract
-# enforces that no module under ``rfmesh_dsp`` imports ``rfmesh_sdr``.
-[dependency-groups]
-test = [
-    "rfmesh-sdr",
-]
