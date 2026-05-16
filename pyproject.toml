@@ -100,6 +100,12 @@ disallow_untyped_defs = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 warn_return_any = true
+# Each package owns its own src/ and tests/ roots; the two flags below stop
+# mypy from collapsing every package's tests/ directory into one shared
+# "tests" module (which would fail with a duplicate-module-name error as
+# soon as two packages add tests/__init__.py). See WS-CD-001b.
+explicit_package_bases = true
+namespace_packages = true
 exclude = ["packages/*/vendor/", "firmware/build/"]
 
 # Per-package overrides go in each package's own pyproject.toml when needed.
