@@ -52,7 +52,12 @@ from rfmesh_sdr import (
     AntennaPattern,
     ArraySpec,
     ChannelImpairments,
+    CompositeChannel,
     EmitterSpec,
+    FreeSpaceChannel,
+    IQImbalance,
+    LogNormalShadowing,
+    MultipathFIRChannel,
     SimulationScenario,
 )
 
@@ -351,4 +356,110 @@ def low_snr_calibration_ula_scenario() -> SimulationScenario:
         noise_floor_dbfs=_NOISE_FLOOR_DBFS,
         array=array,
         calibration_reference_snr_db=-3.0,
+    )
+
+
+# ---------------------------------------------------------------------------
+# WS-A-003 channel and receiver-impairment scenarios
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def multipath_scenario() -> SimulationScenario:
+    """``default_scenario`` propagation with a two-tap multipath layered on free-space.
+
+    The single emitter sits at boresight, 1 km, 915 MHz; the channel is
+    ``CompositeChannel(FreeSpaceChannel, MultipathFIRChannel)`` with the
+    second tap at ``0.7 * exp(j*pi/3)`` 50 samples deep.
+    """
+    tx_power_db = _tx_power_db_for_snr(
+        target_snr_db=_TARGET_SNR_DB_AT_BORESIGHT,
+        distance_m=_DEFAULT_RANGE_M,
+        frequency_hz=_CENTER_FREQ_HZ,
+        noise_floor_dbfs=_NOISE_FLOOR_DBFS,
+    )
+    taps = np.array([1.0 + 0j, 0.7 * np.exp(1j * np.pi / 3.0)], dtype=np.complex128)
+    delays = np.array([0, 50], dtype=np.int64)
+    channel = CompositeChannel(
+        channels=(FreeSpaceChannel(), MultipathFIRChannel(taps=taps, delays=delays)),
+    )
+    return SimulationScenario(
+        emitters=(
+            EmitterSpec(
+                azimuth_deg=0.0,
+                range_m=_DEFAULT_RANGE_M,
+                frequency_hz=_CENTER_FREQ_HZ,
+                tx_power_db=tx_power_db,
+            ),
+        ),
+        antenna=AntennaPattern(hpbw_deg=_HPBW_DEG),
+        sample_rate_hz=_SAMPLE_RATE_HZ,
+        center_freq_hz=_CENTER_FREQ_HZ,
+        noise_floor_dbfs=_NOISE_FLOOR_DBFS,
+        channel=channel,
+    )
+
+
+@pytest.fixture
+def shadowing_scenario() -> SimulationScenario:
+    """``default_scenario`` propagation with ``LogNormalShadowing(sigma_db=4.0)``.
+
+    Composed atop free-space so reseeding the receiver draws fresh fades
+    while preserving the deterministic Friis geometry.
+    """
+    tx_power_db = _tx_power_db_for_snr(
+        target_snr_db=_TARGET_SNR_DB_AT_BORESIGHT,
+        distance_m=_DEFAULT_RANGE_M,
+        frequency_hz=_CENTER_FREQ_HZ,
+        noise_floor_dbfs=_NOISE_FLOOR_DBFS,
+    )
+    channel = CompositeChannel(
+        channels=(FreeSpaceChannel(), LogNormalShadowing(sigma_db=4.0)),
+    )
+    return SimulationScenario(
+        emitters=(
+            EmitterSpec(
+                azimuth_deg=0.0,
+                range_m=_DEFAULT_RANGE_M,
+                frequency_hz=_CENTER_FREQ_HZ,
+                tx_power_db=tx_power_db,
+            ),
+        ),
+        antenna=AntennaPattern(hpbw_deg=_HPBW_DEG),
+        sample_rate_hz=_SAMPLE_RATE_HZ,
+        center_freq_hz=_CENTER_FREQ_HZ,
+        noise_floor_dbfs=_NOISE_FLOOR_DBFS,
+        channel=channel,
+    )
+
+
+@pytest.fixture
+def iq_imbalance_scenario() -> SimulationScenario:
+    """``default_scenario`` with a 0.5 dB / 3 deg ``IQImbalance`` impairment.
+
+    The single emitter is offset 200 kHz from the centre frequency so the
+    image tone at -200 kHz lands well clear of DC -- the IRR is measurable
+    on the FFT in a single block.
+    """
+    f_emitter_hz = _CENTER_FREQ_HZ + 200_000.0
+    tx_power_db = _tx_power_db_for_snr(
+        target_snr_db=60.0,
+        distance_m=_DEFAULT_RANGE_M,
+        frequency_hz=f_emitter_hz,
+        noise_floor_dbfs=_NOISE_FLOOR_DBFS,
+    )
+    return SimulationScenario(
+        emitters=(
+            EmitterSpec(
+                azimuth_deg=0.0,
+                range_m=_DEFAULT_RANGE_M,
+                frequency_hz=f_emitter_hz,
+                tx_power_db=tx_power_db,
+            ),
+        ),
+        antenna=AntennaPattern(hpbw_deg=_HPBW_DEG),
+        sample_rate_hz=_SAMPLE_RATE_HZ,
+        center_freq_hz=_CENTER_FREQ_HZ,
+        noise_floor_dbfs=_NOISE_FLOOR_DBFS,
+        receiver_impairments=IQImbalance(amplitude_db=0.5, phase_deg=3.0),
     )

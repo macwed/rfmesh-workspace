@@ -22,12 +22,21 @@ from .antenna import AntennaPattern
 from .array import ArraySpec
 from .channel import ChannelModel, FreeSpaceChannel
 from .emitter import EmitterSpec
-from .impairments import ChannelImpairments
+from .impairments import (
+    ChannelImpairments,
+    IdentityReceiverImpairments,
+    ReceiverImpairments,
+)
 
 
 def _default_channel() -> ChannelModel:
     """Construct the default ``FreeSpaceChannel`` for the dataclass factory."""
     return FreeSpaceChannel()
+
+
+def _default_receiver_impairments() -> ReceiverImpairments:
+    """Construct the default no-op ``IdentityReceiverImpairments`` factory."""
+    return IdentityReceiverImpairments()
 
 
 @dataclass(frozen=True)
@@ -49,6 +58,17 @@ class SimulationScenario:
     * ``calibration_reference_snr_db`` -- the SNR of the simulated noise-source
       reference used during ``calibrate()``. Default 30 dB; reducing it below
       the per-channel ADC noise floor causes calibration to fail.
+
+    Channel and receiver impairment fields (WS-A-003):
+
+    * ``channel`` -- the propagation channel model (``FreeSpaceChannel`` by
+      default, swappable for ``TwoRayGroundChannel``, ``MultipathFIRChannel``,
+      ``LogNormalShadowing``, or a ``CompositeChannel`` chaining several).
+      Applied per emitter *before* steering / AWGN.
+    * ``receiver_impairments`` -- analog/ADC-stage effects applied to the
+      summed accumulator *after* AWGN. Defaults to ``IdentityReceiverImpairments``
+      so a WS-A-001/002 scenario produces byte-identical IQ to before this
+      ticket (the backward-compat regression anchor, ``test_default_scenario_unchanged``).
     """
 
     emitters: tuple[EmitterSpec, ...]
@@ -60,6 +80,7 @@ class SimulationScenario:
     array: ArraySpec | None = None
     impairments: ChannelImpairments | None = None
     calibration_reference_snr_db: float = 30.0
+    receiver_impairments: ReceiverImpairments = field(default_factory=_default_receiver_impairments)
 
     def __post_init__(self) -> None:
         """Enforce the scenario-level invariants the receiver depends on.
