@@ -40,6 +40,16 @@ WS-B-003 fixtures (L2 MUSIC estimator):
 * ``l2_music_sigma_table.npz`` -- for SNR in {10, 20, 30} dB, the median
   claimed sigma over 200 trials with ``receiver.reseed(i)`` per trial.
 
+WS-B-004 fixtures (L2 MVDR/Capon):
+
+* ``l2_mvdr_pseudospectrum_137deg_uca4_20db.npz`` -- 720-sample Capon
+  pseudospectrum for the canonical UCA-4 / r=lambda/4 / 137 deg /
+  20 dB / 4096-coherent-sample scenario at seed=42; consumed by
+  ``test_l2_mvdr.py::test_golden_pseudospectrum``.
+* ``l2_mvdr_sigma_table.npz`` -- median claimed sigma over 200 trials
+  at SNR in {10, 20, 30} dB on the same scenario; consumed by
+  ``test_l2_mvdr.py::test_golden_sigma_table``.
+
 Each ``.npz`` snapshots the inputs *alongside* the outputs so a future
 divergence can be triaged without re-deriving the geometry from scratch.
 """
@@ -55,7 +65,12 @@ from rfmesh_contracts import (  # type: ignore[import-untyped, unused-ignore]
     ArrayGeometry,
     GeodeticPosition,
 )
-from rfmesh_dsp import L1AmplitudeSweepEstimator, L2MusicEstimator, compute_rssi_dbfs
+from rfmesh_dsp import (
+    L1AmplitudeSweepEstimator,
+    L2MusicEstimator,
+    L2MvdrEstimator,
+    compute_rssi_dbfs,
+)
 from rfmesh_dsp.array_covariance import sample_covariance
 from rfmesh_dsp.array_manifold import steering_matrix
 from rfmesh_sdr import (  # type: ignore[import-untyped, unused-ignore]
@@ -107,6 +122,16 @@ _L2_GOLDEN_PSEUDO_SEED = 42
 _L2_GOLDEN_PSEUDO_SNR_DB = 20.0
 _L2_SIGMA_TABLE_SNRS_DB: tuple[float, ...] = (10.0, 20.0, 30.0)
 _L2_SIGMA_TABLE_TRIALS = 200
+
+# --- WS-B-004 (L2 MVDR/Capon) constants -------------------------------------
+_MVDR_NODE_ID = "golden-mvdr-node"
+_MVDR_NODE_POSITION = GeodeticPosition(lat_deg=52.0, lon_deg=21.0)
+_MVDR_T_UNIX_NS = 1_700_000_000_000_000_000
+_MVDR_N_COHERENT_SAMPLES = 4096
+_MVDR_GOLDEN_SEED = 42
+_MVDR_SIGMA_TABLE_SNRS_DB: tuple[float, ...] = (10.0, 20.0, 30.0)
+_MVDR_SIGMA_TABLE_TRIALS = 200
+_MVDR_GOLDEN_PSPEC_SNR_DB = 20.0
 
 
 # --- WS-B-001 generators ----------------------------------------------------
@@ -346,6 +371,103 @@ def generate_l2_sigma_table_golden() -> Path:
     return out
 
 
+# --- WS-B-004 (L2 MVDR/Capon) generators ------------------------------------
+
+
+def _mvdr_array_config(scenario: SimulationScenario) -> ArrayConfig:
+    """Build the ``ArrayConfig`` matching the simulator UCA fixture."""
+    array = scenario.array
+    if array is None:
+        msg = "MVDR golden generation requires a scenario with an array spec."
+        raise RuntimeError(msg)
+    # The MVDR scenario fixtures are all UCA; reproduce the radius from
+    # the element positions (channel 0 is at (r, 0)).
+    radius_m = float(array.element_positions_m[0, 0])
+    return ArrayConfig(
+        geometry=ArrayGeometry.UCA,
+        n_elements=int(array.n_elements),
+        element_spacing_m=radius_m,
+    )
+
+
+def _mvdr_estimator_for(
+    scenario: SimulationScenario,
+    receiver: SyntheticReceiver,
+) -> L2MvdrEstimator:
+    """Construct a calibrated MVDR estimator paired with ``receiver``."""
+    return L2MvdrEstimator(
+        node_id=_MVDR_NODE_ID,
+        node_position=_MVDR_NODE_POSITION,
+        receiver=receiver,
+        array_config=_mvdr_array_config(scenario),
+        operating_frequency_hz=scenario.center_freq_hz,
+    )
+
+
+def claim_mvdr_sigma_one_trial(
+    scenario: SimulationScenario,
+    seed: int,
+) -> float | None:
+    """Run one Capon estimate from a single coherent block; return sigma or None."""
+    receiver = SyntheticReceiver(scenario, seed=seed)
+    receiver.open()
+    receiver.calibrate()
+    estimator = _mvdr_estimator_for(scenario, receiver)
+    estimator.set_timestamp(_MVDR_T_UNIX_NS)
+    block = receiver.read_coherent(_MVDR_N_COHERENT_SAMPLES)
+    report = estimator.estimate(block)
+    receiver.close()
+    if report is None:
+        return None
+    return float(report.azimuth_sigma_deg)
+
+
+def generate_mvdr_pseudospectrum_golden() -> Path:
+    """Generate the 720-sample Capon pseudospectrum at seed=42, 20 dB.
+
+    Deterministic recompute target for the byte-near-equal golden gate;
+    consumed by ``test_l2_mvdr.py::test_golden_pseudospectrum``.
+    """
+    scenario = conftest._build_mvdr_uca4_scenario(_MVDR_GOLDEN_PSPEC_SNR_DB)
+    receiver = SyntheticReceiver(scenario, seed=_MVDR_GOLDEN_SEED)
+    receiver.open()
+    receiver.calibrate()
+    estimator = _mvdr_estimator_for(scenario, receiver)
+    block = receiver.read_coherent(_MVDR_N_COHERENT_SAMPLES)
+    pseudospectrum = estimator.compute_pseudospectrum(block)
+    scan_azimuths_deg = estimator.scan_azimuths_deg.copy()
+    receiver.close()
+
+    _GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
+    out = _GOLDEN_DIR / "l2_mvdr_pseudospectrum_137deg_uca4_20db.npz"
+    np.savez(
+        out,
+        pseudospectrum=pseudospectrum,
+        azimuths_deg=scan_azimuths_deg,
+        n_samples=np.int64(_MVDR_N_COHERENT_SAMPLES),
+        seed=np.int64(_MVDR_GOLDEN_SEED),
+    )
+    return out
+
+
+def generate_mvdr_sigma_table_golden() -> Path:
+    """Generate the (SNR, median claimed sigma) golden table for Capon."""
+    snrs = np.array(_MVDR_SIGMA_TABLE_SNRS_DB, dtype=np.float64)
+    median_sigmas = np.empty(snrs.size, dtype=np.float64)
+    for i, snr_db in enumerate(snrs):
+        scenario = conftest._build_mvdr_uca4_scenario(float(snr_db))
+        sigmas: list[float] = []
+        for trial in range(_MVDR_SIGMA_TABLE_TRIALS):
+            sigma = claim_mvdr_sigma_one_trial(scenario, seed=trial)
+            if sigma is not None:
+                sigmas.append(sigma)
+        median_sigmas[i] = float(np.median(sigmas)) if sigmas else float("nan")
+    _GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
+    out = _GOLDEN_DIR / "l2_mvdr_sigma_table.npz"
+    np.savez(out, snr_db=snrs, median_claimed_sigma_deg=median_sigmas)
+    return out
+
+
 def main() -> None:
     paths = [
         generate_sweep_golden(),
@@ -355,6 +477,8 @@ def main() -> None:
         generate_covariance_golden(),
         generate_l2_pseudospectrum_golden(),
         generate_l2_sigma_table_golden(),
+        generate_mvdr_pseudospectrum_golden(),
+        generate_mvdr_sigma_table_golden(),
     ]
     for p in paths:
         print(f"wrote {p}")

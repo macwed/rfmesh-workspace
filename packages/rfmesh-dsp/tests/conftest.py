@@ -221,3 +221,78 @@ def l2_uca_scenario_factory() -> Callable[[float], SimulationScenario]:
 def l2_low_snr_scenario() -> SimulationScenario:
     """L2 scenario at -10 dB SNR; the eigenvalue gate should reject the bearing."""
     return _build_l2_uca_scenario(-10.0)
+
+
+# ---------------------------------------------------------------------------
+# WS-B-004 coherent-mode L2 (MVDR/Capon) fixtures
+# ---------------------------------------------------------------------------
+
+# At 915 MHz, lambda = c / f ~= 0.3276 m. The MVDR test uses r = lambda/4
+# (a smaller-than-half-wavelength radius) to drive the steering vectors
+# apart enough that a UCA of only N = 4 elements still produces a clean
+# Capon peak. The convention is consistent with the WS-A coherent
+# fixtures' wavelength derivation; reproducing it here keeps the DSP
+# tests independent of the SDR test tree.
+_MVDR_WAVELENGTH_M = _SPEED_OF_LIGHT_M_PER_S / _CENTER_FREQ_HZ
+_MVDR_UCA_RADIUS_M = 0.25 * _MVDR_WAVELENGTH_M
+# Isotropic per-element pattern: 180 deg HPBW with the back-lobe floor
+# clamped at the boresight gain produces a uniform unity pattern, so the
+# array's directional response comes entirely from the steering vector.
+_MVDR_ISOTROPIC_HPBW_DEG = 180.0
+_MVDR_ISOTROPIC_FLOOR_DB = 0.0
+_MVDR_COHERENT_RANGE_M = 1500.0
+_MVDR_PEAK_AZIMUTH_DEG = 137.0
+_MVDR_TARGET_SNR_DB = 20.0
+
+
+def _build_mvdr_uca4_scenario(target_snr_db: float) -> SimulationScenario:
+    """Build the canonical MVDR UCA-4 scenario at a configurable target SNR.
+
+    UCA with 4 elements at r = lambda/4 (915 MHz), single CW emitter at
+    array-local 137 deg at 1500 m. Heading defaults to 0, so the
+    geographic azimuth and the array-local azimuth coincide -- the Capon
+    scan's recovered peak position is directly comparable to the truth.
+    """
+    tx_power_db = _tx_power_db_for_snr(
+        target_snr_db=target_snr_db,
+        distance_m=_MVDR_COHERENT_RANGE_M,
+        frequency_hz=_CENTER_FREQ_HZ,
+        noise_floor_dbfs=_NOISE_FLOOR_DBFS,
+    )
+    return SimulationScenario(
+        emitters=(
+            EmitterSpec(
+                azimuth_deg=_MVDR_PEAK_AZIMUTH_DEG,
+                range_m=_MVDR_COHERENT_RANGE_M,
+                frequency_hz=_CENTER_FREQ_HZ,
+                tx_power_db=tx_power_db,
+            ),
+        ),
+        antenna=AntennaPattern(
+            hpbw_deg=_MVDR_ISOTROPIC_HPBW_DEG,
+            back_lobe_floor_db=_MVDR_ISOTROPIC_FLOOR_DB,
+        ),
+        sample_rate_hz=_SAMPLE_RATE_HZ,
+        center_freq_hz=_CENTER_FREQ_HZ,
+        noise_floor_dbfs=_NOISE_FLOOR_DBFS,
+        array=ArraySpec.uca(n_elements=4, radius_m=_MVDR_UCA_RADIUS_M),
+    )
+
+
+@pytest.fixture
+def mvdr_uca4_scenario() -> SimulationScenario:
+    """4-element UCA, r = lambda/4, CW emitter at 137 deg, ~20 dB SNR.
+
+    Drives the MVDR peak-recovery acceptance test and the golden-file
+    pseudospectrum at seed=42. The UCA's 360-deg unambiguous coverage
+    lets the scan span the full circle without front/back disambiguation
+    machinery; ``N = 4`` is the smallest array for which an L2 demo is
+    credible.
+    """
+    return _build_mvdr_uca4_scenario(_MVDR_TARGET_SNR_DB)
+
+
+@pytest.fixture
+def mvdr_uca4_snr_scenario_factory() -> Callable[[float], SimulationScenario]:
+    """Factory: ``mvdr_uca4_snr_scenario_factory(snr_db)`` -> UCA-4 scenario at that SNR."""
+    return _build_mvdr_uca4_scenario
