@@ -1,6 +1,6 @@
 # ADR-004: Array calibration file format
 
-**Status:** PROPOSED
+**Status:** ACCEPTED (2026-05-17, lead-Opus + Maciej, conditional on WS-B review points #1 and #2 incorporated below; point #3 deferred to a follow-up)
 **Date:** 2026-05-15
 **Author:** Opus-A (Workstream A)
 **Reviewers:** Lead, Opus-B (Workstream B — consumer of this file)
@@ -49,7 +49,7 @@ metadata**. One pair of files per calibration capture:
 
 | Key | Shape | dtype | Meaning |
 |---|---|---|---|
-| `complex_offsets` | `(n_freq, n_elements)` | `complex128` | Per-element-per-frequency calibration offsets. Multiplying a raw channel by `1/complex_offsets[f, i]` gives the calibrated channel referenced to channel 0. By convention, `complex_offsets[:, 0]` is identically 1+0j. |
+| `complex_corrections` | `(n_freq, n_elements)` | `complex128` | Per-element-per-frequency calibration *corrections*: multiplying a raw channel by `complex_corrections[f, i]` (NOT by `1/...`) gives the calibrated channel referenced to channel 0. By convention `complex_corrections[:, 0]` is identically `1+0j`. Naming aligns the on-disk field with WS-A's in-memory `Calibration.complex_corrections` record so one convention covers both (WS-B sign-off point #1, 2026-05-16). |
 | `frequencies_hz` | `(n_freq,)` | `float64` | Calibration frequencies, ascending. Consumers interpolate (linear in log-magnitude, linear in phase after unwrap) for frequencies between samples. |
 | `element_positions_m` | `(n_elements, 2)` | `float64` | Element positions in the array's local (x, y) frame, metres. Redundant with `ArrayConfig.element_positions_m` for CUSTOM, but carried in the file so a calibration is self-describing. For ULA/UCA derived from `ArrayConfig.element_spacing_m` and `geometry`. |
 | `noise_floor_estimate_dbfs` | `()` (scalar) | `float64` | Noise floor at the time of calibration, for sanity-checking that calibration was performed under benign conditions. Not load-bearing; advisory. |
@@ -90,6 +90,18 @@ NOT `rfmesh_contracts.SCHEMA_VERSION`. They evolve independently; the
 calibration loader rejects unknown calibration-file schemas the same
 way `rfmesh-contracts` consumers reject unknown contract schemas.
 
+### Loader ownership (WS-B sign-off point #2, 2026-05-16)
+
+The calibration file loader (`ArrayCalibration`) lives **only** in
+`rfmesh-sdr` (`packages/rfmesh-sdr/src/rfmesh_sdr/calibration.py`). It is
+**never** imported by `rfmesh-dsp`. The DSP-side L2 estimators consume
+*already-calibrated* coherent IQ via the `CoherentReceiver` Protocol;
+they do not see calibration metadata or perform file I/O. This split
+enforces Invariant B5 ("`rfmesh-dsp` is pure: no file I/O") and
+Invariant B2 (cross-workstream coupling is via contracts only — and the
+calibration file is *not* a contract). A reviewer who sees an
+`ArrayCalibration` import inside `rfmesh-dsp` rejects the diff.
+
 ### Loader API (in `rfmesh_sdr.calibration`, NOT in contracts)
 
 ```python
@@ -100,6 +112,7 @@ cal = ArrayCalibration.from_files(npz_path, json_path)
 cal = ArrayCalibration.load(npz_path)  # finds the .json next to it
 
 # Pure numpy operation; no I/O after loading:
+# (apply multiplies channels by complex_corrections, no 1/x)
 calibrated = cal.apply(raw_coherent_block, frequency_hz)
 ```
 

@@ -1,6 +1,8 @@
-# ADR-004 — Fusion algorithm choices: Stansfield variant, MLE optimiser, GDOP definition
+# ADR-007 — Fusion algorithm choices: Stansfield variant, MLE optimiser, GDOP definition
 
-- **Status:** PROPOSED
+*(Renumbered from ADR-004 on 2026-05-17 to resolve a duplicate-number collision with `ADR-004-array-calibration-file-format.md`. Content unchanged.)*
+
+- **Status:** ACCEPTED (2026-05-17, lead-Opus + Maciej)
 - **Author:** Opus-CD (Workstream C+D)
 - **Date:** 2026-05-15
 - **Decision scope:** internal to `rfmesh-fusion`. No contract change; no

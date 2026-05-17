@@ -6,7 +6,7 @@ data + Protocol; exceptions live with the workstream that raises them.
 Cross-workstream callers handle errors at the Protocol boundary
 (``Fuser.fuse``) -- they do not import these symbols, and the
 ``Fuser`` implementation catches them locally to drive the
-``fallback_centroid`` path (ADR-004 D3).
+``fallback_centroid`` path (ADR-007 D3).
 
 The hierarchy stays small on purpose. A new fusion-internal exception
 class is justified only when a caller in the package genuinely needs to
@@ -39,7 +39,7 @@ class DegenerateGeometryError(FusionError):
     ``numpy.linalg.solve`` raised ``LinAlgError``).
 
     ``fuser.py`` (WS-CD-007) catches this and routes to the
-    ``fallback_centroid`` path per ADR-004 D3 -- the closed-form solver
+    ``fallback_centroid`` path per ADR-007 D3 -- the closed-form solver
     refuses to invent an answer rather than degrading silently
     (Invariant 4).
     """

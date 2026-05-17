@@ -6,11 +6,11 @@ batch of ``BearingReport`` s and their associated node positions
 emitter position in one 2x2 linear solve. The sprint-1 MLE step
 (WS-CD-003) refines this seed; on degenerate geometries the ``Fuser``
 catches ``DegenerateGeometryError`` and routes to the
-``fallback_centroid`` path (ADR-004 D3).
+``fallback_centroid`` path (ADR-007 D3).
 
 CHOICE OF VARIANT
 -----------------
-Classical Stansfield with inverse-variance weights, per ADR-004 D1:
+Classical Stansfield with inverse-variance weights, per ADR-007 D1:
 
 * Minimise ``Sum_i w_i * (n_i . (x - p_i))^2`` where ``n_i`` is the unit
   normal to bearing-i's ray (the bearing-line's perpendicular-distance
@@ -48,7 +48,7 @@ makes the per-weight magnitudes more intuitive when debugging.
 
 References
 ----------
-* ``ADR-004-fusion-algorithm-choices.md`` D1, D3.
+* ``ADR-007-fusion-algorithm-choices.md`` D1, D3.
 * ``ARCHITECTURE.md`` §6 (AoA cross-fix, no TDOA).
 * ``INTERFACES.md`` §2 (``BearingReport`` semantics; honest
   ``azimuth_sigma_deg``).
@@ -80,7 +80,7 @@ _MIN_BEARINGS: int = 2
 # (all bearings parallel, or all nodes coincident with the same
 # bearing). We catch this before ``numpy.linalg.solve`` and raise
 # ``DegenerateGeometryError`` -- the ``Fuser`` then routes to
-# ``fallback_centroid`` per ADR-004 D3.
+# ``fallback_centroid`` per ADR-007 D3.
 _NEAR_SINGULAR_RATIO: float = 1e-12
 
 # Pre-check threshold for "all node positions coincident". A bearings-

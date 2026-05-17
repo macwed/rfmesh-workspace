@@ -15,7 +15,7 @@ times the range to the emitter; at the rfmesh operational scale
 treating the local tangent plane as flat is well under 1 m -- two orders
 of magnitude below the per-bearing geometry error. Trading that 1 m of
 correctness for a scipy/pyproj dependency and the corresponding mypy /
-pyproject churn would be a bad bargain. See ADR-004 D1 and
+pyproject churn would be a bad bargain. See ADR-007 D1 and
 ``packages/rfmesh-fusion/docs/MODULE_PLAN.md`` Section 3.
 
 THE APPROXIMATION

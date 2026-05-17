@@ -1,14 +1,17 @@
 # ADR-005 — Fusion `ConfidenceLevel` policy and operational tolerance
 
-- **Status:** PROPOSED — initial value needs lead/Maciej ratification
-  against `trench_demo.yaml` outcomes.
+- **Status:** ACCEPTED (2026-05-17, lead-Opus + Maciej). The 5%
+  operational threshold (D1) is provisional pending `trench_demo.yaml`
+  geometry verification (lead-side, separate task) and Phase C
+  multipath calibration on Maciej's bench; structural policy (D2-D6)
+  is final.
 - **Author:** Opus-CD (Workstream C+D)
 - **Date:** 2026-05-15
 - **Decision scope:** internal to `rfmesh-fusion`, but the chosen value is
   the *operator-facing* threshold an RF/EW jury sees on ATAK. No contract
   change.
 - **Supersedes / superseded by:** —
-- **Depends on:** ADR-004 (algorithm choices fix the meaning of the
+- **Depends on:** ADR-007 (algorithm choices fix the meaning of the
   underlying quantities).
 
 ---
@@ -69,7 +72,7 @@ one that downgrades a fix from `HIGH` to `MEDIUM`.
 A fix where *any* contributing bearing has `is_outlier == True`
 downgrades from `HIGH` to `MEDIUM` (not to `LOW` — the fix is still
 real, just imperfect). The downgrade is on *fix-level confidence
-display*, not on inclusion in the solver: per ADR-004 D3 and
+display*, not on inclusion in the solver: per ADR-007 D3 and
 `MODULE_PLAN.md` §7.2, the sprint-1 solver is honesty-over-robustness
 and does not reject the outlier. The dashboard shows the bearing as
 included-but-flagged; the operator sees both the degraded fix *and*
@@ -230,7 +233,7 @@ ADR reference inline. Changing it is a one-token diff.
 
 - The boundary-case unit tests in `tests/test_confidence.py` cover D4
   exhaustively.
-- The honest-ellipse Monte Carlo (from ADR-004) at the sprint-1 demo
+- The honest-ellipse Monte Carlo (from ADR-007) at the sprint-1 demo
   geometry produces a `HIGH/MEDIUM/LOW` distribution that the workstream
   reports to the lead at sprint-1 review. If that distribution is
   obviously wrong (e.g. every fix is `LOW`, or every fix is `HIGH`), the

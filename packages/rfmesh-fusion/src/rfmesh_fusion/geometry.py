@@ -13,7 +13,7 @@ solver (``stansfield.py``) and by the ``Fuser`` fallback path
   when the rays are parallel/anti-parallel and no honest answer
   exists.
 * ``weighted_centroid_of_crossings`` -- weighted mean of a sequence of
-  2-D points. The ``fallback_centroid`` arithmetic per ADR-004 D3.
+  2-D points. The ``fallback_centroid`` arithmetic per ADR-007 D3.
 
 WHY HAND-ROLLED 2-D INSTEAD OF NUMPY
 ------------------------------------
@@ -28,7 +28,7 @@ References
 ----------
 * ``ARCHITECTURE.md`` §6 (AoA, not TDOA; bearings cross at the fix).
 * ``INTERFACES.md`` §0 (ENU axes, azimuth convention).
-* ``ADR-004-fusion-algorithm-choices.md`` D1 (classical Stansfield in
+* ``ADR-007-fusion-algorithm-choices.md`` D1 (classical Stansfield in
   ENU), D3 (degenerate-geometry path -> fallback centroid).
 """
 
@@ -145,7 +145,7 @@ def weighted_centroid_of_crossings(
     """Weighted mean of a sequence of 2-D points.
 
     Implements the arithmetic of the ``fallback_centroid`` path
-    (ADR-004 D3): pairwise ray-ray crossings, weighted by a function of
+    (ADR-007 D3): pairwise ray-ray crossings, weighted by a function of
     their contributing per-bearing weights, are blended into a single
     "best honest guess" emitter position when the closed-form solver
     has refused.
