@@ -7,6 +7,12 @@ jamming, not a degraded mode (see ``ARCHITECTURE.md`` §6 and
 
 Rendered as a small per-node table: ``node_id | healthy | gnss_locked |
 active_capabilities | status_detail``.
+
+``status_detail`` carries operator-facing degradation strings (e.g.
+``"LoRa bearer down, Wi-Fi only"`` from ``BothBearer.health_summary``).
+A non-empty value is rendered in orange so the operator sees the
+heartbeat-channel diagnostic during the demo (ADR-011 follow-up to
+the architect-council BLOCK on commit ``f8b2a48``).
 """
 
 from __future__ import annotations
@@ -76,9 +82,10 @@ class NodeStatusPanel(Panel):
             gnss_text = "GNSS lock" if status.gnss_locked else "GNSS denied"
             gnss_color = "green" if status.gnss_locked else "orange"
             caps = ",".join(cap.value for cap in status.active_capabilities) or "-"
+            detail = status.status_detail.strip()
             self.ax.text(0.02, y, node_id, transform=self.ax.transAxes, fontsize=8)
             self.ax.text(
-                0.30,
+                0.20,
                 y,
                 health_marker,
                 transform=self.ax.transAxes,
@@ -86,11 +93,24 @@ class NodeStatusPanel(Panel):
                 color=health_color,
             )
             self.ax.text(
-                0.45,
+                0.32,
                 y,
                 gnss_text,
                 transform=self.ax.transAxes,
                 fontsize=8,
                 color=gnss_color,
             )
-            self.ax.text(0.70, y, caps, transform=self.ax.transAxes, fontsize=7)
+            self.ax.text(0.52, y, caps, transform=self.ax.transAxes, fontsize=7)
+            if detail:
+                # Status detail in orange so operator catches the
+                # heartbeat-channel diagnostic during the demo
+                # (e.g. "LoRa bearer down, Wi-Fi only"). Empty string
+                # renders nothing so a healthy node stays visually quiet.
+                self.ax.text(
+                    0.74,
+                    y,
+                    detail,
+                    transform=self.ax.transAxes,
+                    fontsize=7,
+                    color="orange",
+                )

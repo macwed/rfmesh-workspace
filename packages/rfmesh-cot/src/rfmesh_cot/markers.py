@@ -113,30 +113,26 @@ def _format_stale_time(t_unix_ns: int, stale_after_s: float = STALE_AFTER_S) -> 
     return stale.strftime("%Y-%m-%dT%H:%M:%S.") + f"{stale.microsecond // 1000:03d}Z"
 
 
-def _range_m(
+def _range_m_text(
     fix_lat_deg: float,
     fix_lon_deg: float,
     contributing_node_count: int,
-) -> float:
-    """Best-effort emitter range estimate, metres.
+) -> str:
+    """Operator-facing range string for CoT remarks.
 
-    We do not have the node positions here (they are in the bearings, not
-    in the FixEvent), so the "range" we report is the equirectangular
-    distance from the geodetic origin (0, 0) -- which is *not* meaningful
-    operationally. Until WS-CD wires the node-position context in,
-    callers may override via the remarks string; the field is included
-    in remarks for parity with the architect spec (§2.1) and is honest
-    about its current ground meaning (always 0 here -- placeholder).
+    Returns ``"n/a"`` in v1.0 because the FixEvent does not carry the
+    operator's view-center position (the node positions live in the
+    bearings, not in the fix). Writing ``"0.000"`` looked like a real
+    zero-metre measurement on the ATAK marker; ``"n/a"`` matches what
+    ``rfmesh-ops.FixPanel`` shows when its operator-view origin is
+    unknown (ADR-009 follow-up; demo-integrity council R1).
 
     A future ticket may take an optional ``observer_position`` argument
-    and compute true range; for v1.0 the percentage display (ellipse
-    semi-major / range) lives in ``rfmesh-ops`` where it has access to
-    the geometry.
+    and compute a real range; for v1.0 the percentage display lives in
+    ``rfmesh-ops`` where it has access to the full geometry.
     """
-    # Placeholder so the remarks string carries a number rather than NaN;
-    # rfmesh-ops computes the operational percentage with full context.
-    _ = (fix_lat_deg, fix_lon_deg)
-    return 0.0
+    _ = (fix_lat_deg, fix_lon_deg, contributing_node_count)
+    return "n/a"
 
 
 def _build_uid(fix: FixEvent, callsign_prefix: str) -> str:
@@ -179,7 +175,7 @@ def fix_event_to_cot_xml(
             <link point="lat,lon" .../>   <!-- N+1 polygon vertices -->
             <link point="..."/>
             ...
-            <remarks>method=stansfield+mle GDOP=3.45 range_m=0.0
+            <remarks>method=stansfield+mle GDOP=3.45 range_m=n/a
                      classification=elrs confidence=high
                      contributing_nodes=node-a,node-b,node-c</remarks>
           </detail>
@@ -268,11 +264,11 @@ def fix_event_to_cot_xml(
     # the architect doc §2.1 binds:
     #   method=...  (which solver mode)
     #   GDOP=...    (geometry quality)
-    #   range_m=... (operational distance summary; placeholder here)
+    #   range_m=... ("n/a" until observer-position context is wired; R1)
     #   classification=... (the EmitterClass label, or 'none')
     classification_str = fix.emitter_class.value if fix.emitter_class is not None else "none"
     contributing = ",".join(fix.contributing_nodes)
-    range_m = _range_m(
+    range_m_text = _range_m_text(
         fix.position.lat_deg,
         fix.position.lon_deg,
         len(fix.contributing_nodes),
@@ -280,7 +276,7 @@ def fix_event_to_cot_xml(
     remarks_text = (
         f"method={fix.method} "
         f"GDOP={fix.gdop:.{_METRE_PRECISION}f} "
-        f"range_m={range_m:.{_METRE_PRECISION}f} "
+        f"range_m={range_m_text} "
         f"classification={classification_str} "
         f"confidence={fix.confidence_level.value} "
         f"contributing_nodes={contributing}"

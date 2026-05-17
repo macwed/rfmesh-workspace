@@ -237,6 +237,62 @@ def test_both_bearer_falls_through_when_lora_unavailable() -> None:
         server.close()
 
 
+def test_both_bearer_lora_down_surfaces_via_health_summary() -> None:
+    """LoRa NotImplementedError is observable -- health_summary() returns canonical string.
+
+    Regression test for the architect-council BLOCK on commit f8b2a48
+    (B3: BothBearer must not silently swallow LoRa-unavailable; the
+    state must surface to NodeStatus.status_detail and on to the
+    operator dashboard).
+    """
+    port = find_free_udp_port()
+    server = WifiBearer(f"udp://127.0.0.1:{port}", bind=True)
+    try:
+        wifi = WifiBearer(f"udp://127.0.0.1:{port}", bind=False)
+        lora_unavailable = LoraBearer("/dev/null", loopback=False)
+        composite = BothBearer(wifi=wifi, lora=lora_unavailable)
+        try:
+            # Before any send: both bearers presumed available, summary empty.
+            assert composite.is_lora_available() is True
+            assert composite.health_summary() == ""
+
+            # First send flips the LoRa flag (NotImplementedError caught
+            # and logged once, not silently suppressed).
+            composite.send_bearing(make_bearing_report())
+            assert composite.is_lora_available() is False
+            assert composite.health_summary() == "LoRa bearer down, Wi-Fi only"
+
+            # Subsequent send keeps the summary; no LoRa call retried.
+            composite.send_bearing(make_bearing_report())
+            assert composite.is_lora_available() is False
+            assert composite.health_summary() == "LoRa bearer down, Wi-Fi only"
+        finally:
+            composite.close()
+    finally:
+        server.close()
+
+
+def test_both_bearer_status_send_also_surfaces_lora_down() -> None:
+    """The status path flips the LoRa flag identically to the bearing path."""
+    port = find_free_udp_port()
+    server = WifiBearer(f"udp://127.0.0.1:{port}", bind=True)
+    try:
+        wifi = WifiBearer(f"udp://127.0.0.1:{port}", bind=False)
+        lora_unavailable = LoraBearer("/dev/null", loopback=False)
+        composite = BothBearer(wifi=wifi, lora=lora_unavailable)
+        try:
+            # Send a NodeStatus through the composite. The Wi-Fi half
+            # ships; LoRa raises and is surfaced through health_summary(),
+            # not swallowed.
+            composite.send_status(make_node_status())
+            assert composite.is_lora_available() is False
+            assert composite.health_summary() == "LoRa bearer down, Wi-Fi only"
+        finally:
+            composite.close()
+    finally:
+        server.close()
+
+
 # ---------------------------------------------------------------------------
 # Envelope codec -- round-trip + the size / decode guards.
 # ---------------------------------------------------------------------------

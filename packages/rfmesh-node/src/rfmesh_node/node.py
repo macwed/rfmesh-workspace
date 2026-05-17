@@ -162,6 +162,20 @@ class Node:
                 await asyncio.wait_for(self._stopping.wait(), timeout=interval_s)
 
     def _build_status(self) -> NodeStatus:
+        # Surface bearer health into status_detail when the bearer exposes
+        # a health_summary() method (e.g. BothBearer reports "LoRa bearer
+        # down, Wi-Fi only" once the LoRa half raises NotImplementedError).
+        # Wi-Fi-only and LoRa-only bearers omit the method; default to "".
+        # See INTERFACES.md §3 NodeStatus.status_detail for the canonical
+        # example strings.
+        status_detail = ""
+        summary_fn = getattr(self._bearer, "health_summary", None)
+        if callable(summary_fn):
+            try:
+                status_detail = str(summary_fn() or "")
+            except Exception:
+                _LOG.exception("Node._build_status: bearer.health_summary failed")
+                status_detail = ""
         return NodeStatus(
             node_id=self._config.node_id,
             t_unix_ns=time.time_ns(),
@@ -169,7 +183,7 @@ class Node:
             active_capabilities=tuple(self._active_capabilities),
             gnss_locked=False,
             healthy=True,
-            status_detail="",
+            status_detail=status_detail,
         )
 
     async def _teardown(self) -> None:

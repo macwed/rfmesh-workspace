@@ -220,6 +220,59 @@ async def test_emit_for_test_routes_through_bearer() -> None:
         await asyncio.wait_for(runner, timeout=2.0)
 
 
+async def test_heartbeat_surfaces_bearer_health_summary() -> None:
+    """``NodeStatus.status_detail`` carries ``bearer.health_summary()`` when present.
+
+    Regression test for the architect-council BLOCK on commit f8b2a48
+    (B3: BothBearer's LoRa-down state must surface to the heartbeat
+    channel, not be hidden behind ``status_detail=""``).
+
+    Uses an inline stub bearer whose ``health_summary`` returns the
+    canonical ``"LoRa bearer down, Wi-Fi only"`` string. The heartbeat
+    output must contain that exact text.
+    """
+
+    class _StubBearerWithHealth(_FakeBearer):
+        def health_summary(self) -> str:
+            return "LoRa bearer down, Wi-Fi only"
+
+    receiver = _FakeReceiver()
+    bearer = _StubBearerWithHealth()
+    config = _l1_config(heartbeat_interval_s=0.05)
+    node = Node(config, receiver=receiver, bearer=bearer)
+
+    runner = asyncio.create_task(node.run())
+    try:
+        # Give the runtime time to emit at least one heartbeat.
+        await asyncio.sleep(0.2)
+    finally:
+        await node.shutdown()
+        await asyncio.wait_for(runner, timeout=2.0)
+
+    assert bearer.statuses, "expected at least one heartbeat"
+    for status in bearer.statuses:
+        assert status.status_detail == "LoRa bearer down, Wi-Fi only"
+
+
+async def test_heartbeat_status_detail_empty_when_bearer_has_no_health_summary() -> None:
+    """Bearers without ``health_summary`` produce ``status_detail=""`` (back-compat)."""
+    receiver = _FakeReceiver()
+    bearer = _FakeBearer()  # no health_summary method
+    config = _l1_config(heartbeat_interval_s=0.05)
+    node = Node(config, receiver=receiver, bearer=bearer)
+
+    runner = asyncio.create_task(node.run())
+    try:
+        await asyncio.sleep(0.15)
+    finally:
+        await node.shutdown()
+        await asyncio.wait_for(runner, timeout=2.0)
+
+    assert bearer.statuses
+    for status in bearer.statuses:
+        assert status.status_detail == ""
+
+
 async def test_run_called_twice_raises() -> None:
     """Calling run() twice on the same Node is a programming error."""
     receiver = _FakeReceiver()
