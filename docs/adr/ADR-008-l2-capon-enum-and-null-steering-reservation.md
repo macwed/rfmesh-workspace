@@ -1,5 +1,19 @@
 # ADR-008 — L2 Capon vs MVDR null-steering: `Capability` enum split + `SCHEMA_VERSION` 1.1.0
 
+> **AMENDED 2026-05-17 by ADR-010.** §D6's binding API shape for
+> `compute_null_steering_weights` was insufficient: the slide-friendly
+> `NullSteeringResult.null_depth_db` cannot be computed from R + w
+> alone (it is a receive-pattern depth at the jammer azimuth, which
+> requires the array manifold). The function signature gains geometry
+> keyword-only parameters (`array_geometry`, `n_elements`,
+> `element_spacing_m`, optional `element_positions_m`, `frequency_hz`);
+> two tests were reframed; the consistency tolerance widened from 0.5
+> dB to 10 dB (grid-resolution honest). See
+> `ADR-010-null-steering-api-geometry-extension.md`. All other
+> bindings of this ADR (look-direction not null-direction, 1e-6
+> default loading, FB smoothing default ON, NullSteeringResult struct,
+> ≤ 20 dB UI cap) stand.
+
 - **Status:** ACCEPTED (2026-05-17, lead-Opus + Maciej, after council review by Architect / RF-DSP / Demo-Integrity subagents).
 - **Author:** lead-Opus (Claude Code).
 - **Reviewers:** Architect (REQUEST-ADR-FIRST → resolved here), RF-DSP (NOTE non-blocking, 4 corrections folded in), Demo-Integrity (CONCERN-WORTH-RAISING, narrative + null-depth budget folded in).
