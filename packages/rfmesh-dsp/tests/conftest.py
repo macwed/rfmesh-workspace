@@ -296,3 +296,97 @@ def mvdr_uca4_scenario() -> SimulationScenario:
 def mvdr_uca4_snr_scenario_factory() -> Callable[[float], SimulationScenario]:
     """Factory: ``mvdr_uca4_snr_scenario_factory(snr_db)`` -> UCA-4 scenario at that SNR."""
     return _build_mvdr_uca4_scenario
+
+
+# ---------------------------------------------------------------------------
+# WS-B-007 (L2 null-steering) two-emitter scenario fixtures.
+#
+# Canonical scenario from the WS-B-007 ticket / ADR-008 D6:
+#   signal at theta_s = 30 deg, jammer at theta_j = 100 deg,
+#   N = 4 UCA at lambda/4, SNR signal/jammer/noise = 10/20/0 dB,
+#   T = 4096 snapshots, seed = 42.
+# The signal is the "look" direction (whose response MVDR preserves);
+# the jammer is the implicit-in-R interferer the null forms against.
+# ---------------------------------------------------------------------------
+
+_NULL_STEERING_SIGNAL_AZIMUTH_DEG = 30.0
+_NULL_STEERING_JAMMER_AZIMUTH_DEG = 100.0
+_NULL_STEERING_EMITTER_RANGE_M = 1500.0
+_NULL_STEERING_SIGNAL_SNR_DB = 10.0
+_NULL_STEERING_JAMMER_SNR_DB = 20.0
+
+
+def _build_null_steering_two_emitter_scenario(
+    *,
+    signal_snr_db: float = _NULL_STEERING_SIGNAL_SNR_DB,
+    jammer_snr_db: float = _NULL_STEERING_JAMMER_SNR_DB,
+    signal_azimuth_deg: float = _NULL_STEERING_SIGNAL_AZIMUTH_DEG,
+    jammer_azimuth_deg: float = _NULL_STEERING_JAMMER_AZIMUTH_DEG,
+) -> SimulationScenario:
+    """Build the two-emitter UCA-4 scenario for WS-B-007 null-steering tests.
+
+    Reuses the MVDR isotropic-pattern convention (180 deg HPBW, 0 dB
+    back-lobe floor) so the array's directional selectivity comes
+    entirely from the steering vectors -- the L2 path concern is
+    phase coherence, not antenna shape.
+    """
+    signal_tx_power_db = _tx_power_db_for_snr(
+        target_snr_db=signal_snr_db,
+        distance_m=_NULL_STEERING_EMITTER_RANGE_M,
+        frequency_hz=_CENTER_FREQ_HZ,
+        noise_floor_dbfs=_NOISE_FLOOR_DBFS,
+    )
+    jammer_tx_power_db = _tx_power_db_for_snr(
+        target_snr_db=jammer_snr_db,
+        distance_m=_NULL_STEERING_EMITTER_RANGE_M,
+        frequency_hz=_CENTER_FREQ_HZ,
+        noise_floor_dbfs=_NOISE_FLOOR_DBFS,
+    )
+    # Use slightly different carrier frequencies so the two coherent
+    # tones do not synthesise a single beating waveform -- the L2
+    # covariance estimator needs two independent contributions for
+    # the rank-2 signal-plus-jammer subspace to materialise. 10 kHz
+    # offset is well within the analysis bandwidth and large enough
+    # to decorrelate over T = 4096 samples at 2.048 MS/s.
+    return SimulationScenario(
+        emitters=(
+            EmitterSpec(
+                azimuth_deg=signal_azimuth_deg,
+                range_m=_NULL_STEERING_EMITTER_RANGE_M,
+                frequency_hz=_CENTER_FREQ_HZ,
+                tx_power_db=signal_tx_power_db,
+            ),
+            EmitterSpec(
+                azimuth_deg=jammer_azimuth_deg,
+                range_m=_NULL_STEERING_EMITTER_RANGE_M,
+                frequency_hz=_CENTER_FREQ_HZ + 10_000.0,
+                tx_power_db=jammer_tx_power_db,
+            ),
+        ),
+        antenna=AntennaPattern(
+            hpbw_deg=_MVDR_ISOTROPIC_HPBW_DEG,
+            back_lobe_floor_db=_MVDR_ISOTROPIC_FLOOR_DB,
+        ),
+        sample_rate_hz=_SAMPLE_RATE_HZ,
+        center_freq_hz=_CENTER_FREQ_HZ,
+        noise_floor_dbfs=_NOISE_FLOOR_DBFS,
+        array=ArraySpec.uca(n_elements=4, radius_m=_MVDR_UCA_RADIUS_M),
+    )
+
+
+@pytest.fixture
+def null_steering_two_emitter_scenario() -> SimulationScenario:
+    """Canonical 2-emitter UCA-4 scenario: signal at 30 deg, jammer at 100 deg.
+
+    Per ADR-008 D6 acceptance criteria: SNR signal = 10 dB, jammer =
+    20 dB, noise = 0 dB; the array is UCA N=4 at radius = lambda/4
+    for 915 MHz; isotropic per-element pattern; T = 4096 snapshots
+    per call.
+    """
+    return _build_null_steering_two_emitter_scenario()
+
+
+@pytest.fixture
+def null_steering_two_emitter_factory() -> Callable[..., SimulationScenario]:
+    """Factory: ``null_steering_two_emitter_factory(signal_snr_db=..., ...)``."""
+    return _build_null_steering_two_emitter_scenario

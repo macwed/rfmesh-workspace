@@ -9,9 +9,16 @@ from __future__ import annotations
 
 from rfmesh_dsp.array_covariance import forward_backward_smooth, sample_covariance
 from rfmesh_dsp.array_manifold import steering_matrix, steering_vector
+from rfmesh_dsp.exceptions import DspError, NullSteeringError
 from rfmesh_dsp.l1 import L1AmplitudeSweepEstimator
 from rfmesh_dsp.l2_music import L2MusicEstimator
 from rfmesh_dsp.l2_mvdr import L2MvdrEstimator
+from rfmesh_dsp.l2_null_steering import (
+    NullSteeringResult,
+    apply_null,
+    compute_null_steering_weights,
+    compute_receive_pattern,
+)
 from rfmesh_dsp.rssi import (
     ClippingReport,
     compute_noise_floor_dbfs,
@@ -29,12 +36,18 @@ from rfmesh_dsp.spectrum import (
 
 __all__ = [
     "ClippingReport",
+    "DspError",
     "L1AmplitudeSweepEstimator",
     "L2MusicEstimator",
     "L2MvdrEstimator",
+    "NullSteeringError",
+    "NullSteeringResult",
+    "apply_null",
     "compute_fft",
     "compute_noise_floor_dbfs",
+    "compute_null_steering_weights",
     "compute_psd",
+    "compute_receive_pattern",
     "compute_rssi_dbfs",
     "compute_rssi_in_band",
     "compute_snr_db",
