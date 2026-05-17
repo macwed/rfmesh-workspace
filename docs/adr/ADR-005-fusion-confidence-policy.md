@@ -1,5 +1,13 @@
 # ADR-005 — Fusion `ConfidenceLevel` policy and operational tolerance
 
+> **AMENDED 2026-05-17 by ADR-009.** The "Rationale for the 5% choice"
+> paragraph below contains a 1-σ vs 95%-chi-square scale error: the
+> 150 m back-of-envelope is the 1-σ value, the contract puts
+> `semi_major_m` at the 95% level (factor ≈ 2.45 larger). The
+> threshold value (0.05) and the structural policy stay unchanged;
+> the *demo narrative* is the part that needed correcting. See
+> `ADR-009-confidence-band-math-correction-and-demo-narrative.md`.
+
 - **Status:** ACCEPTED (2026-05-17, lead-Opus + Maciej). The 5%
   operational threshold (D1) is provisional pending `trench_demo.yaml`
   geometry verification (lead-side, separate task) and Phase C
