@@ -170,6 +170,15 @@ modules = [
     "rfmesh_node",
     "rfmesh_ops",
 ]
+# WS-B-005 exception (ticket criterion 9): the L3 modulation classifier
+# in rfmesh_ml consumes the salvaged STFT primitive from rfmesh_dsp as
+# its feature-extraction entry point. Treated as a sibling-internal
+# dependency rather than a star-graph violation -- this is the only
+# such allowance in the workspace, and it does not break the star
+# topology for any other consumer of either module.
+ignore_imports = [
+    "rfmesh_ml.features -> rfmesh_dsp.spectrum",
+]
 
 [[tool.importlinter.contracts]]
 name = "DSP is pure"
@@ -181,4 +190,10 @@ forbidden_modules = ["requests", "httpx", "aiohttp", "socket", "subprocess"]
 name = "Fusion is pure"
 type = "forbidden"
 source_modules = ["rfmesh_fusion"]
+forbidden_modules = ["requests", "httpx", "aiohttp", "socket", "subprocess"]
+
+[[tool.importlinter.contracts]]
+name = "ML is pure"
+type = "forbidden"
+source_modules = ["rfmesh_ml"]
 forbidden_modules = ["requests", "httpx", "aiohttp", "socket", "subprocess"]
