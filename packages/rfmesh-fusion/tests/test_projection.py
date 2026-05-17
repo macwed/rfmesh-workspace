@@ -22,6 +22,7 @@ from __future__ import annotations
 import math
 
 import pytest
+from _helpers import MakePosition  # type: ignore[import-not-found, unused-ignore]
 from rfmesh_contracts.geospatial import (  # type: ignore[import-untyped, unused-ignore]
     GeodeticPosition,
 )
@@ -32,8 +33,6 @@ from rfmesh_fusion.projection import (
     from_enu,
     to_enu,
 )
-
-from .conftest import MakePosition
 
 # Tolerances and fixed displacements used by the acceptance-criteria tests.
 # Named to satisfy ruff's PLR2004 (no magic numbers in comparisons) and to

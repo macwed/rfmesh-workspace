@@ -22,6 +22,11 @@ from __future__ import annotations
 import math
 
 import pytest
+from _helpers import (  # type: ignore[import-not-found, unused-ignore]
+    MakeBearing,
+    MakePosition,
+    azimuth_node_to_emitter_deg,
+)
 from rfmesh_contracts.geospatial import (  # type: ignore[import-untyped, unused-ignore]
     GeodeticPosition,
 )
@@ -30,8 +35,6 @@ from rfmesh_contracts.messages import (  # type: ignore[import-untyped, unused-i
 )
 from rfmesh_fusion.exceptions import FusionError
 from rfmesh_fusion.residuals import ResidualsResult, compute_residuals
-
-from .conftest import MakeBearing, MakePosition, azimuth_node_to_emitter_deg
 
 # Tolerances. The "perfect" cases are float64 arithmetic on a single
 # ``atan2`` round-trip; the round-off floor is well under 1e-12 deg.

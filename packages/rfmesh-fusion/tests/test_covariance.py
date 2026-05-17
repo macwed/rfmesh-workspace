@@ -20,6 +20,10 @@ import math
 
 import numpy as np
 import pytest
+from _helpers import (  # type: ignore[import-not-found, unused-ignore]
+    MakeBearing,
+    azimuth_node_to_emitter_deg,
+)
 from rfmesh_contracts.geospatial import (  # type: ignore[import-untyped, unused-ignore]
     EllipseENU,
 )
@@ -37,8 +41,6 @@ from rfmesh_fusion.exceptions import (
     MLEConvergenceError,
     SingularFisherInformationError,
 )
-
-from .conftest import MakeBearing, azimuth_node_to_emitter_deg
 
 # Honesty / tolerance bands used across tests. Hoisted to module
 # constants both because ruff PLR2004 flags them as magic in

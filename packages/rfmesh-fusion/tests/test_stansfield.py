@@ -19,6 +19,7 @@ import math
 from collections.abc import Callable
 
 import pytest
+from _helpers import MakeBearing, MakePosition  # type: ignore[import-not-found, unused-ignore]
 from rfmesh_contracts.geospatial import (  # type: ignore[import-untyped, unused-ignore]
     GeodeticPosition,
 )
@@ -28,8 +29,6 @@ from rfmesh_contracts.messages import (  # type: ignore[import-untyped, unused-i
 from rfmesh_fusion.exceptions import DegenerateGeometryError
 from rfmesh_fusion.geometry import bearing_to_unit_vector, ray_ray_crossing
 from rfmesh_fusion.stansfield import stansfield_seed
-
-from .conftest import MakeBearing, MakePosition
 
 # Recovery tolerances per ticket acceptance criteria.
 _TOL_EQUILATERAL_M = 1e-6
