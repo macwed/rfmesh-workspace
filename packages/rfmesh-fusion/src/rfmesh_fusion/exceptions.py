@@ -69,3 +69,28 @@ class MLEConvergenceError(FusionError):
     rather than returning the last iterate with ``converged = False`` or
     silently capping at ``max_iter``.
     """
+
+
+class SingularFisherInformationError(FusionError):
+    """Raised by ``covariance.compute_covariance`` (and helpers) when the
+    Fisher information matrix ``J^T W J`` is singular or the derived
+    covariance is non-PSD.
+
+    Concretely: ``numpy.linalg.solve`` (or the closed-form 2x2 inverse)
+    reports a singular ``J^T W J``, or the eigendecomposition of the
+    covariance returns a zero / negative eigenvalue. Both indicate a
+    rank-deficient geometry that should NEVER reach this stage in
+    practice -- ``stansfield_seed`` raises ``DegenerateGeometryError``
+    first on the same input, and the ``Fuser`` (WS-CD-007) routes
+    around that before MLE is even attempted. The class exists for
+    Invariant B3 (no silent fallbacks): if a future refactor changes
+    the upstream gating, ``covariance.py`` refuses loudly rather than
+    returning ``inf`` / ``nan`` covariances or letting a non-PSD
+    eigenvalue through into the ``EllipseENU`` validator.
+
+    Distinct from ``DegenerateGeometryError`` (closed-form seed
+    rank-deficiency, ab initio) and ``MLEConvergenceError`` (Gauss-
+    Newton divergence during refinement). Three siblings, three
+    structurally different failure stages, one shared base
+    ``FusionError`` for the ``Fuser``'s broad ``except`` net.
+    """
