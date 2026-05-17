@@ -40,11 +40,11 @@ check '(^|[[:space:];&|])pip[[:space:]]+install' \
 check '(^|[[:space:];&|])pip3[[:space:]]+install' \
   "pip3 install forbidden — uv-only workspace"
 
-check '(^|[[:space:];&|])uv[[:space:]]+add([[:space:]]|$)' \
-  "uv add requires lead approval (AGENTS.md §5: write /uvadd-request first)"
-
-check '(^|[[:space:];&|])uv[[:space:]]+remove([[:space:]]|$)' \
-  "uv remove requires lead approval (same channel as uv add)"
+# uv add / uv remove: lead-Opus may run directly per HANDOFF §2 relaxed
+# model (lead approves with rationale in commit message or ADR). Builder
+# subagents must still write /uvadd-request first; the hook does not
+# distinguish, so the burden is on the prompt / ticket reviewer to gate
+# subagent calls.
 
 check '(^|[[:space:];&|])(pipenv|poetry|conda|hatch|rye)[[:space:]]' \
   "Only uv is allowed (CLAUDE.md Hard rules)"
@@ -77,16 +77,14 @@ check '(^|[[:space:];&|])rm[[:space:]]+(-[a-zA-Z]*[rR]|--recursive)' \
 check '(^|[[:space:];&|])(shred|wipe)[[:space:]]' \
   "shred/wipe forbidden — too easy to misuse"
 
-# --- git merge while on main -----------------------------------------------
-# `git merge` is contextual — it operates on the current branch. We block
-# it only when HEAD is main. Anywhere else (merging main *into* a feature
-# branch, e.g.) is fine.
-if echo "$CMD" | grep -qE '(^|[[:space:];&|])git[[:space:]]+merge'; then
-  CURRENT="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
-  if [[ "$CURRENT" == "main" ]]; then
-    deny "git merge while on main forbidden — only the lead merges (AGENTS.md §3, §7)"
-  fi
-fi
+# NOTE 2026-05-17: The "git merge while on main" guard was removed
+# alongside the "push to main" guards (see above) when Maciej dissolved
+# the manual four-conversation workflow and handed the project to
+# lead-Opus. The lead now merges feature/worktree branches directly into
+# main. HANDOFF_TO_CLAUDE_CODE_LEAD.md §2: "operational gates are
+# historical record, not binding constraint." Force-push,
+# --no-verify, and direct writes to packages/rfmesh-contracts/src
+# remain blocked because those are real safety guards.
 
 # --- Belt-and-suspenders: bash-side writes to frozen contracts -------------
 # Write/Edit tools are caught by protect-frozen-paths.sh. But a bash
