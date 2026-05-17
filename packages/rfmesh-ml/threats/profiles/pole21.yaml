@@ -1,0 +1,20 @@
+emitter_class: pole21
+human_name: "Pole-21 GNSS jamming complex"
+references: []
+match_rules:
+  - modulation_class: fhss
+    freq_band_hz: [1.56e9, 1.59e9]
+    min_confidence: 0.5
+    notes: >-
+      GPS L1 band (1575.42 MHz +/- 15 MHz). Indicative only -- the
+      enrichment layer returns EmitterClass.UNKNOWN on any match
+      against this stub profile per the WS-B-006 stub-honesty rule.
+      Rules on a stub profile are documentation for the demo, not
+      classification.
+stub: true
+stub_reason: |
+  Awaiting real-IQ capture and classifier training. v1.0.0 ships a
+  structural placeholder per INTERFACES.md §1 stub-at-v1.0.0
+  designation. The enrichment layer returns EmitterClass.UNKNOWN on
+  any match against this profile (rfmesh_ml.threats honesty rule:
+  the demo does not present a fabricated POLE21 classification).

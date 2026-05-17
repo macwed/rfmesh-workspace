@@ -26,10 +26,13 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
+from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
 import pytest
+from rfmesh_ml import ClassificationResult
+from rfmesh_ml.rules import ModulationLabel
 
 _SAMPLE_RATE_HZ: float = 1_000_000.0
 """Default sample rate for the fixtures. 1 MS/s is high enough to
@@ -273,3 +276,41 @@ def noise_iq_factory() -> Callable[[int], npt.NDArray[np.complex64]]:
         return _pure_noise(np.random.default_rng(seed))
 
     return _factory
+
+
+# ---------------------------------------------------------------------------
+# WS-B-006 fixtures: ClassificationResult constructor + bundled-library path.
+# The WS-B-006 wrapper layer is tested against synthesised
+# ``ClassificationResult`` values directly (no IQ involvement) so the
+# threat-enrichment tests stay fast and the layer boundary stays visible.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def make_classification_result() -> Callable[[ModulationLabel, float, int], ClassificationResult]:
+    """Factory: ``make_classification_result(label, confidence, feature_dim=16)``.
+
+    Returns a ``ClassificationResult`` with a finite all-zeros feature
+    vector of the declared length. Does NOT exercise any classifier
+    code path -- it is a pure constructor for testing the
+    threat-enrichment wrapper (WS-B-006).
+    """
+
+    def _factory(
+        modulation_class: ModulationLabel,
+        confidence: float,
+        feature_dim: int = 16,
+    ) -> ClassificationResult:
+        return ClassificationResult(
+            modulation_class=modulation_class,
+            confidence=confidence,
+            feature_vector=np.zeros(feature_dim, dtype=np.float64),
+        )
+
+    return _factory
+
+
+@pytest.fixture
+def bundled_profile_library_path() -> Path:
+    """Path to the v1.0.0 bundled threat-profile library directory."""
+    return Path(__file__).resolve().parent.parent / "threats" / "profiles"

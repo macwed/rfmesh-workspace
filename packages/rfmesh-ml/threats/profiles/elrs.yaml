@@ -1,0 +1,26 @@
+emitter_class: elrs
+human_name: "ExpressLRS R/C control link (LoRa-FHSS)"
+references:
+  - "https://www.expresslrs.org/"
+  - "Semtech SX1276/SX1278 datasheet (LoRa modulation, 868/915 MHz)"
+match_rules:
+  - modulation_class: lora
+    freq_band_hz: [863.0e6, 870.0e6]
+    min_confidence: 0.6
+    notes: >-
+      EU 868 MHz ISM band (region 1 ELRS default). NOTE: Crossfire also
+      operates on this band with LoRa-FHSS modulation; WS-B-006 v1.0.0
+      cannot honestly distinguish ELRS from Crossfire on modulation +
+      frequency alone, so a match against this rule co-occurring with
+      crossfire.yaml's 868 MHz rule returns EmitterClass.UNKNOWN
+      (multi-match honesty policy). The operator on the tablet sees
+      both candidates and decides; a v1.5+ hop-rate discriminator is
+      tracked in the WS-B-006 implementation notes.
+  - modulation_class: lora
+    freq_band_hz: [2.4e9, 2.485e9]
+    min_confidence: 0.6
+    notes: >-
+      2.4 GHz ISM band (region 2 / short-range ELRS). Crossfire does
+      not target this band, so a match here is unambiguous.
+stub: false
+stub_reason: ""

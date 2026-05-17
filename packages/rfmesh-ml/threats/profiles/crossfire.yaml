@@ -1,0 +1,25 @@
+emitter_class: crossfire
+human_name: "TBS Crossfire R/C control link (long-range LoRa-FHSS)"
+references:
+  - "https://www.team-blacksheep.com/products/prod:crossfire_tx"
+  - "Semtech SX1276/SX1278 datasheet (LoRa modulation, 868/915 MHz)"
+match_rules:
+  - modulation_class: lora
+    freq_band_hz: [863.0e6, 870.0e6]
+    min_confidence: 0.6
+    notes: >-
+      EU 868 MHz ISM band (Crossfire long-range link). NOTE: ELRS also
+      operates on this band with LoRa-FHSS modulation; WS-B-006 v1.0.0
+      cannot honestly distinguish Crossfire from ELRS on modulation +
+      frequency alone, so a match against this rule co-occurring with
+      elrs.yaml's 868 MHz rule returns EmitterClass.UNKNOWN
+      (multi-match honesty policy). See elrs.yaml notes.
+  - modulation_class: lora
+    freq_band_hz: [915.0e6, 928.0e6]
+    min_confidence: 0.6
+    notes: >-
+      US 915 MHz ISM band (Crossfire long-range link, region 2). ELRS
+      also operates on this band; same multi-match honesty policy as
+      the 868 MHz rule above.
+stub: false
+stub_reason: ""

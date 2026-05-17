@@ -1,0 +1,26 @@
+emitter_class: volnorez
+human_name: "Volnorez vehicle-mounted counter-FPV jammer"
+references: []
+match_rules:
+  - modulation_class: fhss
+    freq_band_hz: [2.4e9, 2.485e9]
+    min_confidence: 0.5
+    notes: >-
+      2.4 GHz ISM band (counter-FPV target band). Indicative only --
+      the enrichment layer returns EmitterClass.UNKNOWN on any match
+      against this stub profile per the WS-B-006 stub-honesty rule.
+      Rules on a stub profile are documentation for the demo, not
+      classification.
+  - modulation_class: fhss
+    freq_band_hz: [5.725e9, 5.875e9]
+    min_confidence: 0.5
+    notes: >-
+      5.8 GHz ISM band (FPV-video downlink, secondary Volnorez target).
+      Same stub-honesty rule applies.
+stub: true
+stub_reason: |
+  Awaiting real-IQ capture and classifier training. v1.0.0 ships a
+  structural placeholder per INTERFACES.md §1 stub-at-v1.0.0
+  designation. The enrichment layer returns EmitterClass.UNKNOWN on
+  any match against this profile (rfmesh_ml.threats honesty rule:
+  the demo does not present a fabricated VOLNOREZ classification).

@@ -1,0 +1,27 @@
+emitter_class: gsm_jammer
+human_name: "GSM-band handset emission (jammer or unauthorised handset)"
+references:
+  - "3GPP TS 45.005 (GSM 900 / E-GSM 900 / DCS 1800 channel arrangement)"
+  - "INTERFACES.md §1 EmitterClass: GSM_JAMMER is distinctive in context, not in waveform"
+match_rules:
+  - modulation_class: fsk
+    freq_band_hz: [925.0e6, 960.0e6]
+    min_confidence: 0.5
+    notes: >-
+      GSM-900 downlink band (925-960 MHz). v1.0.0 keys off the band +
+      a generic FSK-like modulation hint -- the real discrimination
+      between a GSM jammer and a legitimate handset emission requires
+      operator context (lone uplink burst from a static, non-
+      infrastructure location -- per INTERFACES.md §1). The threat
+      library matches; the fusion server's node_position context plus
+      the absence of nearby cell-tower infrastructure is what turns a
+      match into a real GSM_JAMMER classification.
+  - modulation_class: fsk
+    freq_band_hz: [880.0e6, 915.0e6]
+    min_confidence: 0.5
+    notes: >-
+      GSM-900 uplink band (880-915 MHz). Same caveat as the downlink
+      rule above -- the threat library cannot distinguish jammer from
+      legitimate handset on modulation alone.
+stub: false
+stub_reason: ""

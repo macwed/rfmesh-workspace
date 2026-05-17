@@ -36,6 +36,7 @@ from rfmesh_ml.modulation_classifier import (
     ModulationClassifier,
     ModulationLabel,
 )
+from rfmesh_ml.threats import ThreatProfileError, enrich_to_emitter_class
 
 __all__ = [
     "CONFIDENCE_FLOOR",
@@ -45,4 +46,6 @@ __all__ = [
     "FeatureExtractionError",
     "ModulationClassifier",
     "ModulationLabel",
+    "ThreatProfileError",
+    "enrich_to_emitter_class",
 ]

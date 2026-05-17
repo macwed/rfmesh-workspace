@@ -1,0 +1,25 @@
+emitter_class: droneid
+human_name: "DJI DroneID / OcuSync downlink beacon (Mavic-class)"
+references:
+  - "DJI DroneID protocol reverse-engineering: https://github.com/RUB-SysSec/DroneSecurity"
+  - "DJI OcuSync 2.4 GHz / 5.8 GHz downlink (Mavic 2 / Mavic 3 / Air series)"
+match_rules:
+  - modulation_class: fsk
+    freq_band_hz: [2.4e9, 2.485e9]
+    min_confidence: 0.5
+    notes: >-
+      2.4 GHz ISM band. v1.0.0 keys off the band + a generic narrow-
+      burst FSK-or-FHSS heuristic -- the real DJI DroneID / OcuSync
+      waveform is OFDM-based and WS-B-005 does not classify OFDM as
+      a modulation family. A v1.5+ ticket sharpens this against real
+      captures; until then this rule matches FSK-classified emissions
+      in the 2.4 GHz ISM band.
+  - modulation_class: fhss
+    freq_band_hz: [2.4e9, 2.485e9]
+    min_confidence: 0.5
+    notes: >-
+      2.4 GHz ISM band, FHSS variant. Some DJI DroneID variants and
+      the OcuSync downlink hop across the 2.4 GHz band; this rule
+      matches FHSS-classified emissions there.
+stub: false
+stub_reason: ""
