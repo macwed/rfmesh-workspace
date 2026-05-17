@@ -385,3 +385,33 @@ Read-out lands in `docs/demo/null_depth_mc_stats.md`. `docs/demo/script.md` Beat
 - 6 new fusion property tests pass; whole suite re-run TBD as background task.
 - ruff + mypy clean across all modified files (`scripts/`, `packages/rfmesh-fusion/tests/`).
 - No contracts touched; SCHEMA_VERSION unchanged.
+
+---
+
+## 2026-05-17 night — Tier C follow-ups
+
+### C1 — ARCHITECTURE↔INTERFACES drift check (`c4eeebb..HEAD`)
+
+Audit covered: enum membership, unit/convention drift, SCHEMA_VERSION pin, capability layer descriptions, no-GNSS/TDOA/magnetometer commitments, fusion solver method strings, demo-piece backings, CoT type strings.
+
+**No 🔴 contract-level drift.** 4 findings, all fixed in `ARCHITECTURE.md`:
+
+| # | Severity | Drift | Fix |
+|---|---|---|---|
+| 1 | 🟡 | §1 L2 description says "MUSIC or MVDR", omits Capon (added in 1.1.0 per ADR-008), conflates MVDR-DoA with MVDR-null. | Rewrote L2 paragraph to enumerate `L2_MUSIC` / `L2_CAPON` / `L2_MVDR_NULL` with their distinct roles. |
+| 2 | 🟡 | "null-steering" framing in §1 said "dual-use clever-hack option"; missing **anti-desense, not ECM** disclaimer. | Added explicit "anti-desense, not ECM" framing + ADR-008 §D8 ≤ 20 dB UI cap + rehearsed band ("−18 dB slide, 15–20 dB typical, up to 25 dB fresh-cal"). |
+| 3 | 🟢 | SCHEMA_VERSION footer absent from ARCHITECTURE.md (only in INTERFACES.md). | Added "Mirrors contracts at SCHEMA_VERSION = 1.1.0" line under Date. |
+| 4 | 🟢 | Date stamp not re-stamped despite §1 L2 split. | Updated to "Date: 2026-05-14 (last amended 2026-05-17 for L2 enum split per ADR-008)". |
+
+Pure-docs commit; no contract change; SCHEMA_VERSION unchanged.
+
+### C2 — tower_sanity_playbook.md reconstruction
+
+**Decision: not authored.** Investigation confirmed `docs/hardware/phase-c-bench-checklist.md` already supersedes the original Thread-1 playbook end-to-end:
+
+- §2 Phase A folds in the `rtl_power -f 800M:980M:10k` cellular carrier-identification step that was the playbook's load-bearing first move.
+- §3-§5 cover the manual sweep + parabolic fit + per-failure-mode diagnosis branches that the playbook enumerated.
+- Comment line 11 in the bench checklist explicitly states "this checklist supersedes [tower_sanity_playbook.md] for the new project".
+- Maciej's draft `docs/hardware/phase-c-tutorial.md` + Polish translation cover the operator-facing tutorial layer.
+
+The original brief framed C2 as "only useful if Phase C surfaces something the bench checklist doesn't cover" — which has not happened. Re-authoring the playbook now would duplicate content with no new information. Parked: if Phase C surfaces a gap, file follow-up against `phase-c-bench-checklist.md` directly rather than reconstructing the legacy playbook.

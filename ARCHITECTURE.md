@@ -4,7 +4,8 @@
 **Audience:** everyone working on rfmesh — the lead, the mid-level Opus agents
 who own workstreams, the Claude Code agents who write tickets' worth of code,
 and Maciej as project owner.
-**Date:** 2026-05-14.
+**Date:** 2026-05-14 (last amended 2026-05-17 for L2 enum split per ADR-008).
+**Mirrors contracts at:** `SCHEMA_VERSION = "1.1.0"`.
 
 This document is the *why*. It explains the small number of decisions that
 every workstream depends on, and the reasoning behind each. The *what* of any
@@ -59,14 +60,24 @@ multipath. Hardware-agnostic: RTL-SDR, HackRF, or any other single-channel
 SDR through the `Receiver` Protocol.
 
 **L2 — Precision DF.** Phase-coherent subspace direction finding on a two-or-
-more-element antenna array, using MUSIC or MVDR. Requires a phase-coherent
+more-element antenna array, using one of three subspace estimators:
+**MUSIC** (eigendecomposition of `R`, contract enum `L2_MUSIC`), **Capon /
+MVDR-spectrum** (peak of `1/(a^H R^-1 a)`, contract enum `L2_CAPON` added
+in SCHEMA_VERSION 1.1.0 per ADR-008), and the dual-use sibling **MVDR
+null-steering** (contract enum `L2_MVDR_NULL`). Requires a phase-coherent
 multi-channel SDR (bladeRF 2.0 micro or ADALM-Pluto+, both AD936x-family,
 single RFIC, coherent by construction). Output: a `BearingReport` with 1–3°
-uncertainty under benign conditions. The *same* sample covariance matrix R
-that MUSIC eigendecomposes for angle-of-arrival can also be inverted (MVDR /
-LCMV) to synthesize a spatial null toward an active jammer — the dual-use
-property the BoTH3 brief explicitly flags as a clever-hack option. **One
-matrix, two products.**
+uncertainty under benign conditions for MUSIC / Capon; null-steering does
+*not* emit `BearingReport`s — it produces a receive weight vector that
+nulls a specified off-look direction. The *same* sample covariance matrix
+R that the DoA estimators consume can also be inverted (MVDR distortionless
+weight `w = R^-1 a / (a^H R^-1 a)`) to synthesize a spatial null toward an
+active jammer. The framing is **anti-desense** (protecting our own L2
+coherent DF channel from being desensitised by a co-channel jammer), **not
+ECM** — we are not transmitting through this array. ADR-008 §D8 caps UI
+text quoting null depth at ≤ 20 dB; the slide caption is "−18 dB" with a
+"15–20 dB typical, up to ~25 dB with fresh calibration" rehearsed band.
+**One matrix, two products.**
 
 **L3 — Classification.** Edge ML emitter classification on a Raspberry Pi 4,
 typically a small CNN over STFT spectrograms. Labels the emitter (ELRS,
