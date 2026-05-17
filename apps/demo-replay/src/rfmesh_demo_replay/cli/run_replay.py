@@ -5,6 +5,7 @@ Usage::
     rfmesh-demo-replay --scenario scenarios/trench_demo.yaml \
                        [--pessimism 1.0|1.5|2.0] \
                        [--no-cot] [--headless] \
+                       [--channel-override free_space|two_ray_ground|...] \
                        [--log-level INFO]
 
 Loads the scenario YAML, constructs a ``ReplayOrchestrator`` in
@@ -22,7 +23,15 @@ from pathlib import Path
 from rfmesh_contracts import FixEvent
 
 from ..replay import ReplayOrchestrator
-from ..scenario import ScenarioLoader
+from ..scenario import ChannelModelSpec, ScenarioLoader
+
+_CHANNEL_OVERRIDE_CHOICES = (
+    "free_space",
+    "two_ray_ground",
+    "multipath_fir",
+    "log_normal_shadowing",
+    "composite",
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -55,6 +64,18 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Disable the in-process dashboard subscriber.",
     )
     parser.add_argument(
+        "--channel-override",
+        type=str,
+        default=None,
+        choices=_CHANNEL_OVERRIDE_CHOICES,
+        help=(
+            "Override the scenario's channel model at load time. Useful for "
+            "artifact-capture runs that need a free-space channel even when "
+            "the scenario specifies a multipath stack (closes A3 NEXT-2). "
+            "Composite is not directly overridable -- pick one atomic kind."
+        ),
+    )
+    parser.add_argument(
         "--log-level",
         type=str,
         default="INFO",
@@ -65,6 +86,18 @@ def _build_parser() -> argparse.ArgumentParser:
 
 async def _run_async(args: argparse.Namespace) -> int:
     scenario = ScenarioLoader().load(args.scenario)
+    if args.channel_override is not None:
+        # Replace the scenario's channel_model with an atomic kind. The
+        # scenario model is frozen=True, so we rebuild it via model_copy
+        # with the override. Documented in A3_NOTES.md NEXT-2.
+        original_kind = scenario.channel_model.kind
+        override = ChannelModelSpec(kind=args.channel_override)
+        scenario = scenario.model_copy(update={"channel_model": override})
+        _LOG.info(
+            "rfmesh-demo-replay: channel overridden to %r (was %r)",
+            args.channel_override,
+            original_kind,
+        )
     fix_sink: asyncio.Queue[FixEvent] = asyncio.Queue()
     orchestrator = ReplayOrchestrator(
         scenario,

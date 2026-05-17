@@ -1,0 +1,183 @@
+# three_node_trench.yaml — 3-node bench-bringup scenario.
+#
+# WHY THIS FILE EXISTS:
+#   trench_demo.yaml is the design-intent 4-node BoTH3 demo (3 L1 + 1 L2
+#   overwatch). For Maciej's bench bring-up he has 3 RTL-SDR + 3 ATK-10
+#   Yagi + 3 MG996R, no L2 hardware. This file mirrors trench_demo's
+#   3 L1 nodes verbatim and drops the L2 overwatch node. Same geometry,
+#   same channel model, same emitter — strip the L2 for a hardware-
+#   matched bench scenario.
+#
+#   When `rfmesh-demo-replay --scenario scenarios/three_node_trench.yaml`
+#   runs the orchestrator against this, the produced bearings + fix
+#   stream is byte-equivalent (within RNG seed) to what Maciej's bench
+#   should produce once 3 RTL-SDR + 3 servo + 3 Yagi are wired and
+#   feeding fusion.
+#
+# Source: docs/BACKLOG.md S2 ticket.
+# Companion: docs/hardware/3-node-bench-bringup.md (the operational
+# recipe for running this against real hardware).
+
+scenario_id: three_node_trench_v1
+description: >
+  Three L1 forward-observation nodes around an emitter at 3 km north.
+  Bench-bringup scenario for Maciej's 3-RTL-SDR hardware setup. Same
+  geometry as trench_demo.yaml's L1 trio, no L2 overwatch.
+
+# ENU origin near Marche-les-Dames (BoTH3 site placeholder). Replace
+# with surveyed origin before any live run.
+enu_origin:
+  lat_deg: 50.330000
+  lon_deg: 5.000000
+  hae_m: 200.0
+
+# Emitter (the target the demo is geolocating).
+emitter:
+  emitter_id: target_01
+  enu_position_m: [0.0, 3000.0]   # east, north
+  center_freq_hz: 915.0e6
+  modulation: cw
+  emit_power_db_above_noise: 25.0
+  expected_class: UNKNOWN
+  notes: >
+    25 dB at-emitter reference SNR. After ~2-3 km free-space-loss-
+    plus-multipath the per-node SNR is ~20 dB, matching the regime
+    in which the L1 sigma honesty band (~5 deg) is calibrated.
+
+# Channel model: design-intent multipath stack at 10 m antenna heights
+# (per the 2026-05-18 D4 fix; see scenarios/trench_demo.yaml header).
+channel:
+  kind: composite
+  layers:
+    - kind: two_ray_ground
+      transmitter_height_m: 10.0
+      receiver_height_m: 10.0
+      ground_dielectric: 15.0
+      ground_conductivity_s_per_m: 0.005
+    - kind: multipath_fir
+      taps:
+        - { delay_samples: 0,  amplitude: 1.00, phase_deg:   0 }
+        - { delay_samples: 3,  amplitude: 0.30, phase_deg:  45 }
+        - { delay_samples: 8,  amplitude: 0.15, phase_deg: 120 }
+    - kind: log_normal_shadowing
+      std_db: 2.0
+      seed: 1337
+
+# Three L1 nodes. Geometry, capabilities, headings copied verbatim
+# from trench_demo.yaml's L1 trio. The L2 overwatch node is omitted
+# because Maciej's bench has no phase-coherent SDR (Pluto+ delivery
+# uncertain, bladeRF partner-pool not available pre-event).
+nodes:
+  - node_id: node-l1-west
+    enu_position_m: [-1800.0, +1800.0]
+    sigma_m: 5.0
+    heading_deg: 90.0
+    capabilities: [l1_rssi]
+    sdr:
+      driver: sim
+      sample_rate_hz: 2.0e6
+      center_freq_hz: 915.0e6
+      gain_db: 30.0
+      bias_tee: false
+    bearer:
+      kind: wifi
+      heartbeat_interval_s: 2.0
+    expected_sigma_deg: 5.0
+    notes: NW flank, forward observation post 1, RTL-SDR + ATK-10 Yagi
+
+  - node_id: node-l1-east
+    enu_position_m: [+1800.0, +1800.0]
+    sigma_m: 5.0
+    heading_deg: 270.0
+    capabilities: [l1_rssi]
+    sdr:
+      driver: sim
+      sample_rate_hz: 2.0e6
+      center_freq_hz: 915.0e6
+      gain_db: 30.0
+      bias_tee: false
+    bearer:
+      kind: wifi
+      heartbeat_interval_s: 2.0
+    expected_sigma_deg: 5.0
+    notes: NE flank, forward observation post 2, RTL-SDR + ATK-10 Yagi
+
+  - node_id: node-l1-south
+    enu_position_m: [0.0, +900.0]
+    sigma_m: 5.0
+    heading_deg: 0.0
+    capabilities: [l1_rssi]
+    sdr:
+      driver: sim
+      sample_rate_hz: 2.0e6
+      center_freq_hz: 915.0e6
+      gain_db: 30.0
+      bias_tee: false
+    bearer:
+      kind: wifi
+      heartbeat_interval_s: 2.0
+    expected_sigma_deg: 5.0
+    notes: Central south observation post, RTL-SDR + ATK-10 Yagi
+
+# Demo beats — 4 beats matching trench_demo's A/B/C without the L2 D.
+# Beat D is dropped because there is no L2 node; the 3-node bench
+# tops out at the C beat geometry.
+demo_beats:
+  - beat_id: A
+    label: "One observation post"
+    duration_s: 10
+    active_nodes: [node-l1-south]
+    expected_fix: null
+    dashboard_caption: >
+      Single bearing line. No cross-fix yet — one bearing is a ray,
+      not a fix.
+
+  - beat_id: B
+    label: "Two posts — first cross-fix"
+    duration_s: 10
+    active_nodes: [node-l1-west, node-l1-east]
+    expected_fix:
+      semi_major_m: 589
+      semi_minor_m: 393
+      orientation_deg: 0.0
+      range_m: 1200
+      semi_over_range_pct: 49.1
+      gdop: 1.53
+      confidence_level: LOW
+    dashboard_caption: >
+      Two posts. The cross-fix appears, but the ellipse is wide —
+      two bearings only constrain the position along one axis.
+
+  - beat_id: C
+    label: "Three posts — full L1 geometry"
+    duration_s: 15
+    active_nodes:
+      - node-l1-west
+      - node-l1-east
+      - node-l1-south
+    expected_fix:
+      semi_major_m: 393
+      semi_minor_m: 357
+      orientation_deg: 90.0
+      range_m: 1500
+      semi_over_range_pct: 26.2
+      gdop: 1.16
+      confidence_level: MEDIUM
+    dashboard_caption: >
+      Three posts. Ellipse halves. GDOP under 1.2 — the geometry is
+      good. This is the bench bring-up endpoint.
+
+# Top-level expectations the dashboard / honesty Monte-Carlo can gate
+# against. These mirror the per-beat numbers but pre-aggregate for
+# the test harness. No L2 entries because there is no L2 node here.
+expected_outcomes:
+  l1_only_gdop_max: 1.5
+  l1_only_semi_major_m_max: 450
+  l1_only_semi_minor_m_max: 400
+
+# Cross-references
+references:
+  parent_scenario: scenarios/trench_demo.yaml
+  bench_bringup_recipe: docs/hardware/3-node-bench-bringup.md
+  geometry_doc: docs/demo/trench-demo-geometry.md
+  adr_confidence_policy: docs/adr/ADR-005-fusion-confidence-policy.md
