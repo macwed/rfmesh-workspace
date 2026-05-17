@@ -1,9 +1,13 @@
 # rfmesh — Workstreams
 
 **Status:** binding for ownership and dependencies. Acceptance criteria are
-the lead's targets; workstream agents may refine within their own scope.
-**Audience:** lead, mid-level Opus agents, Maciej as project owner.
-**Date:** 2026-05-14.
+the lead's targets; subagents may refine within their own scope. The
+package-ownership table in §1 is canonical for *who writes which files*;
+the per-workstream agent-name column ("Mid-level agent") is a
+historical fossil and is now an annotation only (see note below).
+**Audience:** lead-Opus + council subagents, Maciej as project owner.
+**Date:** 2026-05-14 (original); §0 + §1 header amended 2026-05-17 for
+the lead-Opus handoff per `HANDOFF_TO_CLAUDE_CODE_LEAD.md` §2.
 
 This document is **the** ownership map. It says who owns which package,
 what each workstream delivers, in what order, against what acceptance
@@ -25,14 +29,23 @@ A file lives in exactly one workstream. A workstream may *read* from
 workstreams' salvage rows (as documented reference), but it **writes** only
 to its own files. Cross-workstream changes require lead review.
 
-Workstream-zero is the lead (this conversation). Workstreams A, B, C+D are
-the three Opus 4.7 mid-level agents.
+**Operational model (updated 2026-05-17).** Workstream-zero is the lead
+(this conversation, lead-Opus / Claude Code). Workstreams A, B, C+D
+remain useful as **logical package groupings** (the rows of §1 describe
+which files belong together); the "three mid-level Opus agents in
+worktree isolation" model has been replaced by lead-Opus running a
+**council of subagents** (architect / code-reviewer / rf-dsp-specialist
+/ demo-integrity, defined in `.claude/agents/*.yaml`) plus
+ticket-builder subagents spawned per package. The council reviews
+diffs and ADRs before merge; the lead executes commits and pushes
+to `main` directly. See `CLAUDE.md` (project root) lines 5-49 for the
+canonical council protocol.
 
 ---
 
 ## §1 The workstream table
 
-| # | Workstream | Mid-level agent | Owns (packages / files) | Depends on (contracts only) | Salvage from `rf-mesh` | Reviewer for cross-cutting |
+| # | Workstream | Historical agent (annotation only — see §0) | Owns (packages / files) | Depends on (contracts only) | Salvage from `rf-mesh` | Reviewer for cross-cutting |
 |---|---|---|---|---|---|---|
 | **0** | **Lead — contracts & docs** | (this conversation) | `packages/rfmesh-contracts/`, `ARCHITECTURE.md`, `INTERFACES.md`, `INHERITED_CONTEXT.md`, `WORKSTREAMS.md`, `AGENTS.md`, `SALVAGE_AUDIT.md`, `docs/adr/` | — | Audit-level only (no source files in this workstream salvaged) | All other workstreams |
 | **A** | **SDR + simulator + firmware salvage** | Opus-A | `packages/rfmesh-sdr/`, `packages/rfmesh-servo/`, `firmware/`, `tools/` (servo & capture tooling) | `rfmesh-contracts` | **TAKE:** entire `firmware/` tree (incl. ESP32-S2 port — see §1.1 in INHERITED_CONTEXT), `rfmesh/scan/servo/` (host driver, all 6 modules), `rfmesh/dsp/` is *not* in A's row, `rfmesh/io/iq_reader.py` & `iq_recorder.py` & `IQMetadata`, `rfmesh/io/constants.py`, `tools/servo_repl.py`, `docs/wire-protocols/servo_uart_v1.md`, `docs/hardware_calibration.md`, `lora_beacon_spec.md`. **REFACTOR:** `rfmesh/io/device.py` (ABC → `Receiver` Protocol), `rfmesh/io/devices/rtlsdr.py` (subclass → Protocol-conformer), `rfmesh/io/calibration.py` (re-homed + add ArrayCalibration sibling), `rfmesh/cli/servo_calibrate.py`, `rfmesh/cli/calibrate_dongles.py`, `rfmesh/cli/record_iq.py`. **LEAVE:** `rfmesh/io/devices/bladerf.py` stub (rewrite fresh as `BladeRFCoherentReceiver`). | Lead |
@@ -43,9 +56,10 @@ the three Opus 4.7 mid-level agents.
 
 ## §2 What each workstream delivers (acceptance criteria)
 
-These are the lead's targets at v1.0.0 of the contracts. Each workstream's
-mid-level agent refines them into tickets for Claude Code per the format in
-`AGENTS.md`.
+These are the lead's targets at v1.0.0 of the contracts. Lead-Opus
+authors tickets per the `AGENTS.md` §4 format and spawns ticket-builder
+subagents to execute them; the council (`.claude/agents/*.yaml`) reviews
+diffs and ADRs before merge per `CLAUDE.md` lines 23-49.
 
 ### Workstream 0 (Lead) — deliverables
 

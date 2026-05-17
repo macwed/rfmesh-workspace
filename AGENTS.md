@@ -11,6 +11,13 @@ doubt. It is short on purpose. Anthropic's published guidance is that ~150
 binding instructions is the practical ceiling for reliable adherence; this
 file fits inside that budget.
 
+> **2026-05-17:** `HANDOFF_TO_CLAUDE_CODE_LEAD.md` §2 is the canonical
+> source for the *relaxed* operational scaffolds (worktree-per-workstream,
+> merge-to-main lead gate, manual escalation channel). Where the §2
+> seven binding invariants and the §3 / §7 detail here disagree,
+> HANDOFF §2 wins. The hook
+> `.claude/hooks/block-forbidden-commands.sh` mirrors the relaxed set.
+
 If a rule here is ever in tension with another document, **this file wins**
 for agent behaviour; the conflict is then itself a bug to raise with the
 lead.
@@ -122,22 +129,36 @@ escalated.
 
 ### Allowed with restrictions
 
-- `git push` — only to the workstream's own branch, never to `main`.
-- File create / edit / delete — only within the agent's owned files per
-  `WORKSTREAMS.md` and within the ticket's `Files-you-may-touch` list.
+- `git push` — lead-Opus pushes directly to `main`. Builder/council
+  subagents push to whatever branch the runtime opened them on (may be
+  an isolated worktree branch); lead merges back into `main`. See §7
+  for the operative model.
+- File create / edit / delete — within the ticket's `Files-you-may-touch`
+  list. Lead is unconstrained by `Files-you-may-touch`; subagents are.
 
 ### Forbidden without explicit lead approval
 
-- `uv add <pkg>` — adding a runtime dependency. Workstream agent writes a
-  `/uvadd-request` (see §5).
-- `git push --force`, `git push --no-verify`, anything that bypasses
-  pre-commit / CI.
-- `git merge` to `main` — only the lead merges to main.
+- `uv add <pkg>` — adding a runtime dependency. Subagent writes a
+  `/uvadd-request` (see §5); lead approves and runs `uv add` at the
+  workspace root.
+- `git push --force`, `git push --no-verify`, `git commit --no-verify`,
+  anything that bypasses pre-commit / CI. **Still binding for the
+  lead.** Force-push to `main` is forbidden even for the lead — it
+  rewrites published history and breaks any agent that pulled the
+  prior tip.
 - `rm -rf`, mass deletes, anything against the inherited firmware or
   servo trees without a salvage-amendment ticket.
 - Modifying `packages/rfmesh-contracts/src/**` — see Invariant 1.
+  Modifications by lead require an accepted ADR + `SCHEMA_VERSION`
+  bump; subagents never touch this tree.
 - Modifying `version.py` outside the contracts package or anywhere else
   that pretends to bump `SCHEMA_VERSION`.
+
+> **Note (2026-05-17):** the pre-handoff rule "*`git merge` to `main` —
+> only the lead merges to main*" is removed because the lead **is** the
+> active conversation now (per `HANDOFF_TO_CLAUDE_CODE_LEAD.md` §2).
+> The merge gate is operative automatically. The hook
+> `.claude/hooks/block-forbidden-commands.sh` was relaxed to match.
 
 ---
 
@@ -297,27 +318,26 @@ deliberately.
 
 ---
 
-## §7 Git workflow (worktrees)
+## §7 Git workflow
 
-Each active ticket runs in its own git worktree:
+> **Updated 2026-05-17** to reflect the lead-Opus model per
+> `HANDOFF_TO_CLAUDE_CODE_LEAD.md` §2. The pre-handoff
+> three-worktree-per-workstream model (ws-a / ws-b / ws-cd) and the
+> "morning sync ritual" are obsolete and have been removed. The
+> simplified workflow:
 
-```
-worktree/ws-a/<ticket-short-name>    ← Workstream A's current ticket
-worktree/ws-b/<ticket-short-name>    ← Workstream B's current ticket
-worktree/ws-cd/<ticket-short-name>   ← Workstream C+D's current ticket
-```
-
-Claude Code instances open in their assigned worktree
-(`claude --worktree <name>`) and never see each other's files. The
-worktree merges back to a workstream branch; the workstream branch is
-PR'd to `main`; **only the lead merges PRs to `main`.**
-
-`.claude/worktrees/` is in `.gitignore`. Worktree contents do not show as
-untracked files in the main checkout.
-
-**Morning sync ritual.** Once per working session, each workstream owner
-ensures its worktrees are rebased on `origin/main`. This is the
-drift-prevention ritual; missing it means a workstream slowly diverges.
+- Lead-Opus operates on `main` directly. Commits and pushes land on
+  `origin/main` as the lead executes — no PR ceremony.
+- Builder/council subagents are spawned by the lead and, depending on
+  the agent runtime, may operate either in the lead's `main` checkout
+  or in an automatically-created isolated worktree (under
+  `.claude/worktrees/`). When a subagent operates in an isolated
+  worktree it pushes to its own branch; the lead fetches and
+  `git merge --no-ff` into `main`. The hook
+  `.claude/hooks/block-forbidden-commands.sh` permits this; force-push
+  and `--no-verify` remain blocked (see §3).
+- `.claude/worktrees/` stays in `.gitignore` — worktree contents do not
+  appear as untracked files in the main checkout.
 
 ---
 
