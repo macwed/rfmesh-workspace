@@ -9,6 +9,8 @@ version = "0.1.0"
 description = "CoT/ATAK publisher (PyTAK adapter) for rfmesh FixEvent output."
 requires-python = ">=3.12"
 dependencies = [
+    "cryptography>=42",
+    "pytak>=6,<7",
     "rfmesh-contracts",
 ]
 
