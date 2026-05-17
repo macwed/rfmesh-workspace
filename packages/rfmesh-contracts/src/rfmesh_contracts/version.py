@@ -35,4 +35,4 @@ from __future__ import annotations
 from typing import Final
 
 #: The frozen contract version. Bumped only by the lead, only via an accepted ADR.
-SCHEMA_VERSION: Final[str] = "1.0.0"
+SCHEMA_VERSION: Final[str] = "1.1.0"

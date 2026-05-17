@@ -3,7 +3,7 @@
 Covers Acceptance 1 and 2 of WS-B-004:
 
 * Protocol conformance (``BearingEstimator``).
-* ``method == Capability.L2_MVDR_NULL``.
+* ``method == Capability.L2_CAPON`` (ADR-008 renamed from L2_MVDR_NULL).
 * Peak recovery within +/-2 deg at 20 dB SNR on the canonical UCA-4
   fixture (Capon's peak is broader than MUSIC's; the tolerance is
   looser than WS-B-003's +/-1 deg).
@@ -102,11 +102,16 @@ def test_protocol_conformance(mvdr_uca4_scenario: SimulationScenario) -> None:
     receiver.close()
 
 
-def test_method_is_l2_mvdr(mvdr_uca4_scenario: SimulationScenario) -> None:
-    """``method`` advertises the MVDR capability so the runtime can route by it."""
+def test_method_is_l2_capon(mvdr_uca4_scenario: SimulationScenario) -> None:
+    """``method`` advertises the Capon (MVDR-spectrum) capability so the runtime can route by it.
+
+    Renamed from ``test_method_is_l2_mvdr`` in ADR-008 (SCHEMA_VERSION 1.1.0)
+    when the enum was split: ``L2_CAPON`` for this DoA estimator,
+    ``L2_MVDR_NULL`` for the genuine null-steering deliverable (WS-B-007).
+    """
     receiver = _build_calibrated_receiver(mvdr_uca4_scenario)
     estimator = _build_estimator(receiver)
-    assert estimator.method is Capability.L2_MVDR_NULL
+    assert estimator.method is Capability.L2_CAPON
     receiver.close()
 
 
@@ -120,7 +125,7 @@ def test_peak_recovers_known_angle_uca(mvdr_uca4_scenario: SimulationScenario) -
     receiver.close()
 
     assert report is not None
-    assert report.method is Capability.L2_MVDR_NULL
+    assert report.method is Capability.L2_CAPON
     assert report.node_id == _NODE_ID
     assert report.t_unix_ns == _T_UNIX_NS
     # Signed shortest-arc deviation handles the 0/360 seam correctly.

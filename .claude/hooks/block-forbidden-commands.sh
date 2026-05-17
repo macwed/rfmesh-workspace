@@ -62,13 +62,12 @@ check 'git[[:space:]]+push[[:space:]]+-[a-zA-Z]*f([[:space:]]|$)' \
 check 'git[[:space:]]+commit.*--no-verify' \
   "git commit --no-verify forbidden (bypasses pre-commit gate)"
 
-# Pushing to main: catches `git push origin main`, `... HEAD:main`,
-# `git push -u origin main`, etc.
-check 'git[[:space:]]+push[[:space:]].*[[:space:]]main([[:space:]]|$)' \
-  "Pushing to main forbidden — only the lead merges (AGENTS.md §7)"
-
-check 'git[[:space:]]+push.*HEAD:main' \
-  "Pushing to main forbidden — only the lead merges (AGENTS.md §7)"
+# NOTE 2026-05-17: The two "pushing to main" guards were removed when
+# Maciej dissolved the manual four-conversation workflow and handed the
+# project to lead-Opus (see HANDOFF_TO_CLAUDE_CODE_LEAD.md §2). The lead
+# now owns commits and pushes to main directly. Force-push and
+# --no-verify remain blocked because those are real safety guards, not
+# multi-agent coordination scaffolds.
 
 # --- Destructive filesystem ops --------------------------------------------
 # Block rm with any recursive flag variant: -r, -R, --recursive, -rf, -fr, etc.

@@ -1,22 +1,24 @@
 """L2 Capon (a.k.a. MVDR-spectrum) BearingEstimator.
 
-Implements the L2 capability the contracts label ``Capability.L2_MVDR_NULL``:
-a phase-coherent direction-finding estimator that consumes a multi-channel
-IQ block, inverts the sample covariance with diagonal loading, scans the
-Capon pseudospectrum over array-local azimuth, and emits a
-``BearingReport`` whose ``azimuth_sigma_deg`` is calibrated for honesty
-against ground-truth Monte Carlo (see ``tests/test_l2_mvdr_sigma_honesty.py``).
+Implements ``Capability.L2_CAPON``: a phase-coherent direction-finding
+estimator that consumes a multi-channel IQ block, inverts the sample
+covariance with diagonal loading, scans the Capon pseudospectrum over
+array-local azimuth, and emits a ``BearingReport`` whose
+``azimuth_sigma_deg`` is calibrated for honesty against ground-truth
+Monte Carlo (see ``tests/test_l2_mvdr_sigma_honesty.py``).
 
 NAMING NOTE
 -----------
-Capon / MVDR are two names for the same DoA spectrum:
-``P_capon(theta) = 1 / Re( a(theta)^H * R^{-1} * a(theta) )``. The frozen
-contract enum has ``L2_MVDR_NULL`` for the null-steering capability; this
-estimator is structurally the *spectrum* variant of the same R^{-1}-based
-maths and reports ``Capability.L2_MVDR_NULL`` for now (per the ticket,
-the enum name is the only one available pre-contract-change). Pure
-null-steering (synthesise weights toward known interferers) is a separate
-utility that does not satisfy ``BearingEstimator`` and is out of scope.
+Capon / MVDR-spectrum are two names for the same DoA estimator:
+``P_capon(theta) = 1 / Re( a(theta)^H * R^{-1} * a(theta) )``. SCHEMA_VERSION
+1.1.0 (ADR-008) split the enum: this estimator emits
+``Capability.L2_CAPON`` (DoA spectrum) and the separate
+``Capability.L2_MVDR_NULL`` is reserved for the **null-steering**
+deliverable (a receive-weight synthesiser, not a bearing producer) that
+lives in ``rfmesh_dsp.l2_null_steering`` (WS-B-007). The module file
+name (``l2_mvdr.py``) stays for historical association with
+MVDR-family algorithms; the public-API ``method`` and the
+``BearingReport.method`` field report ``L2_CAPON``.
 
 DIAGONAL LOADING IS REQUIRED, NOT OPTIONAL
 ------------------------------------------
@@ -64,8 +66,9 @@ RUN-TIME SIGMA PATH (binding)
     median claimed sigma matches empirical std within +/- 5 %; the same
     constant satisfies the +/-20% honesty band at SNR in {10, 20, 30}
     dB on the canonical UCA-4 scenario).
-11. Return a ``BearingReport`` with ``method=Capability.L2_MVDR_NULL``;
-    on any guard failure, return ``None`` (Invariant 4 surface).
+11. Return a ``BearingReport`` with ``method=Capability.L2_CAPON``
+    (ADR-008 / SCHEMA_VERSION 1.1.0; was ``L2_MVDR_NULL`` in v1.0.0); on
+    any guard failure, return ``None`` (Invariant 4 surface).
 
 The Capon peak is theoretically broader than MUSIC at the same SNR
 (MUSIC has super-resolution; Capon does not). The honesty test
@@ -202,7 +205,7 @@ class L2MvdrEstimator:
 
     #: Capability this estimator implements. Satisfies the
     #: ``BearingEstimator.method`` property on the Protocol side.
-    method: Capability = Capability.L2_MVDR_NULL
+    method: Capability = Capability.L2_CAPON
 
     def __init__(
         self,
@@ -342,7 +345,7 @@ class L2MvdrEstimator:
             node_position=self._node_position,
             azimuth_deg=azimuth_deg,
             azimuth_sigma_deg=sigma_az_deg,
-            method=Capability.L2_MVDR_NULL,
+            method=Capability.L2_CAPON,
             snr_db=snr_db,
         )
 

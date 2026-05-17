@@ -5,7 +5,7 @@ Edits only by the lead architect, in lockstep with the contracts package.
 **Audience:** every workstream agent and reviewer. This is the dictionary you
 consult when you need to know *what a field means*, not just what type it is.
 **Date:** 2026-05-14.
-**Mirrors contracts at:** `SCHEMA_VERSION = "1.0.0"`.
+**Mirrors contracts at:** `SCHEMA_VERSION = "1.1.0"`.
 
 This document does not duplicate the Pydantic schemas — those are
 authoritative, and you read them directly when you want field names, types,
@@ -107,9 +107,26 @@ never a silent downgrade.
 - `L2_MUSIC` (`"l2_music"`) — phase-coherent subspace DF on a 2+ element
   array. Requires `CoherentReceiver` hardware and a successful array
   calibration. Per-bearing uncertainty 1–3° under benign conditions.
-- `L2_MVDR_NULL` (`"l2_mvdr_null"`) — null-steering (dual-use sibling of
-  `L2_MUSIC`). Same R, same array. A node may declare one without the other;
-  conventionally they ship together, but the operator chooses.
+- `L2_CAPON` (`"l2_capon"`) — phase-coherent Capon (MVDR-spectrum) DF on
+  the same array. Same R as MUSIC, different DoA estimator (peak of
+  `1/(a^H R^-1 a)` instead of MUSIC's noise-subspace projector). More
+  robust than MUSIC in small-snapshot / low-SNR regimes. Per-bearing
+  uncertainty 1–3° under benign conditions. **Added in SCHEMA_VERSION
+  1.1.0 (ADR-008)**; previously, WS-B-004's Capon estimator emitted
+  `L2_MVDR_NULL` under a docstring caveat.
+- `L2_MVDR_NULL` (`"l2_mvdr_null"`) — **null-steering** (dual-use
+  sibling of `L2_MUSIC` / `L2_CAPON`). The same R inverted via the MVDR
+  distortionless-response weight formula `w = R⁻¹ a / (a^H R⁻¹ a)` (`a`
+  is the look-direction steering vector) to synthesise a spatial null
+  on any strong off-look source present in R — typically a co-channel
+  jammer. Protects the project's own L2 coherent DF channel from
+  desensitisation by the jammer while the system continues to produce
+  bearings on it (**anti-desense, not ECM**). Does NOT emit a
+  `BearingReport`; it is a receive-weight synthesiser invoked as an
+  operator action. A node declaring `L2_MVDR_NULL` advertises the
+  capability; no streamed wire-format product is emitted in v1.1.0.
+  Implementation: `rfmesh_dsp.l2_null_steering` (WS-B-007). Same R, same
+  array.
 - `L3_CLASSIFY` (`"l3_classify"`) — emitter classification by edge ML. Needs
   a compute node (Raspberry Pi class), SDR-agnostic.
 

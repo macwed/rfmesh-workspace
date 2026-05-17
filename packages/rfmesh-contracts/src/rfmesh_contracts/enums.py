@@ -33,12 +33,28 @@ class Capability(StrEnum):
     * ``L2_MUSIC`` -- phase-coherent subspace direction finding (MUSIC
       pseudospectrum) on a 2+ element antenna array. Requires a phase-coherent
       multi-channel SDR (bladeRF 2.0 micro, ADALM-Pluto+). Fine: ~1-3 deg.
-    * ``L2_MVDR_NULL`` -- the dual-use sibling of ``L2_MUSIC``. The *same*
-      sample covariance matrix that MUSIC eigendecomposes for angle-of-arrival
-      can be inverted (MVDR / Capon) to synthesize a spatial null toward the
-      jammer, protecting own-receiver SNR. A node that can do ``L2_MUSIC`` can
-      usually also do ``L2_MVDR_NULL``; it is a separate capability because the
-      operator may want one without the other.
+    * ``L2_CAPON`` -- phase-coherent Capon (a.k.a. MVDR-spectrum) direction
+      finding on the same array. Same R as MUSIC; different DoA estimator
+      (peak of ``1 / (a^H R^-1 a)`` instead of MUSIC noise-subspace
+      projector). Robust to small SNR / few-snapshot regimes where MUSIC's
+      eigendecomposition struggles. Added in SCHEMA_VERSION 1.1.0
+      (ADR-008). 1-3 deg under benign conditions.
+    * ``L2_MVDR_NULL`` -- the **null-steering** dual-use sibling of
+      ``L2_CAPON`` (and ``L2_MUSIC``). The *same* sample covariance R is
+      inverted via the MVDR distortionless-response weight formula
+      ``w = R^-1 a / (a^H R^-1 a)`` (where ``a`` is the look-direction
+      steering vector) to synthesise a spatial null toward any strong
+      off-look emitter present in R -- typically a co-channel jammer.
+      Protects the project's own L2 coherent DF channel from
+      desensitisation by the jammer while the system continues to
+      produce bearings on it (**anti-desense, not ECM** -- this distinction
+      matters for the BoTH3 pitch). Does NOT emit a ``BearingReport``;
+      it is a receive-weight synthesiser. Reserved in SCHEMA_VERSION 1.1.0
+      (ADR-008); the implementation lives in
+      ``rfmesh_dsp.l2_null_steering`` (WS-B-007). A node declaring
+      ``L2_MVDR_NULL`` in ``NodeConfig.capabilities`` advertises the
+      receive-side null-steering operation as an operator action; no
+      streamed wire-format product is emitted in v1.1.0.
     * ``L3_CLASSIFY`` -- edge ML emitter classification (STFT spectrogram into
       a CNN/ResNet). Labels the emitter (ELRS, Crossfire, GSM jammer, ...).
       Needs a compute node (Raspberry Pi class) but is SDR-agnostic.
@@ -46,6 +62,7 @@ class Capability(StrEnum):
 
     L1_RSSI = "l1_rssi"
     L2_MUSIC = "l2_music"
+    L2_CAPON = "l2_capon"
     L2_MVDR_NULL = "l2_mvdr_null"
     L3_CLASSIFY = "l3_classify"
 

@@ -367,7 +367,11 @@ class NodeConfig(BaseModel):
         Two layers, two responsibilities, both loud on failure.
         """
         caps = set(self.capabilities)
-        l2_caps = {Capability.L2_MUSIC, Capability.L2_MVDR_NULL}
+        l2_caps = {
+            Capability.L2_MUSIC,
+            Capability.L2_CAPON,
+            Capability.L2_MVDR_NULL,
+        }
         declares_l2 = bool(caps & l2_caps)
 
         if declares_l2 and self.array is None:
