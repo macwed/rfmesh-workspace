@@ -40,17 +40,28 @@ underestimate the east-west scale).
 
 ACCURACY ENVELOPE
 -----------------
-With proper meridional/transverse curvatures the approximation is correct
-to well under 1 m of **tangential** error at <= 5 km from the centre,
-even at 70 deg latitude. Tangential = "along the polygon edge"; radial
-distance from the fix position remains effectively exact (limited only
-by float64 rounding) because each polygon vertex is built from its own
-(east_m, north_m) offset relative to the fix. Above ~50 km the
-tangential error grows quadratically with chord length to a worst-case
-~190 m at 50 km, which is well outside the fixes the rfmesh BoTH3
-scenarios produce (~1-5 km ranges); the simpler form is preferred
-over a full geodesic projection (which would pull pyproj as a
-dependency). Tangential error: rf-dsp-council NOTE 3.
+Two distinct error sources, each bounded:
+
+1. **Radial** (vertex-to-fix distance, what the operator sees as the
+   ellipse boundary): effectively exact, limited only by float64
+   rounding, because each polygon vertex is built from its own
+   (east_m, north_m) offset relative to the fix.
+
+2. **Tangential** (along the polygon edge, between adjacent vertices):
+   two contributions, both bounded by the operating range:
+   - Chord-sagitta (`chord^2 / (8 * R_earth)`) — for a 50 km chord
+     this is ~49 m worst-case, far smaller at the operating range.
+   - Equirectangular projection scale-factor mismatch (the
+     longitude-scale `R * cos(phi)` varies across the polygon as
+     `phi` changes by `chord / R`) — ~100-200 m at 50 km from the
+     centre at mid-latitudes, well below 1 m at the <= 5 km
+     operating range.
+
+The combined envelope is well under 1 m at <= 5 km from the centre,
+even at 70 deg latitude. The rfmesh BoTH3 scenarios produce fixes at
+~1-5 km ranges, so the simpler form is preferred over a full
+geodesic projection (which would pull pyproj as a dependency).
+Error-source decomposition: rf-dsp-council NOTE 3 + NOTE 6 follow-up.
 
 THE POLYGON IS CLOSED
 ---------------------
