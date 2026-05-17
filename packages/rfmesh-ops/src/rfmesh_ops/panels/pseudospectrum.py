@@ -14,12 +14,16 @@ the audit obligation this panel honours.
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import numpy.typing as npt
 from matplotlib.axes import Axes
 from rfmesh_contracts import BearingReport
 
 from rfmesh_ops.panels.base import DashboardMessage, Panel
+
+_LOG = logging.getLogger(__name__)
 
 _TITLE = "MUSIC pseudospectrum"
 # Per INTERFACES.md §3: little-endian float32 samples over [0, 360) at
@@ -28,6 +32,7 @@ _TITLE = "MUSIC pseudospectrum"
 # (it adapts to whatever 4-byte aligned size arrives, so future
 # convention changes degrade gracefully).
 _BYTES_PER_FLOAT32 = 4
+_EXPECTED_SAMPLE_COUNT = 720  # = 360 / 0.5  (rf-dsp-council NOTE 5)
 
 
 class PseudospectrumPanel(Panel):
@@ -43,6 +48,7 @@ class PseudospectrumPanel(Panel):
     def __init__(self, ax: Axes) -> None:
         super().__init__(ax)
         self._latest: dict[str, npt.NDArray[np.float32]] = {}
+        self._warned_sizes: set[tuple[str, int]] = set()
         self._render_empty()
 
     def _render_empty(self) -> None:
@@ -76,6 +82,21 @@ class PseudospectrumPanel(Panel):
         samples = np.frombuffer(msg.raw_pseudospectrum, dtype="<f4")
         if samples.size == 0:
             return
+        # rf-dsp-council NOTE 5: a non-720-sample payload renders at the
+        # implied step but warns once per (node_id, sample_count) so
+        # malformed payloads are operator-visible in the log.
+        if samples.size != _EXPECTED_SAMPLE_COUNT:
+            key = (msg.node_id, samples.size)
+            if key not in self._warned_sizes:
+                _LOG.warning(
+                    "PseudospectrumPanel: node %s shipped %d-sample pseudospectrum "
+                    "(expected %d for 0.5 deg step over [0, 360)); rendering at "
+                    "implied step. Per INTERFACES.md §3.",
+                    msg.node_id,
+                    samples.size,
+                    _EXPECTED_SAMPLE_COUNT,
+                )
+                self._warned_sizes.add(key)
         self._latest[msg.node_id] = samples
         self._render()
 

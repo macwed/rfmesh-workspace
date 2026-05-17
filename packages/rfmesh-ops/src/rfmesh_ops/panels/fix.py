@@ -227,12 +227,15 @@ class FixPanel(Panel):
             f"semi-major: {semi_major_m:.1f} m",
             f"method: {fix.method}",
         ]
+        # Headline numbers (band / %-of-range / GDOP) are what Maciej
+        # narrates during the demo; bumped to 11 pt so a projected
+        # dashboard stays readable at distance (demo-integrity R2).
         self.ax.text(
             0.02,
             0.98,
             "\n".join(overlay_lines),
             transform=self.ax.transAxes,
-            fontsize=8,
+            fontsize=11,
             verticalalignment="top",
             family="monospace",
             bbox={"facecolor": "white", "alpha": 0.7, "edgecolor": "gray"},

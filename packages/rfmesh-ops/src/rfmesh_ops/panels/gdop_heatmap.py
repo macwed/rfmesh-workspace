@@ -196,11 +196,33 @@ class GdopHeatmapPanel(Panel):
                 fontsize=7,
                 color="white",
             )
-        # Mark the warn threshold contour.
+        # Mark the warn threshold contour. Drawing the contour line (not
+        # just the legend text) lets the operator SEE where the
+        # favourable region ends -- the jury-readable artefact that
+        # answers script.md Q3 visually (demo-integrity R3).
+        # Contouring can fail under degenerate grids (e.g. all-NaN); the
+        # legend text still tells the story when the contour cannot be
+        # drawn.
+        finite_mask = np.isfinite(gdop_grid)
+        if finite_mask.any() and gdop_grid[finite_mask].min() < _GDOP_WARN_THRESHOLD:
+            with contextlib.suppress(ValueError, RuntimeError):
+                self.ax.contour(
+                    np.linspace(
+                        -_GRID_HALF_WIDTH_M, _GRID_HALF_WIDTH_M, _GRID_RESOLUTION
+                    ),
+                    np.linspace(
+                        -_GRID_HALF_WIDTH_M, _GRID_HALF_WIDTH_M, _GRID_RESOLUTION
+                    ),
+                    gdop_grid,
+                    levels=[_GDOP_WARN_THRESHOLD],
+                    colors="white",
+                    linewidths=1.2,
+                    linestyles="--",
+                )
         self.ax.text(
             0.02,
             0.98,
-            f"GDOP warn threshold: {_GDOP_WARN_THRESHOLD:.1f}",
+            f"GDOP warn threshold (white contour): {_GDOP_WARN_THRESHOLD:.1f}",
             transform=self.ax.transAxes,
             fontsize=7,
             verticalalignment="top",

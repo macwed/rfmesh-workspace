@@ -104,7 +104,7 @@ def test_ula_matches_simulator_convention() -> None:
     Tests-only import per the ticket; production DSP code must never touch
     rfmesh_sdr.
     """
-    from rfmesh_sdr import (  # type: ignore[import-untyped, unused-ignore]  # noqa: PLC0415
+    from rfmesh_sdr import (  # type: ignore[import-untyped, unused-ignore]
         ArraySpec,
     )
 

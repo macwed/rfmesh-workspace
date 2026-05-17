@@ -24,10 +24,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
+from pydantic import ValidationError
 from rfmesh_contracts import BearerKind, NodeConfig
 
 from ..bearer import BothBearer, LoraBearer, WifiBearer
 from ..node import Node
+from ..runtime import CapabilityMismatchError
 
 if TYPE_CHECKING:
     from rfmesh_contracts import Bearer, Receiver
@@ -95,8 +97,13 @@ async def _run(config: NodeConfig) -> None:
     await node.run()
 
 
-def run_node_main(argv: list[str] | None = None) -> int:
-    """``rfmesh-node`` CLI -- returns a process exit code."""
+def run_node_main(argv: list[str] | None = None) -> int:  # noqa: PLR0911
+    """``rfmesh-node`` CLI -- returns a process exit code.
+
+    Multiple returns (one per distinct error class) are intentional --
+    each gives the operator a specific, actionable log message instead
+    of a generic "config failed" string (demo-integrity council R5).
+    """
     parser = argparse.ArgumentParser(prog="rfmesh-node")
     parser.add_argument(
         "--config",
@@ -114,12 +121,30 @@ def run_node_main(argv: list[str] | None = None) -> int:
 
     logging.basicConfig(level=args.log_level.upper())
 
-    with args.config.open("r", encoding="utf-8") as fp:
-        payload = yaml.safe_load(fp)
-    config = NodeConfig.model_validate(payload)
+    # Operator-facing error UX (demo-integrity council R5): YAML
+    # parse errors, schema-validation errors and capability mismatches
+    # are caught at the CLI boundary and rendered as `_LOG.error(...)`
+    # with a non-zero exit code, instead of dumping a Python traceback
+    # at the operator.
+    try:
+        with args.config.open("r", encoding="utf-8") as fp:
+            payload = yaml.safe_load(fp)
+        config = NodeConfig.model_validate(payload)
+    except FileNotFoundError as exc:
+        _LOG.error("rfmesh-node: config not found: %s", exc)
+        return 2
+    except yaml.YAMLError as exc:
+        _LOG.error("rfmesh-node: malformed config YAML: %s", exc)
+        return 2
+    except ValidationError as exc:
+        _LOG.error("rfmesh-node: config schema invalid:\n%s", exc)
+        return 2
 
     try:
         asyncio.run(_run(config))
+    except CapabilityMismatchError as exc:
+        _LOG.error("rfmesh-node: capability mismatch: %s", exc)
+        return 2
     except NotImplementedError as exc:
         _LOG.error("rfmesh-node: %s", exc)
         return 2

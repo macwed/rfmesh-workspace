@@ -8,8 +8,10 @@ silent fallbacks at the data-load layer).
 
 ``load_profile_library`` is the only public function. It iterates
 ``*.yaml`` files in the supplied directory, parses each with
-``yaml.safe_load`` (never ``yaml.load`` -- Invariant B5 / security:
-arbitrary-Python-object instantiation is blocked by SafeLoader), and
+``yaml.safe_load`` (never ``yaml.load`` -- Invariant B3 / security:
+arbitrary-Python-object instantiation is blocked by SafeLoader, so a
+malformed or hostile YAML file fails loudly instead of silently
+constructing a Python object the loader was not expecting), and
 returns a ``dict[EmitterClass, ThreatProfile]``. Duplicate
 ``emitter_class`` across files is a load-time error.
 

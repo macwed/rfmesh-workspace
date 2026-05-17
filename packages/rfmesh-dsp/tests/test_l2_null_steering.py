@@ -372,7 +372,7 @@ def test_loading_default_is_documented_at_1e_minus_6() -> None:
     contract: read the default off the signature via introspection
     and fail if it changed.
     """
-    import inspect  # noqa: PLC0415 -- module-level introspection is the point
+    import inspect
 
     signature = inspect.signature(compute_null_steering_weights)
     loading_default = signature.parameters["diagonal_loading_factor"].default
@@ -742,7 +742,7 @@ def test_module_does_not_grow_a_bearing_estimator() -> None:
     the boundary from "utility" to "estimator" and the module
     docstring's binding promise is broken.
     """
-    import rfmesh_dsp.l2_null_steering as ns  # noqa: PLC0415 -- module-level introspection is the point
+    import rfmesh_dsp.l2_null_steering as ns
 
     assert not hasattr(ns, "method")
     assert not any(

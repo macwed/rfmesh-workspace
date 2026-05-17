@@ -324,6 +324,14 @@ question. Worth doing.
   the public API gets the new label via `method` and the module
   docstring. A cosmetic rename can land in a future cleanup ticket if
   anyone cares.
+- **Class name `L2MvdrEstimator` is intentional** (rf-dsp-council
+  NOTE 4 follow-up). The class lives in `l2_mvdr.py`, emits
+  `BearingReport.method = Capability.L2_CAPON`, and stays named
+  `L2MvdrEstimator` for git-history continuity. Reviewers and future
+  agents should treat the naming-vs-labelling distinction as
+  intentional and verify against this ADR before "fixing" it. The
+  `build_estimators` dispatch table in `rfmesh_node.capabilities`
+  maps `Capability.L2_CAPON → L2MvdrEstimator` accordingly.
 
 ---
 

@@ -232,6 +232,17 @@ def fix_event_to_cot_xml(
     # <shape><ellipse .../></shape> -- the primary uncertainty
     # representation. ATAK 4.x renders this natively.
     shape = ET.SubElement(detail, "shape")
+    # The `angle` attribute is written verbatim from
+    # `EllipseENU.orientation_deg`, which by contract is ENU-mathematical
+    # positive (angle of semi-major from local East toward North, range
+    # [-180, +180]°). Some ATAK clients render the <ellipse> shape using
+    # an azimuth-from-true-north convention (clockwise from N) and may
+    # therefore display the ellipse rotated by 90° or sign-reversed.
+    # The <link> polygon path below is geometrically correct on the
+    # wire under all client conventions, so any client that draws BOTH
+    # the polygon and the ellipse will show the polygon as the
+    # authoritative shape. INTERFACES.md does not bind the CoT
+    # serialisation convention; this is rf-dsp-council NOTE 1.
     ET.SubElement(
         shape,
         "ellipse",

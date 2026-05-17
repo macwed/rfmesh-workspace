@@ -211,7 +211,18 @@ forbidden_modules = ["rfmesh_ops"]
 # ADR-011 D2: rfmesh_ops imports exactly one module from rfmesh_dsp
 # (l2_null_steering.compute_receive_pattern, per ADR-008 §D7 / ADR-010).
 # The carve-out is expressed by forbidding every OTHER rfmesh_dsp submodule
-# -- the omitted one (l2_null_steering) is the allowed import.
+# at the **direct** import level. Architect-council NOTE 1 surfaced the
+# theoretical gap that a future ops module could import e.g.
+# `rfmesh_dsp.array_covariance` directly without tripping lint-imports.
+# A tightening attempt extended this list to include
+# array_covariance / array_manifold / constants / exceptions; lint-imports
+# walks the full import graph (including TRANSITIVE chains) and the
+# allowed `l2_null_steering` module itself imports `array_manifold` +
+# `exceptions` internally -- so extending the deny-list breaks the
+# carve-out. A positive allowlist contract (only one specific module
+# allowed) is the proper structural fix; left as a parking-lot
+# follow-up. The existing deny-list catches every current ops module
+# at direct-import time, which is the threat that actually exists.
 [[tool.importlinter.contracts]]
 name = "Ops imports only the null-steering pattern from DSP"
 type = "forbidden"

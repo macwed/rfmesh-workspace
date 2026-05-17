@@ -17,7 +17,7 @@ from __future__ import annotations
 import math
 
 from matplotlib.axes import Axes
-from rfmesh_contracts import BearingReport
+from rfmesh_contracts import BearingReport, FixEvent
 
 from rfmesh_ops.panels.base import DashboardMessage, Panel
 
@@ -34,7 +34,7 @@ class BearingsPanel(Panel):
     older ones). The plot is redrawn on every update.
     """
 
-    handled_message_types = (BearingReport,)
+    handled_message_types = (BearingReport, FixEvent)
 
     def __init__(self, ax: Axes) -> None:
         super().__init__(ax)
@@ -42,6 +42,11 @@ class BearingsPanel(Panel):
         # ENU origin (lat, lon) is set lazily from the first report.
         self._origin_lat_deg: float | None = None
         self._origin_lon_deg: float | None = None
+        # Latest FixEvent for the red-X fix marker (demo-integrity R7).
+        # The intersection of the bearing rays is what the operator's
+        # eye traces -- overlaying the actual fix position lets the
+        # jury confirm the geometry visually.
+        self._latest_fix: FixEvent | None = None
         self._render_empty()
 
     def _render_empty(self) -> None:
@@ -55,6 +60,13 @@ class BearingsPanel(Panel):
         self.ax.grid(visible=True, alpha=0.3)
 
     def update(self, msg: DashboardMessage) -> None:
+        if isinstance(msg, FixEvent):
+            # FixEvent on its own does not set the ENU origin (the
+            # bearing reports establish it); we just remember the most
+            # recent fix and re-render so the red X moves with it.
+            self._latest_fix = msg
+            self._render()
+            return
         if not isinstance(msg, BearingReport):
             return
         if self._origin_lat_deg is None:
@@ -87,6 +99,21 @@ class BearingsPanel(Panel):
                 report.node_position.lon_deg,
             )
             self._draw_bearing(east_m, north_m, report, node_id)
+        # Fix marker: red X at the latest fix position (R7). Drawn last
+        # so it lands on top of the bearing rays where they intersect.
+        if self._latest_fix is not None and self._origin_lat_deg is not None:
+            fix_east_m, fix_north_m = self._geodetic_to_enu_m(
+                self._latest_fix.position.lat_deg,
+                self._latest_fix.position.lon_deg,
+            )
+            self.ax.plot(
+                [fix_east_m],
+                [fix_north_m],
+                marker="x",
+                color="red",
+                markersize=10,
+                markeredgewidth=2,
+            )
 
     def _draw_bearing(
         self,

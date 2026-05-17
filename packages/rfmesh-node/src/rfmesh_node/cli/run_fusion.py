@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
+from pydantic import ValidationError
 from rfmesh_contracts import FusionConfig
 
 from ..dashboard_pubsub import DashboardPubSub
@@ -95,9 +96,20 @@ def run_fusion_main(argv: list[str] | None = None) -> int:
 
     logging.basicConfig(level=args.log_level.upper())
 
-    with args.config.open("r", encoding="utf-8") as fp:
-        payload = yaml.safe_load(fp)
-    config = FusionConfig.model_validate(payload)
+    # Operator-facing error UX (demo-integrity council R5).
+    try:
+        with args.config.open("r", encoding="utf-8") as fp:
+            payload = yaml.safe_load(fp)
+        config = FusionConfig.model_validate(payload)
+    except FileNotFoundError as exc:
+        _LOG.error("rfmesh-fusion-server: config not found: %s", exc)
+        return 2
+    except yaml.YAMLError as exc:
+        _LOG.error("rfmesh-fusion-server: malformed config YAML: %s", exc)
+        return 2
+    except ValidationError as exc:
+        _LOG.error("rfmesh-fusion-server: config schema invalid:\n%s", exc)
+        return 2
 
     try:
         asyncio.run(_run(config))

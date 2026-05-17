@@ -22,7 +22,7 @@ text. The differentiation is in the secondary annotation.
 from __future__ import annotations
 
 from matplotlib.axes import Axes
-from rfmesh_contracts import EmitterClass, FixEvent
+from rfmesh_contracts import BearingReport, EmitterClass, FixEvent
 
 from rfmesh_ops.panels.base import DashboardMessage, Panel
 
@@ -33,13 +33,29 @@ _ANNOTATION_L3_UNSURE = "classifier ran, unsure"
 
 
 class ClassificationOverlayPanel(Panel):
-    """Displays the L3 emitter class label + tooltip annotation."""
+    """Displays the L3 emitter class label + tooltip annotation.
 
-    handled_message_types = (FixEvent,)
+    Per-class classification confidence is sourced via a side-channel
+    from the BearingReport stream (FixEvent does not carry it on the
+    contract -- confidence is per-bearing not per-fix). The panel
+    tracks the most recent confidence seen for each EmitterClass
+    value across all node BearingReports; the FixEvent's
+    emitter_class field is the trigger to render the corresponding
+    confidence. demo-integrity council R6 (option a) — re-derive
+    from BearingReport stream the same way ResidualsPanel re-derives
+    is_outlier from azimuth_sigma_deg.
+    """
+
+    handled_message_types = (FixEvent, BearingReport)
 
     def __init__(self, ax: Axes) -> None:
         super().__init__(ax)
         self._current_fix: FixEvent | None = None
+        # Most-recent classification confidence per EmitterClass, seen
+        # across all node BearingReports. None entries mean "the
+        # classifier did not emit a confidence number" (e.g. a node
+        # without L3 capability shipped a bearing with emitter_class=None).
+        self._confidence_by_class: dict[EmitterClass, float] = {}
         self._render_empty()
 
     def _render_empty(self) -> None:
@@ -57,6 +73,16 @@ class ClassificationOverlayPanel(Panel):
         )
 
     def update(self, msg: DashboardMessage) -> None:
+        if isinstance(msg, BearingReport):
+            # Track latest classification confidence per emitter class.
+            if (
+                msg.emitter_class is not None
+                and msg.classification_confidence is not None
+            ):
+                self._confidence_by_class[msg.emitter_class] = float(
+                    msg.classification_confidence
+                )
+            return
         if not isinstance(msg, FixEvent):
             return
         self._current_fix = msg
@@ -77,6 +103,9 @@ class ClassificationOverlayPanel(Panel):
             return _LABEL_UNKNOWN, _ANNOTATION_L3_UNSURE
         # A real classification.
         main = cls.value.upper()
+        confidence = self._confidence_by_class.get(cls)
+        if confidence is not None:
+            return main, f"classifier ran, confidence {confidence:.2f}"
         return main, "classifier ran, confident"
 
     def _render(self) -> None:
