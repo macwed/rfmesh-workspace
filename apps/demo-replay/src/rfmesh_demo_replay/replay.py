@@ -206,6 +206,7 @@ class ReplayOrchestrator:
         self._fusion_service: FusionService | None = None
         self._dashboard_pubsub: DashboardPubSub | None = None
         self._dashboard_queue: asyncio.Queue[BearingReport | FixEvent] | None = None
+        self._fix_relay_queue: asyncio.Queue[BearingReport | FixEvent] | None = None
         self._fusion_task: asyncio.Task[None] | None = None
         self._fix_relay_task: asyncio.Task[None] | None = None
 
@@ -293,6 +294,18 @@ class ReplayOrchestrator:
             self._dashboard_queue = asyncio.Queue()
             self._dashboard_pubsub.add_subscriber(
                 InProcessSubscriber(self._dashboard_queue),  # type: ignore[arg-type]
+            )
+
+        # 5. Dedicated fix-sink relay subscriber.
+        # Independent of the dashboard subscriber so headless mode
+        # (--headless / enable_dashboard=False) still forwards fixes
+        # into fix_sink. Pre-fix, the relay walked the dashboard queue
+        # and short-circuited when it was None -- fix_sink stayed empty
+        # under --headless. (Council audit 2026-05-18, D2.)
+        if self._fix_sink is not None:
+            self._fix_relay_queue = asyncio.Queue()
+            self._dashboard_pubsub.add_subscriber(
+                InProcessSubscriber(self._fix_relay_queue),  # type: ignore[arg-type]
             )
 
     def _build_node_context(self, spec: NodeReplaySpec) -> _NodeContext:
@@ -535,26 +548,28 @@ class ReplayOrchestrator:
     # ------------------------------------------------------------------
 
     async def _relay_fixes_to_sink(self) -> None:
-        """Forward published FixEvents from the dashboard pubsub to ``fix_sink``.
+        """Forward published FixEvents from the relay queue to ``fix_sink``.
 
-        The pubsub already fans out; the relay adds the optional
-        ``fix_sink`` queue so tests can wait on fix emission without
-        registering a subscriber. Implemented as a no-op when no sink
-        is configured.
+        The relay walks a private subscriber queue registered in ``_setup``
+        whenever ``fix_sink`` is supplied. That subscriber is independent
+        of the dashboard subscriber, so this relay works under
+        ``--headless`` (which suppresses only the *dashboard* subscriber).
+        When no sink is configured, this task blocks indefinitely until
+        the orchestrator's teardown cancels it.
         """
-        if self._fix_sink is None or self._dashboard_queue is None:
-            # Block forever -- the orchestrator's teardown cancels us.
+        sink = self._fix_sink
+        queue = self._fix_relay_queue
+        if sink is None or queue is None:
             while True:
                 await asyncio.sleep(3600.0)
 
-        # Drain the dashboard queue, forwarding FixEvents.
         while True:
             try:
-                item = await self._dashboard_queue.get()
+                item = await queue.get()
             except asyncio.CancelledError:
                 return
             if isinstance(item, FixEvent):
-                await self._fix_sink.put(item)
+                await sink.put(item)
 
 
 # ---------------------------------------------------------------------------

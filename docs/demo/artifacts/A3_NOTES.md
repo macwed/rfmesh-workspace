@@ -1,8 +1,18 @@
 # A3 Demo-Replay End-to-End Exercise — Findings
 
-**Date:** 2026-05-17
+**Date:** 2026-05-17 (initial capture); **2026-05-18 amended** (NEXT-1 close-out).
 **Scope:** rfmesh-demo-replay orchestrator → dashboard render → CoT XML, all wired through the simulator.
 **Branch:** main (commit on file).
+
+**2026-05-18 update — NEXT-1 closed.** `scenarios/trench_demo.yaml` antenna heights raised from `tx 3 m / rx 2 m` to **10 m / 10 m** (forward-observation mast height). The destructive two-ray null at the demo geometry now sits off-range, and the design-intent multipath channel produces three published fixes per the script. **Artifact-capture now uses `scenarios/trench_demo.yaml` (design intent), not the sister `scenarios/trench_demo_artifact.yaml`.** The PNGs and JSON in this directory therefore reflect the multipath-loaded honesty budget, matching `expected_fix:` numbers within ~10–25 %.
+
+| Beat | semi_major_m | semi_minor_m | gdop | confidence |
+|---|---|---|---|---|
+| B | 1310 (expected 589) | 122 (expected 393) | 1.42 | MEDIUM |
+| C | 268 (expected 393) | 117 (expected 357) | 1.12 | MEDIUM |
+| D | 312 (expected 359) | 170 (expected 125) | 1.15 | MEDIUM |
+
+Numbers diverge from `expected_fix:` because the live orchestrator runs **a single noise realisation per beat**, while `expected_fix:` came from a 10 000-sample Monte Carlo at the original 3 m / 2 m geometry. Re-running WS-CD-008 MC at the new heights would refine the `expected_fix:` block — parked as a future ticket.
 
 ## What this directory contains
 

@@ -1,16 +1,16 @@
 [
   {
-    "fix_id": "ecaaf5c2-a173-4dff-8491-cab88c9f575f",
-    "t_unix_ns": 1779046499392914212,
-    "lat_deg": 50.35689693139124,
-    "lon_deg": 5.000087055092689,
+    "fix_id": "87975812-b80b-478b-899e-abe17bc2e709",
+    "t_unix_ns": 1779058164250054959,
+    "lat_deg": 50.359984137141446,
+    "lon_deg": 5.0089963884993685,
     "hae_m": 0.0,
-    "sigma_m": 18.131977645273487,
-    "semi_major_m": 18.131977645273487,
-    "semi_minor_m": 11.346018450746072,
-    "orientation_deg": -13.751126952165496,
-    "gdop": 1.5347465291481803,
-    "confidence_level": "high",
+    "sigma_m": 1310.0482214884833,
+    "semi_major_m": 1310.0482214884833,
+    "semi_minor_m": 122.44364762289537,
+    "orientation_deg": -52.92305358238267,
+    "gdop": 1.4191843325185787,
+    "confidence_level": "medium",
     "method": "stansfield+mle",
     "contributing_nodes": [
       "node-l1-west",
@@ -22,17 +22,17 @@
     ]
   },
   {
-    "fix_id": "49e689d3-064a-4653-99a3-ed3bd2bc2b5a",
-    "t_unix_ns": 1779046499557636257,
-    "lat_deg": 50.35698336158396,
-    "lon_deg": 4.999950574878824,
+    "fix_id": "681715b1-e1ca-4c93-a27e-bb650852945b",
+    "t_unix_ns": 1779058164410005504,
+    "lat_deg": 50.3551454881435,
+    "lon_deg": 4.994709657849111,
     "hae_m": 0.0,
-    "sigma_m": 10.489485563005445,
-    "semi_major_m": 10.489485563005445,
-    "semi_minor_m": 6.883772092734832,
-    "orientation_deg": -88.13464710382794,
-    "gdop": 1.1597062590786957,
-    "confidence_level": "high",
+    "sigma_m": 268.5532817637802,
+    "semi_major_m": 268.5532817637802,
+    "semi_minor_m": 116.71733770651406,
+    "orientation_deg": 40.036426455449444,
+    "gdop": 1.1210399797284616,
+    "confidence_level": "medium",
     "method": "stansfield+mle",
     "contributing_nodes": [
       "node-l1-west",
@@ -40,23 +40,23 @@
       "node-l1-south"
     ],
     "residuals_deg": [
-      -0.05101868087717776,
-      -0.04514167435610261,
-      0.021216634711322513
+      0.20244116490326292,
+      7.462047305278929,
+      -0.8625744003328464
     ]
   },
   {
-    "fix_id": "280cc7d9-c33c-4dec-9757-3e9d96698054",
-    "t_unix_ns": 1779046499723612749,
-    "lat_deg": 50.35697350272294,
-    "lon_deg": 4.999987833050107,
+    "fix_id": "c5a9b1d8-269d-47c3-ad7d-16a19d5e0dd1",
+    "t_unix_ns": 1779058164570515623,
+    "lat_deg": 50.354472231406106,
+    "lon_deg": 4.99816223139731,
     "hae_m": 0.0,
-    "sigma_m": 8.68696278899168,
-    "semi_major_m": 8.68696278899168,
-    "semi_minor_m": 5.965875945045165,
-    "orientation_deg": -46.73084579464459,
-    "gdop": 1.1596606393127646,
-    "confidence_level": "high",
+    "sigma_m": 311.607403399175,
+    "semi_major_m": 311.607403399175,
+    "semi_minor_m": 170.31688541182473,
+    "orientation_deg": -30.091827908066232,
+    "gdop": 1.1451283897283306,
+    "confidence_level": "medium",
     "method": "stansfield+mle",
     "contributing_nodes": [
       "node-l1-west",
@@ -64,9 +64,9 @@
       "node-l1-south"
     ],
     "residuals_deg": [
-      -0.005654374981901356,
-      -0.0016503940348115975,
-      0.0035361412031420514
+      -8.592417534616573,
+      -1.2583005725076646,
+      4.163124878407416
     ]
   }
 ]

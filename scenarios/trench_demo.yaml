@@ -51,10 +51,16 @@ channel:
   kind: composite
   layers:
     - kind: two_ray_ground
-      transmitter_height_m: 3.0
-      receiver_height_m: 2.0
+      transmitter_height_m: 10.0
+      receiver_height_m: 10.0
       ground_dielectric: 15.0
       ground_conductivity_s_per_m: 0.005
+      # 2026-05-18 amendment (A3 NEXT-1 + Phase C lesson): the original
+      # heights 3 m / 2 m put receivers in a destructive two-ray null at
+      # the 1800/1200/3000 m geometry at 915 MHz. Mast A confirmed this
+      # is the multipath-dominance failure mode (~2 dB front-back ratio
+      # at sub-1 km). For the demo geometry we model a forward-observation
+      # mast at 10 m height; the destructive null moves off our range.
     - kind: multipath_fir
       taps:
         - { delay_samples: 0,  amplitude: 1.00, phase_deg:   0 }

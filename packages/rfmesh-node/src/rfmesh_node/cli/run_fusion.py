@@ -55,9 +55,7 @@ def _build_cot_publisher(config: FusionConfig) -> CotPublisher | None:
 async def _run(config: FusionConfig) -> None:
     # Lazy import: keeps the import-time cost of the CLI module
     # small for unit tests that only need the argparse surface.
-    from rfmesh_fusion import (  # type: ignore[import-untyped]  # noqa: PLC0415
-        StansfieldMLEFuser,
-    )
+    from rfmesh_fusion import StansfieldMLEFuser  # noqa: PLC0415
 
     fuser = StansfieldMLEFuser(config)
     cot_publisher = _build_cot_publisher(config)

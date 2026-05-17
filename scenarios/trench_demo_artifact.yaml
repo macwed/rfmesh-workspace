@@ -1,20 +1,19 @@
-# trench_demo_artifact.yaml — A3 artifact-capture variant of trench_demo.
+# trench_demo_artifact.yaml — historical A3 artifact-capture variant.
 #
-# WHY THIS FILE EXISTS:
-#   The sister scenario `trench_demo.yaml` carries the design-intent
-#   channel model (two_ray_ground + multipath_fir + log_normal_shadowing).
-#   At the documented tx_height=3 m / rx_height=2 m geometry over ~2.2 km
-#   at 915 MHz, two_ray puts the L1 receivers in a destructive null deep
-#   enough that the default L1 amplitude-sweep prominence gate (6 dB)
-#   refuses to emit a bearing — i.e. the *simulator* is honestly modelling
-#   a Phase-C failure mode (multipath dominance, INHERITED_CONTEXT §3.1.1).
+# STATUS as of 2026-05-18: superseded by `scenarios/trench_demo.yaml` for
+# artifact capture. The original purpose of this file was to work around
+# the destructive two-ray null at the documented tx_h=3 m / rx_h=2 m
+# scenario geometry by swapping the channel to free-space. NEXT-1 from
+# the A3 follow-up list closed on 2026-05-18 by raising the antenna
+# heights in `trench_demo.yaml` to 10 m / 10 m (forward-observation mast),
+# which moves the destructive null off-range and lets the design-intent
+# multipath channel emit fixes.
 #
-#   For the A3 demo-replay end-to-end exercise we need a scenario that
-#   produces fixes for artifact-capture (PNG snapshots, CoT XML). The
-#   honest mitigation is a separate variant that *swaps the channel* for
-#   free-space — same geometry, same nodes, same beats — to capture a
-#   clean run. Numbers in `expected_outcomes` below describe the design-
-#   intent (two_ray) case; they are NOT re-derived for free-space here.
+# This file is kept for historical reference / regression comparison.
+# `scripts/capture_demo_artifacts.py` now points at `trench_demo.yaml`,
+# not this file. If you want a free-space-channel run for any reason
+# (e.g. validating that the simulator's free-space branch still works),
+# this YAML still loads and produces 3 fixes in the same beat structure.
 #
 # Source: docs/demo/artifacts/A3_NOTES.md
 # Geometry rationale: docs/demo/trench-demo-geometry.md

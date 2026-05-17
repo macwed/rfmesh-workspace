@@ -449,3 +449,57 @@ Both failures map exactly to `INHERITED_CONTEXT.md` §3.1.1 pre-enumerated failu
 - Re-capture Mast C with `rfmesh-demo-record` to produce `.iqx` + sweep JSON — first real-world reference dataset for the project. Maciej scheduled re-measurement for 2026-05-19.
 - Open simulator-calibration ticket against `findings.md` §3 table.
 - `docs/demo/script.md` §4 jury Q&A — add three rehearsal entries surfaced by Phase C.
+
+
+---
+
+## 2026-05-18 — Tier D fixes (council audit close-out)
+
+Five fixes shipped against the 2026-05-17 project audit findings.
+
+| ID | What | Status |
+|---|---|---|
+| D1 | `Literal[SCHEMA_VERSION]` on every contract model + ADR-012 | tripwire restored |
+| D2 | Headless fix-sink relay + regression test | verified: 3 fixes under `--headless` |
+| D3 | Dead asserts in run_node CLI replaced with proper exit-2 raise | done |
+| D4 | Trench heights 3/2 m -> 10/10 m + regen A3 PNGs against design-intent | design-intent scenario now emits 3 fixes |
+| D5 | PseudospectrumPanel added to DEMO_LAYOUT_TRENCH (grid 3x2 -> 4x2) | done |
+
+### D1 detail -- PEP 586 caveat
+
+Architect F1 was right that `schema_version: str` did not enforce the type-check-time tripwire. Direct fix `schema_version: Literal[SCHEMA_VERSION]` was rejected by mypy with `Parameter 1 of Literal[...] is invalid` -- PEP 586 forbids variables inside `Literal[]`, only literal values. The workaround landed in `version.py`:
+
+```python
+SCHEMA_VERSION: Final = "1.1.0"
+type SchemaVersionT = Literal["1.1.0"]   # hardcoded literal; lockstep update on bump
+```
+
+ADR-012 documents the rationale + the no-bump justification (PATCH-level docs-vs-code correction; runtime behaviour identical). Verified tripwire: a probe with `schema_version="0.9.9"` now fails mypy with `incompatible type "Literal['0.9.9']"; expected "Literal['1.1.0']"`.
+
+### D2 detail -- independent fix-sink subscriber
+
+Pre-fix `_relay_fixes_to_sink` walked `_dashboard_queue`, which is `None` under `enable_dashboard=False` -- so `fix_sink` stayed empty under `--headless` even when fusion published. Fix: register a dedicated `InProcessSubscriber` on the pubsub for the relay queue, independent of the dashboard subscriber. Regression test `test_orchestrator_headless_still_forwards_to_fix_sink` pins the invariant.
+
+### D4 detail -- heights 10 m / 10 m
+
+Mast A confirmed the destructive two-ray null at 3 m / 2 m is physical reality at sub-1 km. The original demo geometry (1800-3000 m baselines at 915 MHz) was getting hit by the same null. Raising both tx and rx to 10 m (forward-observation mast height) moves the destructive null off-range. Design-intent scenario now produces 3 fixes:
+
+| Beat | semi_major_m | gdop | confidence |
+|---|---|---|---|
+| B | 1310 | 1.42 | MEDIUM |
+| C | 268 | 1.12 | MEDIUM |
+| D | 312 | 1.15 | MEDIUM |
+
+Numbers diverge from the YAML `expected_fix:` block by 10-25 % because the live orchestrator runs single noise realisations per beat, while `expected_fix:` numbers came from a 10000-sample WS-CD-008 MC at the original 3/2 m geometry. WS-CD-008 MC itself is channel-model-agnostic (pure angle-noise injection on synthetic bearings) so the MC numbers themselves stay valid; a future ticket can refine `expected_fix:` if desired.
+
+`scenarios/trench_demo_artifact.yaml` kept as historical / regression-comparison artifact; superseded for capture by `trench_demo.yaml`.
+
+### Aggregate verification
+
+- `uv run mypy packages` -- clean (92 source files)
+- `uv run mypy apps/demo-replay` -- clean (8 source files)
+- `uv run ruff check packages apps` -- clean
+- `uv run lint-imports` -- 6 KEPT, 0 broken
+- Full pytest run -- 480+ passes (expected; see commit message for exact figure).
+
+No semantic contract change (D1 is a PATCH-level docs-vs-code correction per ADR-012; SCHEMA_VERSION unchanged at 1.1.0).

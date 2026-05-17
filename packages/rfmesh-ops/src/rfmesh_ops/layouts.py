@@ -112,30 +112,39 @@ def _check_no_overlap(layout: DashboardLayout) -> None:
 
 
 # -- DEMO_LAYOUT_TRENCH ---------------------------------------------------
-# The BoTH3 jury demo. Five panels in a 3 x 2 grid:
+# The BoTH3 jury demo. Six panels in a 4 x 2 grid:
 #
 #   +---------------+----------------+
-#   |   FixPanel    |  ClsOverlay    |   row 0
+#   |   FixPanel    | Pseudospectrum |   row 0
 #   |  (large 2x1)  +----------------+
 #   |               |  Bearings      |   row 1
 #   +---------------+----------------+
-#   |  Residuals    |  NullSteering  |   row 2
+#   |  ClsOverlay   |  NullSteering  |   row 2
+#   +---------------+----------------+
+#   |  Residuals (colspan=2)         |   row 3
 #   +---------------+----------------+
 #
-# FixPanel + percentage display -> Advantage #1 / #6
-# BearingsPanel sigma wedges -> Advantage #2
-# ResidualsPanel outlier highlight -> Advantage #6
-# ClassificationOverlayPanel -> Advantage #5
-# NullSteeringPanel -> Advantage #4
+# FixPanel + percentage display       -> Advantage #1 / #6
+# PseudospectrumPanel                 -> Advantage #2 / #3 (binds script Beat D)
+# BearingsPanel sigma wedges          -> Advantage #2
+# ClassificationOverlayPanel          -> Advantage #5
+# NullSteeringPanel                   -> Advantage #4
+# ResidualsPanel outlier highlight    -> Advantage #6
+#
+# Pseudospectrum slot added 2026-05-18 per demo-integrity council finding F3:
+# script.md Beat D narrates "on the right tile you can see the MUSIC
+# pseudospectrum" — the panel needed to be in the trench layout, not just
+# the DEBUG layout.
 DEMO_LAYOUT_TRENCH = DashboardLayout(
     panels=(
         PanelSpec(panel_cls=FixPanel, subplot_kwargs={"row": 0, "col": 0, "rowspan": 2}),
-        PanelSpec(panel_cls=ClassificationOverlayPanel, subplot_kwargs={"row": 0, "col": 1}),
+        PanelSpec(panel_cls=PseudospectrumPanel, subplot_kwargs={"row": 0, "col": 1}),
         PanelSpec(panel_cls=BearingsPanel, subplot_kwargs={"row": 1, "col": 1}),
-        PanelSpec(panel_cls=ResidualsPanel, subplot_kwargs={"row": 2, "col": 0}),
+        PanelSpec(panel_cls=ClassificationOverlayPanel, subplot_kwargs={"row": 2, "col": 0}),
         PanelSpec(panel_cls=NullSteeringPanel, subplot_kwargs={"row": 2, "col": 1}),
+        PanelSpec(panel_cls=ResidualsPanel, subplot_kwargs={"row": 3, "col": 0, "colspan": 2}),
     ),
-    grid_shape=(3, 2),
+    grid_shape=(4, 2),
 )
 _check_no_overlap(DEMO_LAYOUT_TRENCH)
 

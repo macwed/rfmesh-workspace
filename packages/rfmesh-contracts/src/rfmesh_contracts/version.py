@@ -32,7 +32,20 @@ class a different type than before -- exactly the intended tripwire.
 
 from __future__ import annotations
 
-from typing import Final
+from typing import Final, Literal
 
 #: The frozen contract version. Bumped only by the lead, only via an accepted ADR.
-SCHEMA_VERSION: Final[str] = "1.1.0"
+SCHEMA_VERSION: Final = "1.1.0"
+
+#: Type alias for ``Literal[SCHEMA_VERSION]``. Used in every message/config
+#: model's ``schema_version`` field so mypy can enforce the tripwire.
+#:
+#: WHY THIS EXISTS (and not just ``Literal[SCHEMA_VERSION]`` inline):
+#: PEP 586 forbids variables inside ``Literal[...]`` — only literal values
+#: are accepted. So ``Literal[SCHEMA_VERSION]`` raises mypy
+#: ``Parameter 1 of Literal[...] is invalid``. The fix per ADR-012 is to
+#: hardcode the literal at one place (here) and reference it as a type
+#: alias everywhere else. Bumping the version requires updating *both*
+#: ``SCHEMA_VERSION`` and ``SchemaVersionT`` in lockstep — caught by
+#: workspace mypy if the two ever desynchronise.
+type SchemaVersionT = Literal["1.1.0"]

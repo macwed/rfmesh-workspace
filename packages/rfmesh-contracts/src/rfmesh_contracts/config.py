@@ -50,7 +50,7 @@ from pydantic import (
 
 from .enums import ArrayGeometry, BearerKind, Capability
 from .geospatial import GeodeticPosition
-from .version import SCHEMA_VERSION
+from .version import SCHEMA_VERSION, SchemaVersionT
 
 
 class SDRConfig(BaseModel):
@@ -291,7 +291,7 @@ class NodeConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: str = Field(
+    schema_version: SchemaVersionT = Field(
         default=SCHEMA_VERSION,
         description="Contract version this config targets; pinned to SCHEMA_VERSION.",
     )
@@ -415,7 +415,7 @@ class FusionConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: str = Field(
+    schema_version: SchemaVersionT = Field(
         default=SCHEMA_VERSION,
         description="Contract version this config targets; pinned to SCHEMA_VERSION.",
     )

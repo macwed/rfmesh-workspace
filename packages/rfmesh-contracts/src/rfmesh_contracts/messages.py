@@ -45,7 +45,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .enums import Capability, ConfidenceLevel, EmitterClass
 from .geospatial import EllipseENU, GeodeticPosition
-from .version import SCHEMA_VERSION
+from .version import SCHEMA_VERSION, SchemaVersionT
 
 
 class BearingReport(BaseModel):
@@ -75,7 +75,7 @@ class BearingReport(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: str = Field(
+    schema_version: SchemaVersionT = Field(
         default=SCHEMA_VERSION,
         description=(
             "Contract version this message was built against. Pinned to "
@@ -193,7 +193,7 @@ class FixEvent(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: str = Field(
+    schema_version: SchemaVersionT = Field(
         default=SCHEMA_VERSION,
         description="Contract version; pinned to SCHEMA_VERSION (see BearingReport).",
     )
@@ -313,7 +313,7 @@ class NodeStatus(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: str = Field(
+    schema_version: SchemaVersionT = Field(
         default=SCHEMA_VERSION,
         description="Contract version; pinned to SCHEMA_VERSION (see BearingReport).",
     )

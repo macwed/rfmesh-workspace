@@ -53,6 +53,36 @@ async def test_orchestrator_produces_bearings_and_fix(
     assert len(fix.contributing_nodes) >= 2
 
 
+async def test_orchestrator_headless_still_forwards_to_fix_sink(
+    tiny_scenario_path: Path,
+) -> None:
+    """``enable_dashboard=False`` must NOT suppress fix_sink delivery.
+
+    Regression test for the D2 council finding (2026-05-18): the relay
+    used to read from ``_dashboard_queue``, which is ``None`` under
+    ``--headless``. fix_sink stayed empty even when fusion published.
+    The fix wires a dedicated relay subscriber to the pubsub that is
+    independent of the dashboard subscriber.
+    """
+    scenario = ScenarioLoader().load(tiny_scenario_path)
+    fix_sink: asyncio.Queue[FixEvent] = asyncio.Queue()
+    orchestrator = ReplayOrchestrator(
+        scenario,
+        pessimism_factor=1.0,
+        enable_cot=False,
+        enable_dashboard=False,  # the load-bearing toggle
+        fix_sink=fix_sink,
+    )
+    await orchestrator.run()
+
+    fixes = await _drain_queue(fix_sink, timeout_s=2.0)
+    assert len(fixes) >= 1, (
+        "fix_sink received zero fixes under --headless; the relay short-"
+        "circuited on _dashboard_queue is None instead of using its own "
+        "relay subscriber. D2 regression."
+    )
+
+
 async def test_orchestrator_clean_shutdown_on_no_beats(
     tmp_path: Path, tiny_scenario_path: Path
 ) -> None:

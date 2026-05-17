@@ -65,20 +65,30 @@ def _build_receiver(config: NodeConfig) -> Receiver:
 
 
 def _build_bearer(config: NodeConfig) -> Bearer:
-    """Build a bearer that matches ``config.bearer.kind``."""
+    """Build a bearer that matches ``config.bearer.kind``.
+
+    ``BearerConfig._lora_needs_port`` enforces that ``lora_serial_port``
+    is set whenever ``kind`` is ``LORA`` or ``BOTH``, so the ``None``
+    branches below are unreachable when this function is called with a
+    validated ``NodeConfig``. The explicit ``if port is None`` guards
+    are mypy type-narrowers + defence against a future refactor that
+    drops the model validator.
+    """
     endpoint = str(config.fusion_endpoint)
     bearer_cfg = config.bearer
     if bearer_cfg.kind is BearerKind.WIFI:
         return WifiBearer(endpoint)
+    port = bearer_cfg.lora_serial_port
+    if port is None:
+        msg = (
+            f"BearerConfig.kind={bearer_cfg.kind.value} requires lora_serial_port; "
+            "_lora_needs_port validator must have been bypassed."
+        )
+        raise ValueError(msg)
     if bearer_cfg.kind is BearerKind.LORA:
-        assert bearer_cfg.lora_serial_port is not None
-        return LoraBearer(bearer_cfg.lora_serial_port)
-    # BOTH -- requires both halves.
-    assert bearer_cfg.lora_serial_port is not None
-    return BothBearer(
-        WifiBearer(endpoint),
-        LoraBearer(bearer_cfg.lora_serial_port),
-    )
+        return LoraBearer(port)
+    # BOTH -- both halves.
+    return BothBearer(WifiBearer(endpoint), LoraBearer(port))
 
 
 async def _run(config: NodeConfig) -> None:
@@ -147,6 +157,11 @@ def run_node_main(argv: list[str] | None = None) -> int:  # noqa: PLR0911
         return 2
     except NotImplementedError as exc:
         _LOG.error("rfmesh-node: %s", exc)
+        return 2
+    except ValueError as exc:
+        # _build_bearer ValueError when LoRa port missing despite validator
+        # (defensive guard against future refactor dropping _lora_needs_port).
+        _LOG.error("rfmesh-node: bearer build failed: %s", exc)
         return 2
     except KeyboardInterrupt:
         return 0

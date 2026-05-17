@@ -26,19 +26,25 @@ from rfmesh_ops.panels import (
 
 
 def test_demo_layout_trench_builds() -> None:
-    """DEMO_LAYOUT_TRENCH has the architect-mandated 5 panels in a 3x2 grid."""
+    """DEMO_LAYOUT_TRENCH carries the 6 jury panels in a 4x2 grid.
+
+    Updated 2026-05-18 (D5 council-audit close-out): PseudospectrumPanel
+    was added to bind the script.md Beat D narration. Grid extended from
+    3x2 to 4x2 to fit it.
+    """
     layout = DEMO_LAYOUT_TRENCH
     assert isinstance(layout, DashboardLayout)
     panel_classes = {spec.panel_cls for spec in layout.panels}
     expected = {
         FixPanel,
+        PseudospectrumPanel,
         BearingsPanel,
         ResidualsPanel,
         ClassificationOverlayPanel,
         NullSteeringPanel,
     }
     assert panel_classes == expected
-    assert layout.grid_shape == (3, 2)
+    assert layout.grid_shape == (4, 2)
 
 
 def test_demo_layout_debug_has_all_nine_panels() -> None:
