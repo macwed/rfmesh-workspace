@@ -93,7 +93,7 @@ ignore = [
     "S101",      # assert in tests — pytest needs assert
     "ANN401",    # Any in protocol return types when unavoidable
 ]
-per-file-ignores = { "tests/**" = ["S", "ANN", "PLR2004"] }
+per-file-ignores = { "**/tests/**" = ["S", "ANN", "PLR2004", "PLC0415"] }
 
 [tool.mypy]
 python_version = "3.12"

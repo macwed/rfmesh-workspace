@@ -9,8 +9,15 @@ version = "0.1.0"
 description = "Asyncio node runtime: capability detection, pipeline wiring (SDR → DSP → bearer) for rfmesh."
 requires-python = ">=3.12"
 dependencies = [
+    "aiohttp>=3.9",
+    "msgpack>=1.0",
+    "pyyaml>=6.0",
     "rfmesh-contracts",
 ]
+
+[project.scripts]
+rfmesh-node = "rfmesh_node.cli.run_node:run_node_main"
+rfmesh-fusion-server = "rfmesh_node.cli.run_fusion:run_fusion_main"
 
 [build-system]
 requires = ["hatchling"]
