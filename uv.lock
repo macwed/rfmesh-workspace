@@ -10,6 +10,7 @@ resolution-markers = [
 members = [
     "rfmesh-contracts",
     "rfmesh-cot",
+    "rfmesh-demo-replay",
     "rfmesh-dsp",
     "rfmesh-fusion",
     "rfmesh-ml",
@@ -1657,6 +1658,35 @@ requires-dist = [
 ]
 
 [[package]]
+name = "rfmesh-demo-replay"
+version = "0.1.0"
+source = { editable = "apps/demo-replay" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pyyaml" },
+    { name = "rfmesh-contracts" },
+    { name = "rfmesh-cot" },
+    { name = "rfmesh-dsp" },
+    { name = "rfmesh-fusion" },
+    { name = "rfmesh-node" },
+    { name = "rfmesh-ops" },
+    { name = "rfmesh-sdr" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=2.1" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "rfmesh-contracts", editable = "packages/rfmesh-contracts" },
+    { name = "rfmesh-cot", editable = "packages/rfmesh-cot" },
+    { name = "rfmesh-dsp", editable = "packages/rfmesh-dsp" },
+    { name = "rfmesh-fusion", editable = "packages/rfmesh-fusion" },
+    { name = "rfmesh-node", editable = "packages/rfmesh-node" },
+    { name = "rfmesh-ops", editable = "packages/rfmesh-ops" },
+    { name = "rfmesh-sdr", editable = "packages/rfmesh-sdr" },
+]
+
+[[package]]
 name = "rfmesh-dsp"
 version = "0.1.0"
 source = { editable = "packages/rfmesh-dsp" }
@@ -1784,6 +1814,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "rfmesh-contracts" },
     { name = "rfmesh-cot" },
+    { name = "rfmesh-demo-replay" },
     { name = "rfmesh-dsp" },
     { name = "rfmesh-fusion" },
     { name = "rfmesh-ml" },
@@ -1810,6 +1841,7 @@ dev = [
 requires-dist = [
     { name = "rfmesh-contracts", editable = "packages/rfmesh-contracts" },
     { name = "rfmesh-cot", editable = "packages/rfmesh-cot" },
+    { name = "rfmesh-demo-replay", editable = "apps/demo-replay" },
     { name = "rfmesh-dsp", editable = "packages/rfmesh-dsp" },
     { name = "rfmesh-fusion", editable = "packages/rfmesh-fusion" },
     { name = "rfmesh-ml", editable = "packages/rfmesh-ml" },

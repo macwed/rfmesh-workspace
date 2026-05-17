@@ -29,28 +29,35 @@ dependencies = [
     "rfmesh-cot",
     "rfmesh-node",
     "rfmesh-ops",
+    "rfmesh-demo-replay",
 ]
 
 [tool.uv.sources]
 # Each workspace member is sourced from its own subdirectory rather than
 # from a registry. Add a line per package as workstreams deliver them.
-rfmesh-contracts = { workspace = true }
-rfmesh-sdr      = { workspace = true }
-rfmesh-servo    = { workspace = true }
-rfmesh-dsp      = { workspace = true }
-rfmesh-ml       = { workspace = true }
-rfmesh-fusion   = { workspace = true }
-rfmesh-cot      = { workspace = true }
-rfmesh-node     = { workspace = true }
-rfmesh-ops      = { workspace = true }
+rfmesh-contracts   = { workspace = true }
+rfmesh-sdr         = { workspace = true }
+rfmesh-servo       = { workspace = true }
+rfmesh-dsp         = { workspace = true }
+rfmesh-ml          = { workspace = true }
+rfmesh-fusion      = { workspace = true }
+rfmesh-cot         = { workspace = true }
+rfmesh-node        = { workspace = true }
+rfmesh-ops         = { workspace = true }
+rfmesh-demo-replay = { workspace = true }
 
 # The workspace root is a "virtual" project (no source of its own). Members
 # carry the real code. We list the contracts package explicitly above so
 # `uv sync` resolves the editable install for everyone; the glob below
 # makes new workstream packages discoverable.
+#
+# apps/* covers top-level entry-point packages (e.g. apps/demo-replay).
+# Per docs/design/ops-architecture.md §1.5, apps/* is outside the
+# import-linter discipline; its package names are *not* rfmesh_* so
+# the `independence` / forbidden contracts do not match by construction.
 
 [tool.uv.workspace]
-members = ["packages/*"]
+members = ["packages/*", "apps/*"]
 
 [dependency-groups]
 dev = [
@@ -112,12 +119,13 @@ exclude = [
     "packages/[^/]+/vendor/",
     "firmware/build/",
     "packages/[^/]+/tests/",
+    "apps/[^/]+/tests/",
 ]
 
 # Per-package overrides go in each package's own pyproject.toml when needed.
 
 [tool.pytest.ini_options]
-testpaths = ["packages", "tests"]
+testpaths = ["packages", "apps", "tests"]
 addopts = [
     "-ra",
     "--strict-markers",

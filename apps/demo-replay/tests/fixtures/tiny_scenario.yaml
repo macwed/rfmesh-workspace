@@ -1,0 +1,67 @@
+# tiny_scenario.yaml -- smallest possible scenario for demo-replay tests.
+#
+# Two L1 nodes ± 1 km east/west of the ENU origin, one CW emitter
+# 2 km north. Single beat with both nodes active. No L2, no channel
+# tricks -- just enough geometry for fusion to fire.
+
+scenario_id: tiny_v1
+description: "2 L1 nodes + 1 emitter, 1 beat -- smoke test."
+
+enu_origin:
+  lat_deg: 50.0
+  lon_deg: 5.0
+  hae_m: 0.0
+
+emitter:
+  emitter_id: target_smoke
+  enu_position_m: [0.0, 2000.0]
+  center_freq_hz: 915.0e6
+  modulation: cw
+  emit_power_db_above_noise: 60.0
+
+channel:
+  kind: free_space
+
+nodes:
+  - node_id: node-west
+    enu_position_m: [-1000.0, 0.0]
+    sigma_m: 5.0
+    heading_deg: 60.0
+    capabilities: [l1_rssi]
+    sdr:
+      driver: sim
+      sample_rate_hz: 2.0e6
+      center_freq_hz: 915.0e6
+      gain_db: 30.0
+      bias_tee: false
+    bearer:
+      kind: wifi
+      heartbeat_interval_s: 2.0
+
+  - node_id: node-east
+    enu_position_m: [+1000.0, 0.0]
+    sigma_m: 5.0
+    heading_deg: 300.0
+    capabilities: [l1_rssi]
+    sdr:
+      driver: sim
+      sample_rate_hz: 2.0e6
+      center_freq_hz: 915.0e6
+      gain_db: 30.0
+      bias_tee: false
+    bearer:
+      kind: wifi
+      heartbeat_interval_s: 2.0
+
+demo_beats:
+  - beat_id: SMOKE
+    label: "Both nodes active"
+    duration_s: 1.0
+    active_nodes: [node-west, node-east]
+
+fusion:
+  listen_url: "udp://127.0.0.1:9000"
+  batch_window_ms: 100.0
+  node_stale_after_s: 6.0
+  min_bearings_for_fix: 2
+  gdop_warn_threshold: 6.0
