@@ -287,10 +287,20 @@ calibration error", "p5 ≥ 15 dB" from 1000-trial MC. ADR-008 §D8:
 "All UI text quoting null depth caps at 20 dB". The 18 dB number
 is **inside the rehearsed budget** (Maciej rehearses 15-20 typical,
 up to 25 fresh-cal); the actual rendered value on the day is
-whatever the recorded-IQ buffer delivers — `[needs validation —
-WS-B-007 Monte Carlo result fills in the precise number once the
-buffer is captured]`. The framing words ("anti-desense, not ECM")
-are bound by ADR-008 §D5.
+whatever the recorded-IQ buffer delivers. The framing words
+("anti-desense, not ECM") are bound by ADR-008 §D5.
+
+**TBD #1 — pre-computed Monte Carlo read-out (`scripts/null_depth_mc_stats.py`,
+1000 trials, 2026-05-17):** simulator distribution mean = **47.3 dB**,
+median = **46.2 dB**, p5 = **36.4 dB**, p95 = **62.6 dB**, 90 % CI of
+the mean = [46.9, 47.7] dB. Full read-out in
+`docs/demo/null_depth_mc_stats.md`. **Slide caption stays bound to
+"−18 dB" (or up to 20 dB)** — the simulator-clean MC does not model
+the residual error sources a real bench-side capture carries
+(analog I/Q imbalance, narrow-band fading, residual cable phase
+drift beyond ±10°, frequency-selective array element mismatch).
+Real-world numbers will fall below the simulator median; the
+ADR-008 §D8 ≤ 20 dB UI cap holds.
 
 ---
 
@@ -596,12 +606,17 @@ restatement of WS-CD-008's empirical result.
 
 `[needs validation — TBD]` markers in this document, summarised:
 
-- §3 Beat E.2: the precise null-depth number on the dashboard
-  bar chart depends on the recorded-IQ buffer captured during
-  Phase C / Poznań bench session. Rehearsed budget is 15-20 dB
-  (Maciej speaks 18 dB above as a midpoint); the actual rendered
-  value is filled in once WS-B-007 produces the recorded-IQ MC
-  result.
+- §3 Beat E.2: ~~the precise null-depth number on the dashboard~~
+  **Filled-in (2026-05-17):** simulator MC (1000 trials, ±2°
+  mismatch + ±10° calibration error) gives mean = **47.3 dB**,
+  median = **46.2 dB**, p5 = **36.4 dB** — see
+  `docs/demo/null_depth_mc_stats.md`. Slide caption stays bound
+  to **−18 dB** per ADR-008 §D8 (≤ 20 dB cap), because the
+  simulator's clean MC over-predicts the recorded-IQ value the
+  real bench-side capture will deliver. Real-world recorded-IQ
+  buffer remains a **secondary** open TBD: when WS-B-007 lands
+  the captured buffer, replace the simulator MC numbers with the
+  bench numbers — both are bounded by the same ≤ 20 dB UI cap.
 - §5 step 4 contingency: pre-rendered slide deck in
   `docs/demo/slides/` does not exist. Either follow-up ticket
   produces it, or the contingency degrades to step 3 only.
