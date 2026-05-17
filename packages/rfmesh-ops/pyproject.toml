@@ -9,8 +9,20 @@ version = "0.1.0"
 description = "Live ops dashboard (nodes, bearings, fixes, GDOP heatmap) and deployment tooling for rfmesh."
 requires-python = ">=3.12"
 dependencies = [
+    "aiohttp>=3.9",
+    "matplotlib>=3.8",
     "rfmesh-contracts",
+    "rfmesh-dsp",
 ]
+
+# The single sibling import allowed for rfmesh-ops is
+# ``rfmesh_dsp.l2_null_steering.compute_receive_pattern`` for the
+# NullSteeringPanel (Advantage #4 panel, ADR-008 §D7, ADR-010, ADR-011 §D2).
+# Every other rfmesh_dsp submodule is forbidden by the import-linter contract
+# "Ops imports only the null-steering pattern from DSP" in workspace pyproject.
+
+[project.scripts]
+rfmesh-ops = "rfmesh_ops.cli.run_dashboard:run_dashboard_main"
 
 [build-system]
 requires = ["hatchling"]

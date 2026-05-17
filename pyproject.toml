@@ -62,6 +62,7 @@ dev = [
     "import-linter>=2.11",
     "pydeps>=3.0.6",
     "types-pyyaml>=6.0.12.20260510",
+    "pytest-asyncio>=0.23",
 ]
 
 # ----------------------------------------------------------------------------
@@ -126,6 +127,7 @@ markers = [
     "hardware: requires real SDR hardware (deselect with -m 'not hardware')",
     "slow: takes >1s; deselect locally with -m 'not slow'",
 ]
+asyncio_mode = "auto"
 
 [tool.coverage.run]
 branch = true
@@ -182,6 +184,12 @@ modules = [
 # carve-out below.
 ignore_imports = [
     "rfmesh_ml.features -> rfmesh_dsp.spectrum",
+    # ADR-011 D2 carve-out: rfmesh_ops imports the single
+    # ``compute_receive_pattern`` helper from rfmesh_dsp.l2_null_steering
+    # for the NullSteeringPanel (Advantage #4). The companion "Ops
+    # imports only the null-steering pattern from DSP" forbidden
+    # contract pins which DSP submodules remain off-limits.
+    "rfmesh_ops.panels.null_steering -> rfmesh_dsp.l2_null_steering",
 ]
 
 # ADR-011 D1: rfmesh_node may import every sibling package EXCEPT the
