@@ -47,6 +47,80 @@ modulation classifier shipped + ops/demo design pass complete.
 | `ca61f55` | docs(demo): demo script + jury Q&A rehearsal (`docs/demo/script.md`, 634 lines) |
 | `f8d4d0d` | docs(design): ops architecture design pass (`docs/design/ops-architecture.md`, 1164 lines) |
 
+### Post-checkpoint batch (2026-05-17 PM) — ratifications + 4 parallel builders
+
+After the 2026-05-17 checkpoint (`90ab700`), lead-Opus ratified the four
+open decisions in `docs/design/ops-architecture.md` and spawned four
+general-purpose builders in parallel against the main checkout (no
+worktree isolation — single uv.lock + shared verification env). Commits
+landed in build-finish order, not spawn order.
+
+| Commit | Ticket / package | Headline |
+|---|---|---|
+| `8a75026` | ADR-011 ratifications | D1 node composition-root carve-out, D2 ops-only-null-steering carve-out, D3 matplotlib, D4 pyyaml + types-PyYAML. 6 lint-imports contracts KEPT. |
+| `c8f2778` | WS-B-006 threat library | 47 tests (24 prior + 23 new). 6 YAML profiles (4 real + POLE21/VOLNOREZ stubs). **ELRS vs Crossfire at 868 MHz = multi-match → UNKNOWN with upstream confidence (option 2, honest).** `yaml.safe_load` only; stub-first scan; `ThreatProfileError` raises with offending file name. |
+| `8c76cb8` | WS-CD-ops dashboard | 31 tests, 9 panels, 3 layouts (TRENCH / DEBUG / MINIMAL). FixPanel renders %-of-range to **1 decimal**, `n/a` when origin unknown. NullSteeringPanel **caps quoted depth at 20 dB** per ADR-008 §D8. ClassificationOverlayPanel: `None` and `UNKNOWN` both render `"UNKNOWN"`; tooltip differentiates ("no L3 capability" vs "classifier ran, unsure"). ResidualsPanel **re-derives `is_outlier`** per ADR-005 §D3 (contract `FixEvent.residuals_deg` is bare `tuple[float,...]`; flag does not cross the wire). Added one `ignore_imports` line for `rfmesh_ops.panels.null_steering -> rfmesh_dsp.l2_null_steering` so the `independence` clause accepts the D2 carve-out; companion `forbidden` clause still pins every other `rfmesh_dsp` submodule. |
+| `9b08096` | WS-CD-cot PyTAK publisher | 45 tests across 4 files + byte-exact `canonical_fix.xml` golden. **WGS-84 meridional/transverse curvatures** in `ellipse_to_polygon_vertices` (not naive equirectangular) — sub-metre accuracy at demo ranges, <1 m at lat 70°. Stale time = `fix.t_unix_ns + 30 s` (not `now + 30s`) — replays stay honest. Transport errors → `CotTransportError`, no auto-reconnect (B3). `range_m=0.0` placeholder in remarks; ops owns operational % display per ADR-005 D5b. Added `cryptography>=42` runtime dep because PyTAK 6.4.0 has a buggy `warnings.warn(exc)` when cryptography is absent (upstream bug; lifted locally to keep demo immune). |
+| `f8b2a48` | WS-CD-node composition root | 39 tests, 14 source files. **Subscriber-registration race regression test landed** (`test_fusion_service.py::test_subscriber_registration_race`, per `INHERITED_CONTEXT.md` §5.2) — design prevents the race structurally (inbound queue independent of dashboard pubsub list). **Bearer Protocol is synchronous** (builder caught architect-doc vs contract conflict — contract wins per B1; WifiBearer uses non-blocking socket). LoraBearer ships `loopback=True` v1.0; real-serial path raises `NotImplementedError` (B3 honesty); BothBearer suppresses LoRa `NotImplementedError` so Wi-Fi keeps shipping. L2-uncalibrated → `CapabilityMismatchError` at startup (raise, not exclude). |
+
+**Honest-engineering deviations (documented, no contract change):**
+
+- WS-CD-ops `is_outlier` re-derivation. The contract carries
+  `residuals_deg: tuple[float, ...]` (per `FixEvent`); the outlier flag
+  is internal to `rfmesh_fusion.residuals.ResidualsResult` and is not
+  on the wire. Re-deriving in the panel from the live
+  `BearingReport.azimuth_sigma_deg` stream is the honest path. Builder
+  documented this in `packages/rfmesh-ops/src/rfmesh_ops/panels/residuals.py`
+  + README.
+- WS-CD-ops added `pytest-asyncio>=0.23` to workspace dev deps. Needed
+  for the dashboard's WebSocket round-trip + dashboard.run async tests.
+- WS-CD-node caught a workspace-root `pyproject.toml` bug: the
+  `per-file-ignores` glob `tests/**` was root-anchored and had no
+  effect on package tests (`packages/<pkg>/tests/**`). Fixed to
+  `**/tests/**`. Carries `S` + `ANN` + `PLR2004` + `PLC0415` for tests
+  — workspace-wide.
+- WS-CD-node delivered the `Bearer` Protocol with **sync send/recv** to
+  honor the contract in `rfmesh_contracts.protocols.Bearer`. The
+  architect doc had `async def` on the same methods; in the conflict the
+  contract wins (Invariant B1). Documented in
+  `packages/rfmesh-node/src/rfmesh_node/bearer/__init__.py` docstring.
+- WS-CD-node uses **lazy `if TYPE_CHECKING:` imports** for `rfmesh-cot`
+  and `rfmesh-ml` to allow parallel builds; `run_fusion.py` catches
+  `ImportError` so the fusion-server CLI runs headless even when those
+  packages have not landed yet.
+- WS-CD-cot added `cryptography>=42` to lift a PyTAK 6.4.0 upstream
+  bug (`warnings.warn(exc)` passes Exception instead of str/Warning,
+  raising `TypeError` on import when cryptography is absent — official
+  PyPI install includes it transitively, uv resolver does not).
+
+### Integration check (all four landed)
+
+`uv run pytest -m "not hardware"` workspace-wide at the four-builder
+landing: **450 passed in 157.33 s** (from 335 pre-batch). +115 tests:
+B-006 (23 new) + ops (31) + node (39) + cot (45) = 138 new minus 23
+overlap counted in B-006's prior 24-test baseline.
+
+Workspace state after the batch:
+- 6 lint-imports contracts KEPT, 0 broken (D1 + D2 + the WS-B-005
+  `rfmesh_ml.features -> rfmesh_dsp.spectrum` and WS-CD-ops
+  `rfmesh_ops.panels.null_steering -> rfmesh_dsp.l2_null_steering`
+  ignore_imports lines hold).
+- mypy strict: every package green at its own scope; the workspace's
+  `[tool.mypy.exclude]` keeps tests out as before. The post-checkpoint
+  `**/tests/**` per-file-ignores fix is the only non-package edit to
+  `pyproject.toml` from the batch.
+- ruff check + format: every package green.
+
+**Builder agent type lesson learned (operational, not architectural):**
+The first spawn attempt used `caveman:cavecrew-builder` for all four
+packages. That agent type **hard-refuses 3+ file scope** and **has no
+Bash tool** (cannot run `uv add` / `uv run pytest` / verification gates).
+Three agents instantly refused on scope; one (B-006) started writing in
+the main checkout (its `--isolation=worktree` flag was honored in name
+only — file edits used absolute paths to main) before being killed.
+General-purpose agents are the right choice for greenfield package
+builds; cavecrew-builder is for surgical 1-2 file edits only.
+
 ## ADRs landed (cumulative state at sprint end)
 
 | ADR | Title | Status |
@@ -58,6 +132,7 @@ modulation classifier shipped + ops/demo design pass complete.
 | ADR-008 | L2_CAPON enum split + `SCHEMA_VERSION 1.1.0` | ACCEPTED 2026-05-17; **AMENDED by ADR-010** |
 | ADR-009 | ADR-005 math correction (1-σ vs 95 % chi-square) | ACCEPTED 2026-05-17 |
 | ADR-010 | Null-steering API geometry extension | ACCEPTED 2026-05-17 |
+| ADR-011 | Ops architecture ratifications (D1-D4) | ACCEPTED 2026-05-17 |
 
 ## Honest-ellipse Monte Carlo — briefing-book headline
 
