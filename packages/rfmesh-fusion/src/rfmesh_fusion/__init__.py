@@ -7,12 +7,13 @@ in pytest on a CI runner with no hardware.
 
 from __future__ import annotations
 
-from .exceptions import DegenerateGeometryError, FusionError
+from .exceptions import DegenerateGeometryError, FusionError, MLEConvergenceError
 from .geometry import (
     bearing_to_unit_vector,
     ray_ray_crossing,
     weighted_centroid_of_crossings,
 )
+from .mle import MLEResult, solve_mle
 from .projection import (
     MAX_DISTANCE_M,
     R_EARTH_M,
@@ -27,10 +28,13 @@ __all__ = [
     "R_EARTH_M",
     "DegenerateGeometryError",
     "FusionError",
+    "MLEConvergenceError",
+    "MLEResult",
     "bearing_to_unit_vector",
     "choose_enu_origin",
     "from_enu",
     "ray_ray_crossing",
+    "solve_mle",
     "stansfield_seed",
     "to_enu",
     "weighted_centroid_of_crossings",

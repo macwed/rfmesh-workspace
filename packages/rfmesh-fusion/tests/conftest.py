@@ -9,8 +9,10 @@ themselves.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 
+import numpy as np
 import pytest
 from rfmesh_contracts.enums import Capability  # type: ignore[import-untyped, unused-ignore]
 from rfmesh_contracts.geospatial import (  # type: ignore[import-untyped, unused-ignore]
@@ -125,3 +127,38 @@ def make_bearing(make_position: MakePosition) -> MakeBearing:
         )
 
     return _factory
+
+
+@pytest.fixture
+def seeded_rng() -> np.random.Generator:
+    """Return a numpy ``Generator`` with a fixed seed for determinism.
+
+    Used by Monte-Carlo and noise-injecting tests so that re-running
+    them yields byte-identical pass/fail outcomes. Tests that need
+    independent draws within the same scenario should derive their
+    own per-scenario seed -- this fixture is the single canonical
+    "I need *some* deterministic RNG" entry point.
+    """
+    return np.random.default_rng(seed=20260517)
+
+
+def azimuth_node_to_emitter_deg(
+    node_enu: tuple[float, float],
+    emitter_enu: tuple[float, float],
+) -> float:
+    """Return the exact azimuth from ``node_enu`` to ``emitter_enu``.
+
+    Degrees, true north = 0, CW positive, wrapped to ``[0, 360)``.
+    Mirrors ``geometry.bearing_to_unit_vector``'s ``(east, north) =
+    (sin, cos)`` convention: ``azimuth = atan2(east_offset,
+    north_offset)`` -- east first, north second.
+
+    Lives in ``conftest.py`` so any test (Stansfield, MLE, future
+    GDOP/ellipse Monte Carlo) shares one canonical "node-to-emitter
+    azimuth" helper rather than re-deriving the convention each time
+    and risking a sign flip.
+    """
+    de = emitter_enu[0] - node_enu[0]
+    dn = emitter_enu[1] - node_enu[1]
+    az_deg = math.degrees(math.atan2(de, dn))
+    return az_deg % 360.0

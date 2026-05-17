@@ -21,3 +21,13 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rfmesh_fusion"]
+
+# Local pytest configuration. The workspace root pyproject also
+# registers ``slow`` workspace-wide, but per the WS-CD-003 ticket we
+# pin the marker at the package level too so a downstream ticket that
+# runs ``uv run pytest packages/rfmesh-fusion -m "not slow"`` reads
+# the registration without relying on workspace inheritance.
+[tool.pytest.ini_options]
+markers = [
+    "slow: takes >1s; deselect locally with -m 'not slow'",
+]

@@ -43,3 +43,29 @@ class DegenerateGeometryError(FusionError):
     refuses to invent an answer rather than degrading silently
     (Invariant 4).
     """
+
+
+class MLEConvergenceError(FusionError):
+    """Raised by ``solve_mle`` when Gauss-Newton fails to converge.
+
+    Concretely: ``max_iter`` iterations elapsed without ``||Δx|| <
+    tol_m``, the iterate drifted outside ``divergence_radius_m`` of the
+    seed, or ``numpy.linalg.solve`` reported a singular update system
+    (indicating the Jacobian collapsed mid-iteration -- the bearings
+    effectively went rank-1 at the current iterate, e.g. because the
+    iterate is sitting on top of a node).
+
+    Distinct from ``DegenerateGeometryError``: that is raised by the
+    *closed-form* Stansfield seed when the input geometry is
+    rank-deficient ab initio; ``MLEConvergenceError`` is the
+    parallel-but-separate honesty-loud signal on the iterative
+    refinement path. Both are caught by ``fuser.py`` (WS-CD-007), which
+    routes ``DegenerateGeometryError`` to ``fallback_centroid`` and
+    (per ADR-007 D3) decides separately how to handle MLE divergence
+    (likely: return the Stansfield seed with ``confidence_level = LOW``
+    and ``method = "stansfield"``).
+
+    Invariant B3 (no silent fallbacks): the refiner refuses loudly
+    rather than returning the last iterate with ``converged = False`` or
+    silently capping at ``max_iter``.
+    """
