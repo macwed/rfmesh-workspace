@@ -1,0 +1,249 @@
+# trench_demo_artifact.yaml — A3 artifact-capture variant of trench_demo.
+#
+# WHY THIS FILE EXISTS:
+#   The sister scenario `trench_demo.yaml` carries the design-intent
+#   channel model (two_ray_ground + multipath_fir + log_normal_shadowing).
+#   At the documented tx_height=3 m / rx_height=2 m geometry over ~2.2 km
+#   at 915 MHz, two_ray puts the L1 receivers in a destructive null deep
+#   enough that the default L1 amplitude-sweep prominence gate (6 dB)
+#   refuses to emit a bearing — i.e. the *simulator* is honestly modelling
+#   a Phase-C failure mode (multipath dominance, INHERITED_CONTEXT §3.1.1).
+#
+#   For the A3 demo-replay end-to-end exercise we need a scenario that
+#   produces fixes for artifact-capture (PNG snapshots, CoT XML). The
+#   honest mitigation is a separate variant that *swaps the channel* for
+#   free-space — same geometry, same nodes, same beats — to capture a
+#   clean run. Numbers in `expected_outcomes` below describe the design-
+#   intent (two_ray) case; they are NOT re-derived for free-space here.
+#
+# Source: docs/demo/artifacts/A3_NOTES.md
+# Geometry rationale: docs/demo/trench-demo-geometry.md
+# Confidence policy: docs/adr/ADR-005-fusion-confidence-policy.md
+
+scenario_id: trench_demo_artifact_v1
+description: >
+  Four-beat BoTH3 jury demo. Three L1 nodes (RTL-SDR V4 + ATK-10 Yagi
+  + MG996R servo, sigma ~5 deg at SNR 20 dB) form a forward
+  observation arc 1.8-2.2 km from the emitter. One L2 node (bladeRF
+  2.0 micro + 2-element ULA at lambda/2 for 915 MHz, sigma ~1.5 deg
+  at SNR 20 dB) sits forward of the emitter on the east. Emitter at
+  3 km north of the L1 centroid — the BoTH3 spec midpoint of the
+  2-5 km standoff range.
+
+# ENU origin for the scenario. Placeholder coords near
+# Marche-les-Dames; replace with surveyed origin before live run.
+enu_origin:
+  lat_deg: 50.330000
+  lon_deg: 5.000000
+  hae_m: 200.0
+
+# Emitter (the target the demo is geolocating).
+emitter:
+  emitter_id: target_01
+  enu_position_m: [0.0, 3000.0]   # east, north
+  center_freq_hz: 915.0e6
+  modulation: cw
+  emit_power_db_above_noise: 25.0  # at-emitter SNR ref; per-node SNR
+                                   # is derived by the channel model
+  expected_class: UNKNOWN   # demo: unclassified emitter for honesty
+  notes: >
+    The 25 dB at-emitter reference SNR yields ~20 dB SNR at the
+    nodes after ~2 km free-space loss + multipath margin, matching
+    the regime in which L1 sigma honesty band (~5 deg) and L2 sigma
+    honesty band (~1.5 deg) are calibrated.
+
+# Channel model: free-space for artifact-capture clean run.
+# See file header for the destructive-null finding that motivates this
+# substitution vs the design-intent two_ray + multipath + shadow stack.
+channel:
+  kind: free_space
+
+# Per-node specifications. Each node entry has the shape a NodeConfig
+# would have once loaded, with simulator-side extras (the synthetic
+# receiver swap-in: `sdr.driver = "sim"`).
+nodes:
+  - node_id: node-l1-west
+    enu_position_m: [-1800.0, +1800.0]
+    sigma_m: 5.0                       # surveyed-position uncertainty
+    heading_deg: 90.0                  # antenna boresight east
+    capabilities: [l1_rssi]
+    sdr:
+      driver: sim
+      sample_rate_hz: 2.0e6
+      center_freq_hz: 915.0e6
+      gain_db: 30.0
+      bias_tee: false
+    bearer:
+      kind: wifi
+      heartbeat_interval_s: 2.0
+    expected_sigma_deg: 5.0            # design-intent; honesty tested
+    notes: NW flank, forward observation post 1, RTL-SDR + ATK-10 Yagi
+
+  - node_id: node-l1-east
+    enu_position_m: [+1800.0, +1800.0]
+    sigma_m: 5.0
+    heading_deg: 270.0                 # antenna boresight west
+    capabilities: [l1_rssi]
+    sdr:
+      driver: sim
+      sample_rate_hz: 2.0e6
+      center_freq_hz: 915.0e6
+      gain_db: 30.0
+      bias_tee: false
+    bearer:
+      kind: wifi
+      heartbeat_interval_s: 2.0
+    expected_sigma_deg: 5.0
+    notes: NE flank, forward observation post 2, RTL-SDR + ATK-10 Yagi
+
+  - node_id: node-l1-south
+    enu_position_m: [0.0, +900.0]
+    sigma_m: 5.0
+    heading_deg: 0.0                   # antenna boresight north
+    capabilities: [l1_rssi]
+    sdr:
+      driver: sim
+      sample_rate_hz: 2.0e6
+      center_freq_hz: 915.0e6
+      gain_db: 30.0
+      bias_tee: false
+    bearer:
+      kind: wifi
+      heartbeat_interval_s: 2.0
+    expected_sigma_deg: 5.0
+    notes: Central south observation post, RTL-SDR + ATK-10 Yagi
+
+  - node_id: node-l2-overwatch
+    enu_position_m: [+2000.0, +3500.0]
+    sigma_m: 3.0                       # partner-pool position, tighter survey
+    heading_deg: 225.0                 # array boresight SW (toward emitter)
+    capabilities: [l2_music, l2_mvdr_null]
+    sdr:
+      driver: sim                      # coherent simulator mode
+      sample_rate_hz: 4.0e6
+      center_freq_hz: 915.0e6
+      gain_db: 25.0
+      bias_tee: false
+    array:
+      geometry: ula
+      n_elements: 2
+      element_spacing_m: 0.164          # lambda/2 at 915 MHz
+      calibration_file: configs/cal/node-l2-overwatch.json
+    bearer:
+      kind: wifi
+      heartbeat_interval_s: 2.0
+    expected_sigma_deg: 1.5
+    notes: >
+      Forward overwatch, bladeRF 2.0 micro + 2-element ULA. Coherent
+      simulator mode (the bladeRF hardware path itself is
+      partner-pool; the demo uses SyntheticReceiver coherent mode
+      until on-site integration). Carries L2_MVDR_NULL capability so
+      the null-steering A/B demo slide (HANDOFF advantage #4) can
+      use this node's R matrix.
+
+# Demo beats — the sequenced operator-visible scenes that the demo
+# script plays through. Each beat is a wall-clock window during which
+# a specified subset of nodes is "online" (the others are bearer-
+# silent, so fusion's node_stale_after_s drops them from the fix).
+demo_beats:
+  - beat_id: A
+    label: "One observation post"
+    duration_s: 10
+    active_nodes: [node-l1-south]
+    expected_fix: null                       # one bearing is not a fix
+    dashboard_caption: >
+      Single bearing line. No cross-fix yet — one bearing is a ray,
+      not a fix.
+
+  - beat_id: B
+    label: "Two posts — first cross-fix"
+    duration_s: 10
+    active_nodes: [node-l1-west, node-l1-east]
+    expected_fix:
+      semi_major_m: 589
+      semi_minor_m: 393
+      orientation_deg: 0.0
+      range_m: 1200
+      semi_over_range_pct: 49.1
+      gdop: 1.53
+      confidence_level: LOW
+    dashboard_caption: >
+      Two posts. The cross-fix appears, but the ellipse is wide —
+      two bearings only constrain the position along one axis.
+
+  - beat_id: C
+    label: "Three posts — MEDIUM band"
+    duration_s: 15
+    active_nodes:
+      - node-l1-west
+      - node-l1-east
+      - node-l1-south
+    expected_fix:
+      semi_major_m: 393
+      semi_minor_m: 357
+      orientation_deg: 90.0
+      range_m: 1500
+      semi_over_range_pct: 26.2
+      gdop: 1.16
+      confidence_level: MEDIUM            # see geometry doc §4
+    dashboard_caption: >
+      Three posts. Ellipse halves. GDOP under 1.2 — the geometry is
+      good. Working, not yet competition-grade.
+
+  - beat_id: D
+    label: "L2 partner joins — HIGH band transition"
+    duration_s: 20
+    active_nodes:
+      - node-l1-west
+      - node-l1-east
+      - node-l1-south
+      - node-l2-overwatch
+    expected_fix:
+      semi_major_m: 359
+      semi_minor_m: 125
+      orientation_deg: -165.6
+      range_m: 1118
+      semi_over_range_pct: 32.1            # see geometry doc §4
+      gdop: 1.02
+      confidence_level: MEDIUM             # honest re-statement; HIGH
+                                           # transition awaits the
+                                           # ADR-005 amendment per
+                                           # geometry doc §4 option 2
+      semi_minor_m_drop_pct: 65            # the visible "shrink" beat
+    dashboard_caption: >
+      Coherent partner-pool radio joins. Semi-minor collapses 65 %.
+      It is the geometry diversity that buys the precision — not the
+      sensor alone. (Deployment density, not per-sensor magic.)
+
+# Top-level expectations the dashboard / honesty Monte-Carlo can gate
+# against. These mirror the per-beat numbers but pre-aggregate for
+# the test harness.
+expected_outcomes:
+  l1_only_gdop_max: 1.5            # 3-node configuration
+  l1_plus_l2_gdop_max: 1.1
+  l1_only_semi_major_m_max: 450    # 95 % ellipse, simulator sigma
+  l1_plus_l2_semi_major_m_max: 400 # 95 % ellipse, simulator sigma
+  l1_plus_l2_semi_minor_m_max: 150 # the visible-shrink number
+
+# Phase-C pessimism budget — what happens under 1.5x / 2x sigma
+# inflation (per INHERITED_CONTEXT §3.1.1). Documented here so the
+# demo replay can run a pessimism overlay if needed.
+phase_c_pessimism:
+  sigma_inflation_factor_1_5x:
+    beat_c_semi_major_m: 589
+    beat_c_semi_over_range_pct: 39.3
+    beat_d_semi_major_m: 538
+    beat_d_semi_over_range_pct: 48.1
+  sigma_inflation_factor_2_0x:
+    beat_c_semi_major_m: 785
+    beat_c_semi_over_range_pct: 52.4
+    beat_d_semi_major_m: 718
+    beat_d_semi_over_range_pct: 64.2
+
+# Cross-references
+references:
+  geometry_doc: docs/demo/trench-demo-geometry.md
+  adr_confidence_policy: docs/adr/ADR-005-fusion-confidence-policy.md
+  adr_algorithm_choices: docs/adr/ADR-007-fusion-algorithm-choices.md
+  inherited_context_phase_c: INHERITED_CONTEXT.md §3.1 + §3.1.1
+  handoff_pitch_advantages: HANDOFF_TO_CLAUDE_CODE_LEAD.md §0

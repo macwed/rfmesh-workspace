@@ -282,3 +282,41 @@ mypy strict — clean on every package. ruff check + format — clean. lint-impo
 - Conversation messages: 308 k (the bulk).
 
 Doc compaction via `/caveman-compress` applied to `INTERFACES.md` + `SALVAGE_AUDIT.md` as part of this checkpoint (Step 0 of `i-see-before-you-zippy-pumpkin.md` plan). Backups at `INTERFACES.original.md` + `SALVAGE_AUDIT.original.md`.
+
+---
+
+## 2026-05-17 evening — A3 end-to-end demo-replay exercise
+
+Ran `rfmesh-demo-replay` orchestrator end-to-end against the simulator while Maciej executed Phase C on bench. Artifacts under `docs/demo/artifacts/`.
+
+**Captured:**
+- 4× dashboard PNG (one per beat, A→D, ~100 KB each, DEMO_LAYOUT_TRENCH)
+- 3× CoT XML (one per `FixEvent`, beats B/C/D, byte-exact `fix_event_to_cot_xml` output)
+- 1× JSON summary (`trench_demo_fixes.json`, per-fix scalar table)
+- 1× findings note (`A3_NOTES.md`)
+
+**Honest finding (Phase-C-relevant):** the design-intent scenario `trench_demo.yaml` produces **zero L1 bearings** at the documented antenna heights (tx 3 m / rx 2 m) over 2.2 km at 915 MHz. Two-ray destructive null suppresses on-axis RSSI to ~5 dB above the off-axis floor; the L1 prominence gate (6 dB default) correctly refuses (Invariant B3). This is the multipath-dominance failure mode pre-enumerated in `INHERITED_CONTEXT.md` §3.1.1 — simulator faithfully models it.
+
+**Mitigations probed:**
+- `tx_h=10 / rx_h=10` recovers L1 (null moves off range)
+- `free_space` channel recovers L1 (idealised, used for these artifacts)
+- Raising L1 prominence threshold below 6 dB — refused (would break sigma honesty)
+
+**Follow-ups surfaced:**
+- **NEXT-1** — adjust `trench_demo.yaml` heights to 10 m and re-run WS-CD-008 Monte-Carlo to re-derive `expected_fix:` numbers in `docs/demo/script.md`.
+- **NEXT-2** — add `--channel-override` flag to `rfmesh-demo-replay` so artifact capture does not need a sister YAML.
+- **NEXT-3** — fix `--headless` mode: orchestrator's `_relay_fixes_to_sink` requires the dashboard queue to also exist. Trace `apps/demo-replay/src/rfmesh_demo_replay/replay.py:545`.
+
+**Sister scenario:** `scenarios/trench_demo_artifact.yaml` (free-space channel, same geometry/nodes/beats as `trench_demo.yaml`), only for artifact capture — does not replace the design-intent file.
+
+**Capture harness:** `scripts/capture_demo_artifacts.py` — programmatic orchestrator + subscriber + per-beat dashboard render, bypasses the `--headless` bug. Reproducible: `uv run python scripts/capture_demo_artifacts.py`.
+
+**Artifact-pass numbers** (free-space channel, not multipath-loaded):
+
+| Beat | Nodes | semi_major_m | semi_minor_m | gdop | confidence |
+|---|---|---|---|---|---|
+| B | west+east | 17.29 | 10.41 | 1.53 | HIGH |
+| C | +south | 9.01 | 5.12 | 1.16 | HIGH |
+| D | +L2 | 10.63 | 6.75 | 1.16 | HIGH |
+
+The ellipse axes are simulator-clean (an order of magnitude tighter than the Monte-Carlo multipath-loaded numbers). Pipeline integrity confirmed; honesty budget unchanged.
