@@ -415,3 +415,37 @@ Pure-docs commit; no contract change; SCHEMA_VERSION unchanged.
 - Maciej's draft `docs/hardware/phase-c-tutorial.md` + Polish translation cover the operator-facing tutorial layer.
 
 The original brief framed C2 as "only useful if Phase C surfaces something the bench checklist doesn't cover" — which has not happened. Re-authoring the playbook now would duplicate content with no new information. Parked: if Phase C surfaces a gap, file follow-up against `phase-c-bench-checklist.md` directly rather than reconstructing the legacy playbook.
+
+---
+
+## 2026-05-18 — Phase C BENCH RESULT: PASS
+
+Maciej executed Phase C bench on the evening of 2026-05-17. Three GSM-mast candidates swept. Full raw log at `docs/phase-c-report/phase-c-report.md` + companion analysis at `docs/phase-c-report/findings.md` + three polar PNGs.
+
+**Verdict: PASS** on Mast C. The INHERITED_CONTEXT §3.1 binary question is empirically answered.
+
+| Mast | Range | Expected | Peak | F/B ratio | Prominence | Verdict |
+|---|---|---|---|---|---|---|
+| A | 650 m | 144° | cluster 135-225° | 1.96 dB | fail | FAIL (multipath dominance, sub-1km no-fly) |
+| B | 2.2 km | 336° NW | 0-45° NE | 8.5 dB | fail (wrong direction) | FAIL (co-channel interference from 5 km off-axis transmitter) |
+| C | ~3 km | 306° | 315° | 14.9 dB | 14.9 dB ≥ 6 dB ✅ | **PASS** (9° azimuth error, well inside ±10°) |
+
+Both failures map exactly to `INHERITED_CONTEXT.md` §3.1.1 pre-enumerated failure modes (multipath dominance + co-channel interference). The L1 prominence gate (`peak_prominence_db_min = 6.0`) would correctly refuse Mast A. Mast B would be honest mis-bearing — the operational mitigation belongs upstream of L1 (reference-emitter selection + deployment density), already in the architecture.
+
+**Architectural implication.** The whole L1 baseline of `ARCHITECTURE.md` is no longer hypothesis: ATK-10 Yagi + RTL-SDR V4 at ~958 MHz, ~3 km, vertical pol delivers 14.9 dB front-back ratio at 9° azimuth error. **The simulator's existing channel models are retroactively validated** — Mast A's flat response is what `composite(two_ray_ground + multipath_fir + log_normal_shadowing)` produces at the trench-demo scenario geometry, which A3 had treated as a defect. Mast A says "no, that's reality at 650 m". The simulator was honest all along.
+
+### Updates landed in this commit
+
+- `docs/phase-c-report/phase-c-report.md` (Maciej's raw bench log) + 3 polar PNGs committed to repo.
+- `docs/phase-c-report/findings.md` authored — architectural read, simulator calibration anchors (§3), demo-narrative implications (§4), operational lessons-learned (§5).
+- `docs/hardware/phase-c-bench-checklist.md` §2 amended with three new subsections lifted from Maciej's bench experience:
+  - "Sub-1 km is the no-fly zone for L1 DF" (Mast A lesson)
+  - §A.2.bis: isolation check (Mast B lesson — off-axis RSSI must be ≥ 6 dB below on-axis at the candidate frequency)
+  - §A.2.ter: site selection (drive to clear-line-of-sight ~3 km from btsearch.pl-heatmap-strong tower)
+
+### Follow-up actions queued (not in this commit)
+
+- Tier D1-D5 from the project audit (Literal[SCHEMA_VERSION], headless relay fix, dead CLI assert, trench heights → 10 m + re-MC + regen PNGs, PseudospectrumPanel in TRENCH layout).
+- Re-capture Mast C with `rfmesh-demo-record` to produce `.iqx` + sweep JSON — first real-world reference dataset for the project. Maciej scheduled re-measurement for 2026-05-19.
+- Open simulator-calibration ticket against `findings.md` §3 table.
+- `docs/demo/script.md` §4 jury Q&A — add three rehearsal entries surfaced by Phase C.

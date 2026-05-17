@@ -58,6 +58,14 @@ The home site does not have a confirmed reference emitter yet — that
 is an open item from the prior project (`INHERITED_CONTEXT.md` §3.2).
 Today's first job is to fix it.
 
+**Lessons learned from the 2026-05-17 Phase C run** (see
+`docs/phase-c-report/findings.md` §5 for the full write-up): on that
+night Maciej swept *three* candidate cellular masts before one of them
+PASSed. The two failures were honest — multipath dominance at 650 m,
+co-channel interference from a stronger off-axis transmitter at 2.2 km
+— and produced explicit diagnostics that retroactively shaped the
+checks below. Read those before starting your own first sweep.
+
 ### A.1 Wideband scan
 
 ```bash
@@ -84,6 +92,48 @@ Record:
 Sanity bound: the tower is expected at 1–5 km. If it is much closer
 the signal will dominate everything and the off-peak floor estimate
 will be unreliable; pick a weaker, more distant carrier instead.
+
+**Sub-1 km is the no-fly zone for L1 DF.** Mast A at 650 m on
+2026-05-17 delivered a 1.96 dB front-back ratio — well below the
+6 dB prominence gate, because near-field multipath flattens any
+antenna's directional response. Pick reference emitters at ≥ 2 km.
+
+### A.2.bis Isolation check (added after the Mast B failure)
+
+A strong, *temporally stable* carrier is necessary but not sufficient.
+The candidate frequency must also be **spatially isolated** — no
+co-channel transmitter close enough to dominate when the antenna
+points elsewhere.
+
+After picking `f_ref_hz`, point the antenna **perpendicular to the
+expected tower bearing** (or any other off-axis direction) and re-read
+RSSI at the same frequency:
+
+```bash
+# Quick off-axis RSSI sanity check at the candidate frequency.
+rtl_sdr -f <f_ref_hz> -s 2048000 -n 4096000 -g 40 - | \
+  python -c "import numpy as np, sys; \
+             iq = np.frombuffer(sys.stdin.buffer.read(), dtype=np.uint8); \
+             iq = (iq[0::2].astype(np.float32) + 1j*iq[1::2].astype(np.float32) - 127.5)/127.5; \
+             print(f'mean |IQ|: {np.mean(np.abs(iq)):.4f}')"
+```
+
+Rule of thumb: off-axis RSSI should be ≥ 6 dB below on-axis RSSI at the
+candidate frequency. If they are within ~3 dB, the candidate is
+contaminated by co-channel interference from a different transmitter
+— Mast B's failure mode. Pick a different frequency (the cellular
+allocation tables list dozens of GSM-900 / E-GSM900 / LTE B8 channels;
+sites at the edge of the band, e.g. 958-960 MHz, are usually less
+contested than the dense 935-940 MHz core).
+
+### A.2.ter Site selection (added after the Mast A failure)
+
+If the home site is dense (suburban, near other buildings, near a
+busy road) and the closest mast is < 2 km, **drive to a clear-line-
+of-sight position** ~3 km from a known-strong tower identified via
+btsearch.pl's heatmap (or equivalent operator-published map). The
+trip is part of the system — site selection is not a happy accident
+that good Phase C results require, it is an operational protocol.
 
 ### A.3 If the scan finds nothing usable
 
