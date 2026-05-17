@@ -93,7 +93,49 @@ landed in build-finish order, not spawn order.
   raising `TypeError` on import when cryptography is absent — official
   PyPI install includes it transitively, uv resolver does not).
 
-### Integration check (all four landed)
+### Post-batch council audit + BLOCK fix + demo-replay
+
+After the 4-builder batch landed (`0dbaaeb`), the council protocol per
+`CLAUDE.md` lines 23-49 was run (architect / code-reviewer /
+rf-dsp-specialist / demo-integrity, in parallel, read-only). One
+critical finding required immediate action.
+
+| Reviewer | Batch verdict | Findings |
+|---|---|---|
+| Code-reviewer | APPROVE | 6 ℹ INFO. Honesty rails verified at code level. |
+| RF-DSP specialist | APPROVE | 5 NOTES (CoT `<ellipse>` angle convention; v1.5+ hop-rate discriminator; equirectangular envelope wording; `L2MvdrEstimator` class-vs-label; pseudospectrum adaptive sample count). |
+| Demo-integrity | APPROVE | 7 RECOMMENDATIONs. R1 (CoT `range_m=0.0` cosmetic dishonesty) + R4 (`NodeStatusPanel` missing `status_detail` column) reinforced the architect BLOCK. |
+| Architect | **BLOCK on `f8b2a48`** | B3 violation: `BothBearer` silently suppressed `LoraBearer.NotImplementedError` → `Node._build_status` hard-coded `healthy=True, status_detail=""` → `NodeStatusPanel` shows green when redundancy is broken. Operator-invisible failure mode in the most jury-visible diagnostic channel. |
+
+**Fix landed (`320423e`):** end-to-end honesty chain through 4 layers:
+
+- `BothBearer` — `contextlib.suppress` replaced with try/except logging WARN once + flipping `_lora_available=False`; subsequent calls skip LoRa entirely. New `is_lora_available()` + `health_summary()` accessors. Returns `"LoRa bearer down, Wi-Fi only"` verbatim per INTERFACES.md §3 canonical example.
+- `Node._build_status` — duck-typing on `bearer.health_summary` so Wi-Fi-only / LoRa-only bearers stay valid; populates `NodeStatus.status_detail`.
+- `NodeStatusPanel` — 5th column rendering `status_detail` in orange.
+- `cot/markers.py` — `_range_m` returns `"n/a"` (R1 alignment with FixPanel's `n/a`-on-unknown-origin); golden `canonical_fix.xml` updated.
+
+4 new regression tests (2 bearer-level + 2 heartbeat-level). All gates green: 43 node + 45 cot + 31 ops; mypy strict + ruff + lint-imports (6 KEPT). Architect's re-audit predicate flips: 4× APPROVE achievable on next pass.
+
+### apps/demo-replay (`d3baabc`)
+
+Greenfield app per architect §2.4 + §3.3. 20 tests (5 scenario loader + 5 ReplayMetadata + 3 ReplayRecorder + 5 ReplayOrchestrator + 2 CLI/aux). In-process orchestration for v1.0 (multi-process is documented migration path; orchestrator seams `_NodeContext` + shared `FusionService`/`DashboardPubSub` already match the multi-process shape).
+
+- `SyntheticReceiver` replay-mode extension **deferred to WS-A-005** — `.iqx + .json` format + `ReplayMetadata` ship now so Phase-C bench captures land in stable format; `NodeReplaySpec.replay_iqx_path` field in place; the actual playback path is the WS-A-005 follow-up.
+- `ReplayMetadata` extends actual `IQMetadata` field names (`n_samples`, `start_time_utc`, `format` — not the brief's guessed `total_samples`/`started_at_utc`/`dtype`).
+- Test-filename collision avoided per AGENTS.md §3.5 (no `__init__.py` under `tests/`; basenames must be workspace-unique) — renamed `test_metadata.py` → `test_replay_metadata.py`.
+- Workspace root: `apps/*` added to `[tool.uv.workspace] members`; `rfmesh-demo-replay` added under `[tool.uv.sources]` + root deps; `apps` added to pytest `testpaths`; `apps/*/tests/` added to mypy excludes.
+
+CLIs: `rfmesh-demo-replay --scenario scenarios/trench_demo.yaml [--pessimism 1.0|1.5|2.0] [--no-cot] [--headless]` and `rfmesh-demo-record --scenario … --output recordings/<session>/ --duration-s 60`.
+
+### Integration check (all six landed)
+
+`uv run pytest -m "not hardware"` workspace-wide at the six-commit
+landing: **474 passed**. Composition: 335 pre-batch + 138 from the 4-
+builder batch + 4 BLOCK-fix regression + 20 from demo-replay - 23 overlap = 474.
+
+### Earlier integration check (4-builder batch only)
+
+(Historical, before the architect BLOCK fix.)
 
 `uv run pytest -m "not hardware"` workspace-wide at the four-builder
 landing: **450 passed in 157.33 s** (from 335 pre-batch). +115 tests:
