@@ -72,7 +72,11 @@ from rfmesh_dsp import (
     compute_rssi_dbfs,
 )
 from rfmesh_dsp.array_covariance import sample_covariance
-from rfmesh_dsp.array_manifold import steering_matrix
+from rfmesh_dsp.array_manifold import steering_matrix, steering_vector
+from rfmesh_dsp.l2_null_steering import (
+    compute_null_steering_weights,
+    compute_receive_pattern,
+)
 from rfmesh_sdr import (  # type: ignore[import-untyped, unused-ignore]
     SimulationScenario,
     SyntheticReceiver,
@@ -468,6 +472,85 @@ def generate_mvdr_sigma_table_golden() -> Path:
     return out
 
 
+def generate_null_steering_receive_pattern_golden() -> Path:
+    """E4: Golden ``compute_receive_pattern`` output for null-steering A/B.
+
+    Canonical scenario from ADR-008 D6:
+    - UCA-4 at radius lambda/4 (i.e. 0.082 m at 915 MHz)
+    - Signal at 30 deg, jammer at 100 deg
+    - Look-direction = signal direction = 30 deg
+    - Default diagonal_loading_factor (1e-6)
+
+    The receive pattern is the canonical jury-visible artefact: the dB
+    gain vs azimuth that the null-steering A/B polar plot reads. Pinning
+    one full pattern as a golden file guarantees that null-depth +
+    sidelobe shape do not silently drift across releases.
+    """
+    n_uca = 4
+    wavelength_m = 299_792_458.0 / 915_000_000.0
+    radius_m = wavelength_m / 4.0
+    signal_azimuth_deg = 30.0
+    jammer_azimuth_deg = 100.0
+
+    # Build an ideal analytic R matching the test fixture in
+    # tests/test_l2_null_steering.py::_ideal_two_emitter_r.
+    positions = np.empty((n_uca, 2), dtype=np.float64)
+    alphas = 2.0 * np.pi * np.arange(n_uca, dtype=np.float64) / float(n_uca)
+    positions[:, 0] = radius_m * np.cos(alphas)
+    positions[:, 1] = radius_m * np.sin(alphas)
+
+    a_s = steering_vector(
+        geometry=ArrayGeometry.UCA,
+        element_positions_m=positions,
+        azimuth_rad=np.radians(signal_azimuth_deg),
+        wavelength_m=wavelength_m,
+    )
+    a_j = steering_vector(
+        geometry=ArrayGeometry.UCA,
+        element_positions_m=positions,
+        azimuth_rad=np.radians(jammer_azimuth_deg),
+        wavelength_m=wavelength_m,
+    )
+    signal_power, jammer_power, noise_power = 10.0, 100.0, 1.0
+    r = (
+        signal_power * np.outer(a_s, a_s.conj())
+        + jammer_power * np.outer(a_j, a_j.conj())
+        + noise_power * np.eye(n_uca, dtype=np.complex128)
+    ).astype(np.complex64)
+    a_look = a_s.astype(np.complex64)
+
+    result = compute_null_steering_weights(
+        r,
+        a_look,
+        array_geometry=ArrayGeometry.UCA,
+        n_elements=n_uca,
+        element_spacing_m=radius_m,
+        frequency_hz=915_000_000.0,
+    )
+    azimuths_deg, gain_db = compute_receive_pattern(
+        result.weights,
+        array_geometry=ArrayGeometry.UCA,
+        n_elements=n_uca,
+        element_spacing_m=radius_m,
+        frequency_hz=915_000_000.0,
+        scan_step_deg=0.5,
+    )
+
+    _GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
+    out = _GOLDEN_DIR / "l2_null_steering_pattern_uca4_30deg_signal_100deg_jammer.npz"
+    np.savez(
+        out,
+        azimuths_deg=azimuths_deg,
+        gain_db=gain_db,
+        signal_azimuth_deg=np.float64(signal_azimuth_deg),
+        jammer_azimuth_deg=np.float64(jammer_azimuth_deg),
+        null_depth_db=np.float64(result.null_depth_db),
+        look_gain_db=np.float64(result.look_gain_db),
+        weights=result.weights,
+    )
+    return out
+
+
 def main() -> None:
     paths = [
         generate_sweep_golden(),
@@ -479,6 +562,7 @@ def main() -> None:
         generate_l2_sigma_table_golden(),
         generate_mvdr_pseudospectrum_golden(),
         generate_mvdr_sigma_table_golden(),
+        generate_null_steering_receive_pattern_golden(),
     ]
     for p in paths:
         print(f"wrote {p}")

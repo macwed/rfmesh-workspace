@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -769,3 +770,85 @@ def test_two_emitter_factory_smoke(
     assert len(scenario.emitters) == _EXPECTED_EMITTER_COUNT
     assert scenario.emitters[0].azimuth_deg == _SIGNAL_AZIMUTH_DEG
     assert scenario.emitters[1].azimuth_deg == _JAMMER_AZIMUTH_DEG
+
+
+# ---------------------------------------------------------------------------
+# 13. Golden-file regression for compute_receive_pattern (E4 / architect F4)
+# ---------------------------------------------------------------------------
+
+
+_GOLDEN_DIR = Path(__file__).parent / "golden"
+_NULL_STEERING_GOLDEN = (
+    _GOLDEN_DIR / "l2_null_steering_pattern_uca4_30deg_signal_100deg_jammer.npz"
+)
+
+
+def test_null_steering_receive_pattern_matches_golden() -> None:
+    """Pin the canonical UCA-4 null-steering receive pattern against a golden.
+
+    Closes the Invariant B4 ambiguity flagged in the 2026-05-18 project
+    audit (architect F4): `l2_null_steering.py` has 11 top-level
+    functions and no golden file. This test pins `compute_receive_pattern`
+    on the canonical ADR-008 D6 scenario:
+
+    - UCA-4 at radius lambda/4, 915 MHz
+    - Signal at 30 deg, jammer at 100 deg
+    - Look-direction = signal direction (anti-desense look)
+    - Default diagonal_loading_factor (1e-6)
+
+    Tolerance is tight (~0.5 dB in gain, exact in azimuth grid) because
+    the analytic R is deterministic — no simulator RNG involved. If
+    this test fails, the null-steering math drifted; investigate
+    before adjusting the golden.
+
+    Regenerate with:
+        uv run python -c "import sys; sys.path.insert(0, \
+        'packages/rfmesh-dsp/tests'); \
+        from golden_generator import \
+        generate_null_steering_receive_pattern_golden as g; print(g())"
+    """
+    assert _NULL_STEERING_GOLDEN.exists(), (
+        f"Golden file missing: {_NULL_STEERING_GOLDEN}. "
+        "Run golden_generator.generate_null_steering_receive_pattern_golden()."
+    )
+    golden = np.load(_NULL_STEERING_GOLDEN)
+
+    # Rebuild the same analytic R + look vector that the generator used.
+    positions = _array_positions_uca4()
+    a_s = steering_vector(
+        geometry=ArrayGeometry.UCA,
+        element_positions_m=positions,
+        azimuth_rad=math.radians(_SIGNAL_AZIMUTH_DEG),
+        wavelength_m=_WAVELENGTH_M,
+    )
+    a_j = steering_vector(
+        geometry=ArrayGeometry.UCA,
+        element_positions_m=positions,
+        azimuth_rad=math.radians(_JAMMER_AZIMUTH_DEG),
+        wavelength_m=_WAVELENGTH_M,
+    )
+    signal_power, jammer_power, noise_power = 10.0, 100.0, 1.0
+    r = (
+        signal_power * np.outer(a_s, a_s.conj())
+        + jammer_power * np.outer(a_j, a_j.conj())
+        + noise_power * np.eye(_N_UCA, dtype=np.complex128)
+    ).astype(np.complex64)
+    a_look = a_s.astype(np.complex64)
+
+    result = compute_null_steering_weights(r, a_look, **_uca4_kwargs())
+    azimuths_deg, gain_db = compute_receive_pattern(
+        result.weights, **_uca4_kwargs(), scan_step_deg=0.5
+    )
+
+    np.testing.assert_array_almost_equal(
+        azimuths_deg, golden["azimuths_deg"], decimal=6
+    )
+    np.testing.assert_array_almost_equal(
+        gain_db, golden["gain_db"], decimal=3
+    )
+    assert result.null_depth_db == pytest.approx(
+        float(golden["null_depth_db"]), abs=0.1
+    )
+    assert result.look_gain_db == pytest.approx(
+        float(golden["look_gain_db"]), abs=0.01
+    )
