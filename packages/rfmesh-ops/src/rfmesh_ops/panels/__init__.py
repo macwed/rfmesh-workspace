@@ -10,6 +10,7 @@ lives in ``docs/design/ops-architecture.md`` §2.3.
 from __future__ import annotations
 
 from rfmesh_ops.panels.base import DashboardMessage, Panel
+from rfmesh_ops.panels.bearing_scan import BearingScanPanel
 from rfmesh_ops.panels.bearings import BearingsPanel
 from rfmesh_ops.panels.classification_overlay import ClassificationOverlayPanel
 from rfmesh_ops.panels.fix import FixPanel
@@ -21,6 +22,7 @@ from rfmesh_ops.panels.pseudospectrum import PseudospectrumPanel
 from rfmesh_ops.panels.residuals import ResidualsPanel
 
 __all__ = [
+    "BearingScanPanel",
     "BearingsPanel",
     "ClassificationOverlayPanel",
     "DashboardMessage",

@@ -13,6 +13,7 @@ import re
 from unittest.mock import patch
 from uuid import UUID
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from matplotlib.axes import Axes
@@ -348,3 +349,133 @@ def _build_fix(
         method="stansfield+mle",
         emitter_class=emitter_class,
     )
+
+
+# ---------------------------------------------------------------------------
+# G7 — BearingScanPanel: live L1-sweep polar diagnostic
+# ---------------------------------------------------------------------------
+
+
+def _make_polar_axes() -> Axes:
+    """Build a matplotlib polar Axes for BearingScanPanel tests."""
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1, projection="polar")
+    return ax
+
+
+def test_bearing_scan_panel_empty_state_renders() -> None:
+    """Fresh panel renders without crashing on a polar axes."""
+    from rfmesh_ops.panels.bearing_scan import BearingScanPanel
+
+    ax = _make_polar_axes()
+    panel = BearingScanPanel(ax)
+    assert panel.has_sweep is False
+    assert panel.node_id is None
+    plt.close(ax.get_figure())
+
+
+def test_bearing_scan_panel_set_sweep_renders_clean_lobe() -> None:
+    """A clean Mast-C-like sweep renders and reports PASS in title."""
+    from rfmesh_ops.panels.bearing_scan import BearingScanPanel
+
+    ax = _make_polar_axes()
+    panel = BearingScanPanel(ax)
+
+    headings = np.linspace(0.0, 360.0, 8, endpoint=False)
+    # Mast C-like profile: peak at 315 deg, 14.9 dB front-back ratio.
+    # values: 0, 45, 90, 135, 180, 225, 270, 315
+    rssi = np.array(
+        [-4.79, -9.43, -14.97, -9.50, -10.29, -8.63, -0.60, -0.07],
+        dtype=np.float64,
+    )
+    panel.set_sweep(
+        headings_deg=headings,
+        rssi_dbfs=rssi,
+        node_id="node-l1-mast-c",
+    )
+    assert panel.has_sweep
+    assert panel.node_id == "node-l1-mast-c"
+    title = ax.get_title()
+    assert "node-l1-mast-c" in title
+    assert "PASS" in title
+    plt.close(ax.get_figure())
+
+
+def test_bearing_scan_panel_renders_refusal_for_flat_disk() -> None:
+    """A flat Mast-A-like sweep renders REFUSED + caption in title."""
+    from rfmesh_ops.panels.bearing_scan import BearingScanPanel
+
+    ax = _make_polar_axes()
+    panel = BearingScanPanel(ax)
+
+    headings = np.linspace(0.0, 360.0, 8, endpoint=False)
+    # Mast A-like: 1.96 dB peak-to-floor, refused by L1 prominence gate.
+    rssi = np.array(
+        [-0.17, -0.30, -1.23, 0.69, 0.73, 0.73, 0.51, -0.15],
+        dtype=np.float64,
+    )
+    refusal_text = (
+        "L1 refused: prominence 1.96 dB < gate 6.0 dB (multipath dominance?)"
+    )
+    panel.set_sweep(
+        headings_deg=headings,
+        rssi_dbfs=rssi,
+        node_id="node-l1-mast-a",
+        refusal_reason=refusal_text,
+    )
+    title = ax.get_title()
+    assert "node-l1-mast-a" in title
+    assert "REFUSED" in title
+    # Refusal caption rendered.
+    text_strs = [t.get_text() for t in ax.texts]
+    assert any("multipath" in s for s in text_strs)
+    plt.close(ax.get_figure())
+
+
+def test_bearing_scan_panel_shape_mismatch_raises() -> None:
+    from rfmesh_ops.panels.bearing_scan import BearingScanPanel
+
+    ax = _make_polar_axes()
+    panel = BearingScanPanel(ax)
+    with pytest.raises(ValueError, match="shape mismatch"):
+        panel.set_sweep(
+            headings_deg=np.array([0.0, 90.0]),
+            rssi_dbfs=np.array([0.0, -10.0, -20.0]),
+            node_id="bad",
+        )
+    plt.close(ax.get_figure())
+
+
+def test_bearing_scan_panel_empty_sweep_raises() -> None:
+    from rfmesh_ops.panels.bearing_scan import BearingScanPanel
+
+    ax = _make_polar_axes()
+    panel = BearingScanPanel(ax)
+    with pytest.raises(ValueError, match="empty sweep"):
+        panel.set_sweep(
+            headings_deg=np.array([], dtype=np.float64),
+            rssi_dbfs=np.array([], dtype=np.float64),
+            node_id="empty",
+        )
+    plt.close(ax.get_figure())
+
+
+def test_bearing_scan_panel_update_is_noop() -> None:
+    """update(msg) is a no-op — operator-driven panel."""
+    from rfmesh_contracts import BearingReport
+    from rfmesh_ops.panels.bearing_scan import BearingScanPanel
+
+    ax = _make_polar_axes()
+    panel = BearingScanPanel(ax)
+    # Faked BearingReport — should not modify panel state.
+    msg = BearingReport(
+        node_id="x",
+        t_unix_ns=1_700_000_000_000_000_000,
+        node_position=GeodeticPosition(lat_deg=52.0, lon_deg=21.0, hae_m=0.0, sigma_m=5.0),
+        azimuth_deg=0.0,
+        azimuth_sigma_deg=1.0,
+        method=Capability.L1_RSSI,
+    )
+    panel.update(msg)
+    assert panel.has_sweep is False
+    plt.close(ax.get_figure())
