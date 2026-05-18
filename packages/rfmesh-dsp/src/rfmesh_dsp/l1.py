@@ -198,6 +198,14 @@ class L1AmplitudeSweepEstimator:
         self._sweep_t_unix_ns: int | None = None
         self._headings_deg: list[float] = []
         self._rssi_dbfs: list[float] = []
+        # Last-refusal annotation — operator-facing diagnostic of why
+        # `estimate()` returned None on the most recent sweep. Cleared
+        # to None on every successful emission and at each begin_sweep.
+        # The node runtime reads this through `last_refusal_reason` and
+        # surfaces it via NodeStatus.status_detail (per E1, 2026-05-18).
+        # Wire-level diagnostic via a contract enum is parked as G4
+        # (needs SCHEMA_VERSION 1.2.0 bump).
+        self._last_refusal_reason: str | None = None
 
     def begin_sweep(self, t_unix_ns: int) -> None:
         """Mark the start of a new sweep; record the bearing's "instant".
@@ -211,6 +219,7 @@ class L1AmplitudeSweepEstimator:
             msg = f"begin_sweep: t_unix_ns must be > 0 (got {t_unix_ns})."
             raise ValueError(msg)
         self._sweep_t_unix_ns = t_unix_ns
+        self._last_refusal_reason = None
         self._headings_deg = []
         self._rssi_dbfs = []
 
@@ -266,13 +275,19 @@ class L1AmplitudeSweepEstimator:
         self._rssi_dbfs = []
 
         if sweep_t is None or rssi.size < _PARABOLA_FIT_N_POINTS:
+            self._last_refusal_reason = (
+                f"sweep underpopulated: {rssi.size} < "
+                f"{_PARABOLA_FIT_N_POINTS} observations (no begin_sweep?)"
+            )
             return None
 
         fit_result = self._fit_peak(headings, rssi)
         if fit_result is None:
-            return None
+            return None  # _fit_peak already populated _last_refusal_reason
         azimuth_deg, sigma_az_deg, snr_db = fit_result
 
+        # Successful emission — clear any stale refusal text.
+        self._last_refusal_reason = None
         return BearingReport(  # type: ignore[no-any-return, unused-ignore]
             node_id=self._node_id,
             t_unix_ns=sweep_t,
@@ -282,6 +297,18 @@ class L1AmplitudeSweepEstimator:
             method=Capability.L1_RSSI,
             snr_db=snr_db,
         )
+
+    @property
+    def last_refusal_reason(self) -> str | None:
+        """Human-readable reason the most recent `estimate()` returned None.
+
+        ``None`` when the last call emitted a bearing successfully, or
+        when no `estimate()` call has happened yet. Operator-facing
+        diagnostic; the node runtime forwards this to
+        `NodeStatus.status_detail` so the dashboard's NodeStatusPanel
+        renders it (E1 closes the operator-invisible-refusal gap).
+        """
+        return self._last_refusal_reason
 
     def _fit_peak(
         self,
@@ -302,6 +329,10 @@ class L1AmplitudeSweepEstimator:
         peak_db = float(rssi[peak_idx])
         prominence_db = peak_db - median_floor_db
         if prominence_db < self._peak_prominence_db_min:
+            self._last_refusal_reason = (
+                f"L1 refused: prominence {prominence_db:.1f} dB < gate "
+                f"{self._peak_prominence_db_min:.1f} dB (multipath dominance?)"
+            )
             return None
 
         half = _PARABOLA_FIT_N_POINTS // 2
@@ -315,11 +346,16 @@ class L1AmplitudeSweepEstimator:
 
         fit = _fit_parabola_with_cov(x, y)
         if fit is None:
+            self._last_refusal_reason = "L1 refused: parabola fit failed (singular cov)"
             return None
         c2, c1, _c0, cov = fit
         # Curvature must be negative for a true peak; otherwise the
         # quadratic opens upward and the "peak" is a saddle (Invariant 4).
         if c2 >= 0.0:
+            self._last_refusal_reason = (
+                f"L1 refused: parabola opens upward (c2={c2:.3e}, "
+                "peak is a saddle — multipath fluke?)"
+            )
             return None
 
         vertex_x = -c1 / (2.0 * c2)
@@ -327,6 +363,10 @@ class L1AmplitudeSweepEstimator:
         # window; an extrapolated vertex means the data did not actually
         # peak inside the window we picked, so refuse.
         if abs(vertex_x) > half * self._sweep_step_deg + _VERTEX_BOUND_SLACK_DEG:
+            self._last_refusal_reason = (
+                f"L1 refused: vertex offset {vertex_x:.1f} deg outside "
+                f"fit window (peak not in observed sweep)"
+            )
             return None
 
         d_dc1 = -1.0 / (2.0 * c2)
@@ -342,6 +382,10 @@ class L1AmplitudeSweepEstimator:
         # many trials equal to the true bearing-recovery sigma.
         var_vertex_x /= _CHI2_MEDIAN_OVER_DOF
         if not math.isfinite(var_vertex_x) or var_vertex_x <= 0.0:
+            self._last_refusal_reason = (
+                f"L1 refused: non-finite variance {var_vertex_x} "
+                "(numerically unrecoverable fit)"
+            )
             return None
 
         return (

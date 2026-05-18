@@ -211,3 +211,71 @@ def test_golden_sigma_table() -> None:
             f"SNR={snr_db} dB: median sigma drifted from golden "
             f"{expected_median:.4f} -> {recomputed:.4f} ({rel * 100:.2f} %)."
         )
+
+
+# ---------------------------------------------------------------------------
+# E1 — last_refusal_reason surfaces honest diagnostic when estimate returns None
+# ---------------------------------------------------------------------------
+
+
+def test_last_refusal_reason_none_before_first_estimate() -> None:
+    """Fresh estimator has no refusal reason yet."""
+    estimator = _build_estimator()
+    assert estimator.last_refusal_reason is None
+
+
+def test_last_refusal_reason_set_when_no_begin_sweep() -> None:
+    """Calling estimate without begin_sweep gives a useful diagnostic."""
+    estimator = _build_estimator()
+    report = estimator.estimate(np.zeros(_SWEEP_BLOCK_SAMPLES, dtype=np.complex64))
+    assert report is None
+    reason = estimator.last_refusal_reason
+    assert reason is not None
+    assert "underpopulated" in reason or "begin_sweep" in reason
+
+
+def test_last_refusal_reason_cleared_on_successful_estimate(
+    peak_test_scenario: SimulationScenario,
+) -> None:
+    """A clean recovery clears any stale refusal text from a prior sweep."""
+    receiver = SyntheticReceiver(peak_test_scenario, seed=0)
+    receiver.open()
+    estimator = _build_estimator()
+    # First call without begin_sweep -> sets a refusal reason.
+    estimator.estimate(np.zeros(_SWEEP_BLOCK_SAMPLES, dtype=np.complex64))
+    assert estimator.last_refusal_reason is not None
+    # Now a clean sweep.
+    _drive_full_sweep(estimator, receiver)
+    report = estimator.estimate(np.zeros(_SWEEP_BLOCK_SAMPLES, dtype=np.complex64))
+    receiver.close()
+    assert report is not None
+    assert estimator.last_refusal_reason is None
+
+
+def test_last_refusal_reason_prominence_gate_message() -> None:
+    """Below-prominence refusal includes a 'multipath dominance' hint string.
+
+    Build a flat-RSSI sweep (constant 0.0 dB headings) — peak/floor delta = 0 dB,
+    well below the 6 dB gate. The refusal reason must name the prominence gate
+    so the operator (or future status_detail surface) understands why.
+    """
+    estimator = L1AmplitudeSweepEstimator(
+        node_id=_NODE_ID,
+        node_position=_NODE_POSITION,
+        sweep_step_deg=_SWEEP_STEP_DEG,
+        sweep_dwell_samples=_SWEEP_BLOCK_SAMPLES,
+    )
+    estimator.begin_sweep(t_unix_ns=_T_UNIX_NS)
+    # Inject a flat sweep: 16 headings, all-zero IQ -> compute_rssi_dbfs
+    # yields a finite floor with no peak. Use a small dwell to avoid
+    # allocating a giant zeros() block needlessly.
+    flat_iq = np.zeros(_SWEEP_BLOCK_SAMPLES, dtype=np.complex64)
+    flat_iq[:] = 1e-6 + 0j  # tiny constant so RSSI is finite, not -inf
+    for h in np.arange(0.0, 360.0, _SWEEP_STEP_DEG):
+        estimator.observe(float(h), flat_iq)
+    report = estimator.estimate(np.zeros(_SWEEP_BLOCK_SAMPLES, dtype=np.complex64))
+    assert report is None
+    reason = estimator.last_refusal_reason
+    assert reason is not None
+    assert "prominence" in reason.lower()
+    assert "multipath" in reason.lower()  # operator-facing hint
