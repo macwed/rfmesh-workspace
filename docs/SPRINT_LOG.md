@@ -550,3 +550,47 @@ reviewed at the end of the run.
 **Friend onboarding ready to ship**: ONBOARDING.md + BACKLOG.md + WORK-SPLIT.md + TICKET-TEMPLATE.md + 4 skeleton tickets (WS-A-005, WS-A-006, WS-A-007, E2, G8, S4) + .github/PULL_REQUEST_TEMPLATE.md.
 
 No contract change tonight. SCHEMA_VERSION unchanged at 1.1.0.
+
+---
+
+## 2026-05-18 daytime — root cleanup + HANDOFF retirement + ADR-013 PROPOSED + 3-node smoke
+
+Maciej resumed. Five commits, all on `main`, no contract change (SCHEMA_VERSION still 1.1.0; ADR-013 proposes 1.2.0 but stays in PROPOSED status awaiting lead sign-off).
+
+| Commit | What | Headline |
+|---|---|---|
+| `f3959e1` | Root `.md` sprawl cleanup (15 → 9) | Stale top-level docs moved under `docs/` or removed; root tree now: `ARCHITECTURE.md`, `AGENTS.md`, `INTERFACES.md`, `INHERITED_CONTEXT.md`, `WORKSTREAMS.md`, `SALVAGE_AUDIT.md`, `CLAUDE.md`, `README.md`, `SPRINT_LOG.md` — every file load-bearing. |
+| `448c938` | HANDOFF retirement + Seven Binding Invariants rewrite | `HANDOFF_TO_CLAUDE_CODE_LEAD.md` was operator-local (Maciej personal info) but referenced by 19 tracked files — would break friend clone. Extracted §0 → `docs/ADVANTAGES.md` (8 architectural advantages). Promoted §2 → `AGENTS.md` §1 "Seven Binding Invariants (B1-B7)" matching codebase usage. Mass `sed` updated all refs across tracked files. Source file removed from tracking (kept Maciej-local). |
+| `a0f0318` | `.gitignore` — NOTES_*.md operator-personal pattern | Generalised pattern for `NOTES_<topic>_<date>.md` operator scratch files; existing `phase-c-tutorial*` + `NOTES_mast_recapture_2026-05-19.md` rules committed alongside. |
+| `8350ec9` | **ADR-013 PROPOSED** — SCHEMA_VERSION 1.2.0 G3+G4 paired bump | Doc-only commit (status PROPOSED, awaits lead ACCEPT/REJECT). Pairs G3 (`FixEvent.gdop_uncomputable_reason: str \| None`, replaces fabricated GDOP at `fuser.py:238-243`) + G4 (`Capability.L1_REFUSED_PROMINENCE` enum + `BearingReport.refusal_reason: str \| None`, promotes E1 `last_refusal_reason` to wire-level). Two changes paired so single SCHEMA_VERSION 1.1.0 → 1.2.0 bump covers both. ADR includes 8-step propagation plan + rollback contingency. |
+| `794fa75` | 3-node simulator end-to-end smoke against bench recipe | `docs/demo/artifacts/3node/`: `three_node_final.png` (DEMO_LAYOUT_TRENCH 4×2 rendered), `three_node_fix_01.xml` + `three_node_fix_02.xml` (CoT XML byte-exact), `three_node_fixes.json` (per-fix scalar table). Pre-validates `scenarios/three_node_trench.yaml` simulator-side before Maciej executes bench bring-up per `docs/hardware/3-node-bench-bringup.md`. Output: 6 bearings + 2 fixes; Beat B smaj=720m / GDOP=1.65 / MEDIUM; Beat C smaj=566m / GDOP=1.14 / MEDIUM. Numbers match `expected_fix:` block qualitatively (single-realisation variance vs MC-averaged design-intent). |
+
+### NOTES_mast_recapture_2026-05-19.md (gitignored, operator tutorial)
+
+10-section recapture tutorial authored for Maciej (kept untracked — operator-personal):
+- Equipment checklist (RTL-SDR V4, ATK-10, tripod, compass, laptop)
+- Two-mast recapture procedure (Mast A 650 m + Mast C ~3 km)
+- `capture_heading.sh` helper script: prompts for true bearing, captures `.iqx` + `.json` sidecar via `rfmesh-demo-record`
+- `rtl_sdr` + `rtl_power` commands for raw capture (3 minutes per heading, 5 headings per mast)
+- Multi-height sweep (1.5 m / 3 m / 6 m AGL to characterise two-ray null per Mast A finding)
+- Polarisation cross-check (vertical primary, horizontal sanity-check for 25 dB drop confirming antenna alignment)
+- Post-capture verification: `rfmesh-iqmeta` reads back metadata; `rfmesh-rssi-plot` renders polar sweep; sanity-check 6 dB prominence
+- Site-selection appendix per `phase-c-bench-checklist.md` §A.2.ter
+
+### Suite verification
+
+`uv run pytest -m "not hardware"` post-ADR-013-PROPOSED-doc-only commit: **521 passed in 235.60 s** (was 520 pre-`53eda24`; +1 = trench-heights probe added during D4 validation). No regression. mypy strict + ruff + lint-imports (6 KEPT) clean.
+
+### Open lead decisions
+
+1. **ADR-013 ACCEPT or REJECT.** If ACCEPTED: 8-step propagation across 9 packages (~2-3 hr, council-reviewed per commit). If REJECTED: G3 and G4 stay as v1.1.0 internal-only mechanisms (E1 `last_refusal_reason` already shipped; GDOP fabrication stays at `fuser.py:238-243` flagged as known dishonesty).
+2. **Bench recapture window.** Maciej scheduled Mast A + Mast C re-measurement per `NOTES_mast_recapture_2026-05-19.md`. No code blocks on this.
+3. **Friend clone URL send.** Onboarding package complete; awaiting Maciej's send.
+
+### Deferred (unchanged from overnight Tier E/S/G7 batch)
+
+- G2 AIC/MDL source-rank detector — needs human read before criterion lock.
+- WS-A-007 firmware ESP32-S2 port — Maciej bench + flash hardware.
+- C3 + C4 (Mast C scenario YAML + simulator multipath calibration vs Mast A height-sweep data) — pending Maciej `.iqx` captures.
+
+Context state at this checkpoint: 72 % (717 k / 1 M tokens). Recommended `/clear` after this commit to fresh-eyes the council audit on next session — all load-bearing state in tracked files (ADRs, AGENTS.md B1-B7, SPRINT_LOG.md, INHERITED_CONTEXT.md, BACKLOG.md).
