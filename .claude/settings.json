@@ -1,5 +1,6 @@
 {
   "permissions": {
+    "defaultMode": "acceptEdits",
     "allow": [
       "Bash(xargs cat)",
       "Bash(uv sync *)",
@@ -8,7 +9,30 @@
       "Bash(.venv/bin/lint-imports *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git reset *)"
+      "Bash(git reset *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git branch *)",
+      "Bash(git checkout *)",
+      "Bash(git rebase *)",
+      "Bash(uv run pytest *)",
+      "Bash(uv run ruff *)",
+      "Bash(uv run mypy *)",
+      "Bash(just lint *)",
+      "Bash(just test *)",
+      "Bash(just type *)",
+      "Bash(just fmt *)",
+      "Bash(just test-cov *)",
+      "Bash(python -c *)"
+    ],
+    "deny": [
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(sudo rm *)",
+      "Bash(rm -rf /*)",
+      "Bash(curl * | bash)",
+      "Bash(wget * | sh)"
     ]
   },
 

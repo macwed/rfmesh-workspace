@@ -32,9 +32,8 @@ If you believe a contract change is required:
   2. Draft an ADR: docs/adr/ADR-NNN-<short>.md (status: PROPOSED).
   3. Surface to the lead. Only the lead unfreezes contracts.
 
-See AGENTS.md §1 (Invariant 1) and §6 (Escalation).
-You can use the contracts-impact-analyzer subagent for help drafting
-the ADR.
+Read AGENTS.md §1 for the ADR format and draft docs/adr/ADR-NNN-<short>.md
+with status PROPOSED. Surface to the lead.
 EOF
   exit 2
 fi
