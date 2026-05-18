@@ -620,16 +620,25 @@ replay` process dies mid-beat:
    played, generating fresh IQ to the same scenario. Numbers may
    differ slightly run-to-run; the band labels and the geometry
    should not."*
-4. **If the simulator also fails**, the static slide deck in
-   `docs/demo/slides/` carries pre-rendered screenshots of every
-   beat with the rehearsed captions baked in. Maciej presents
-   the slides. No demo, no panic, no story-changing.
+4. **If the simulator also fails**, Maciej falls back to the
+   committed A3 artifact PNGs at `docs/demo/artifacts/trench_demo_
+   beat_{A,B,C,D}.png` + the Phase C polar plots at
+   `docs/phase-c-report/phase_c_polar_{A,B,C}.png`. These are
+   pre-rendered honest evidence: same code path, simulator
+   numbers, real Phase C bench polar shapes. Maciej walks through
+   them as the demo replacement. No live system, no panic, no
+   story-changing — the artifacts ARE the receipts the demo
+   script's claims rest on.
 
-The pre-rendered slide deck is `[needs validation — TBD]`: it
-does not exist yet. Either it lands in a follow-up ticket
-(`rfmesh-ops` workstream, post-dashboard), or this contingency
-step collapses to step 3 only. Either is fine for v1.0; the slide
-deck is insurance, not critical path.
+E5 contingency revision (2026-05-18): the original step-4 referred
+to a `docs/demo/slides/` pre-rendered deck that does not exist.
+Authoring a polished slide deck is human-design work outside the
+agent's autonomous scope and would duplicate the A3 artifacts that
+already exist. The contingency now points at the committed artifact
+PNGs instead — they are honest, reproducible (`uv run python
+scripts/capture_demo_artifacts.py`), and tied to commit hashes for
+defensibility under jury scrutiny. If a polished slide deck is
+later authored, this step trivially re-anchors to it.
 
 ---
 
@@ -745,9 +754,13 @@ restatement of WS-CD-008's empirical result.
   buffer remains a **secondary** open TBD: when WS-B-007 lands
   the captured buffer, replace the simulator MC numbers with the
   bench numbers — both are bounded by the same ≤ 20 dB UI cap.
-- §5 step 4 contingency: pre-rendered slide deck in
-  `docs/demo/slides/` does not exist. Either follow-up ticket
-  produces it, or the contingency degrades to step 3 only.
+- §5 step 4 contingency: ~~pre-rendered slide deck in `docs/demo/
+  slides/` does not exist~~. **Closed 2026-05-18 (E5)** — step-4
+  contingency re-anchored to the committed A3 artifact PNGs at
+  `docs/demo/artifacts/` + Phase C polar plots at `docs/phase-c-
+  report/`. The fallback uses real pre-rendered evidence tied to
+  commit hashes; a polished slide deck is now insurance-on-top, not
+  critical-path. If authored later, the step trivially re-anchors.
 - §6 last bullet: WinTAK / iTAK / non-TAK C2 integration is not
   validated. Only FreeTAKServer is.
 
