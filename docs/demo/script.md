@@ -455,6 +455,134 @@ Receipts: ADR-008 §D5 ("anti-desense, not ECM" binding framing).
 Receipts: ARCHITECTURE §6 (no GNSS / no TDOA / no magnetometer);
 HANDOFF §0 Advantage #2 (GNSS-denied by construction).
 
+### Block D — operational / latency / minimum-detectable
+
+(Added 2026-05-18 per demo-integrity audit finding F6 — the four
+questions an RF/EW expert most likely opens with that were not
+yet rehearsed.)
+
+**Q10. "What's your latency from emitter-on to CoT marker?"**
+
+> "End to end, about two hundred to three hundred milliseconds in
+> the happy path. Breaking it down: an L1 sweep takes roughly a
+> hundred and twenty milliseconds at four MS/s and twenty-five
+> half-degree headings — the L1 estimator runs in microseconds
+> after the buffer is in memory. The fusion server batches inside
+> a hundred-millisecond window. CoT XML render and push to ATAK is
+> tens of milliseconds. L2 is faster — single coherent snapshot
+> at four-kilo-sample T is about one millisecond plus MUSIC
+> eigendecomposition. For a moving emitter the bearing update rate
+> is the sweep rate; for a stationary one the fix tightens with
+> integration. Two hundred millisecond reaction is our honest claim."
+
+Receipts: `FusionConfig.batch_window_ms = 100`; `L2MusicEstimator`
+test runtimes; PyTAK transport latency observed in canonical-fix
+golden write tests.
+
+**Q11. "Frequency-hopping spread-spectrum emitters — ELRS, Crossfire.
+How does your bearing window cover one hop?"**
+
+> "ELRS hops at roughly a hundred and fifty per second — a hop
+> dwells for about seven milliseconds. Our L1 amplitude integration
+> at four MS/s captures four-thousand-plus samples per heading, well
+> under one millisecond of dwell — we see one hop per heading and
+> our bearing window samples across many hops naturally as the servo
+> rotates. The RSSI sum across a sweep is hop-rate-invariant
+> as long as our integration time per heading is shorter than one
+> hop, which it is by a factor of seven. L2 MUSIC is more subtle —
+> a hopping emitter looks like a wideband process inside MUSIC's
+> covariance window, and we currently track one *source* per snapshot
+> even if it hops within the band. The honest cap: we track FHSS
+> envelopes, not per-hop bearings. For a hop-rate-discriminating
+> classifier see our parking-lot ticket `PARKING-LOT-elrs-crossfire-
+> hoprate.md`."
+
+Receipts: `PARKING-LOT-elrs-crossfire-hoprate.md` honesty caveat;
+sweep-dwell parameters in `L1AmplitudeSweepEstimator.__init__`.
+
+**Q12. "Minimum detectable signal — what's the SNR floor below
+which you refuse to emit?"**
+
+> "Six decibels of peak prominence above the median noise-floor
+> estimate. That's the L1 estimator's `peak_prominence_db_min`
+> gate, and it is the line at which the parabola fit's uncertainty
+> grows wider than fifteen degrees. Below that, no bearing emitted —
+> `BearingReport = None`, dashboard shows 'L1 refused — prominence
+> X dB < 6 dB gate'. We saw this physically last week on a 650-metre
+> sub-Phase-C mast: 1.96 dB prominence, refused, correct. We are
+> not in the business of fabricating bearings to fill the gap
+> when physics says we can't see."
+
+Receipts: `docs/phase-c-report/findings.md` Mast A (1.96 dB);
+`packages/rfmesh-dsp/src/rfmesh_dsp/l1.py` `peak_prominence_db_min`
+default; E1 dashboard caption (this commit, 2026-05-18).
+
+**Q13. "Broadband jammer covering the whole RTL-SDR band — what do
+you do?"**
+
+> "Three answers, in order of severity. First: the L1 amplitude
+> sweep degrades to honest refusal — peak prominence collapses
+> under noise inflation; the prominence gate refuses; no fix on
+> that band. Second: if we have an L2 array on the same band, the
+> Capon-or-MUSIC subspace estimator can separate spatially provided
+> the jammer is angularly distinct from the target — the same
+> covariance matrix that does anti-desense null-steering also gives
+> us a target bearing when there is one to find. Third: deployment
+> density. A broadband jammer at one azimuth blinds nodes pointed at
+> it; nodes pointed elsewhere still see the target. The mesh as a
+> whole degrades, no node lies. None of these is ECM — none of them
+> is transmitting. We are a receive-only mesh and we degrade
+> honestly."
+
+Receipts: L1 prominence gate (E1); ADR-008 anti-desense framing;
+ARCHITECTURE §1 capability-layer heterogeneity.
+
+### Block E — Phase C / site selection
+
+(Added 2026-05-18 per Phase C bench result `docs/phase-c-report/
+findings.md`. Maciej may be asked about the field validation that
+underpins the L1 claims.)
+
+**Q14. "How did you pick the reference emitter for your bench
+validation?"**
+
+> "Three candidates from the public Polish cellular database —
+> btsearch.pl's heatmap shows the strongest masts in a radius.
+> The first I tried was six hundred and fifty metres from my
+> house — too close, multipath dominance, 1.96 dB front-back
+> ratio, the L1 prominence gate refused. Second was two-point-two
+> kilometres, but a stronger transmitter five kilometres away on
+> the same frequency dominated — wrong-direction bearing, also a
+> refusal-equivalent diagnostic. Third was three kilometres with
+> a less-contested frequency at 958 megahertz, line-of-sight from
+> a clear spot — 14.9 dB front-back, peak within nine degrees of
+> the map bearing. That's the one. The two failures are why our
+> bench-checklist has an isolation step and a site-selection rule;
+> site selection is part of the system, not luck."
+
+Receipts: `docs/phase-c-report/findings.md` (full bench writeup);
+`docs/hardware/phase-c-bench-checklist.md` §2.A.2.bis and
+§2.A.2.ter (the two new subsections after the bench).
+
+**Q15. "What happens if your operating site has the same multipath
+problem on the day?"**
+
+> "We have three answers ready. First: site selection during recon
+> — same protocol that worked in Poland, applied to the deployment
+> map. Second: the system refuses honestly when prominence is below
+> gate — the dashboard tells the operator 'this node can't see; move
+> it'. Third: the multipath dominance pre-enumerated in our
+> inherited context document is exactly the failure mode the
+> simulator's two-ray-ground channel models. Our Monte Carlo at the
+> multipath-loaded geometry already includes this regime. The system
+> performs honestly inside the band the simulator covered, and the
+> bench-checklist's three new subsections are the operator's recipe
+> for staying inside that band."
+
+Receipts: `INHERITED_CONTEXT.md` §3.1.1 (pre-enumerated failure
+modes); `phase-c-bench-checklist.md` §2 amendments;
+`test_honest_ellipse_monte_carlo.py` scenario list.
+
 ---
 
 ## §5 Recorded IQ vs live demo — the binding decision
