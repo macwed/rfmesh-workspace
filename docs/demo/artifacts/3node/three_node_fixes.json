@@ -1,0 +1,46 @@
+[
+  {
+    "fix_id": "51ae0416-05d4-45c1-9fed-628a5a91da4f",
+    "t_unix_ns": 1779085522631644211,
+    "lat_deg": 50.35526266631225,
+    "lon_deg": 5.000469298195446,
+    "sigma_m": 719.7368133232657,
+    "semi_major_m": 719.7368133232657,
+    "semi_minor_m": 370.07568188345925,
+    "orientation_deg": -13.8830825323647,
+    "gdop": 1.6545304751765335,
+    "confidence_level": "medium",
+    "method": "stansfield+mle",
+    "contributing_nodes": [
+      "node-l1-west",
+      "node-l1-east"
+    ],
+    "residuals_deg": [
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "fix_id": "3b4ba0e7-e239-4220-96de-b001ba9958dd",
+    "t_unix_ns": 1779085522801549389,
+    "lat_deg": 50.354051374281184,
+    "lon_deg": 4.9982295253624285,
+    "sigma_m": 565.8980151408815,
+    "semi_major_m": 565.8980151408815,
+    "semi_minor_m": 340.09600607929514,
+    "orientation_deg": 40.31399473179302,
+    "gdop": 1.143343575013754,
+    "confidence_level": "medium",
+    "method": "stansfield+mle",
+    "contributing_nodes": [
+      "node-l1-west",
+      "node-l1-east",
+      "node-l1-south"
+    ],
+    "residuals_deg": [
+      0.35151565371228344,
+      6.285253445174362,
+      -0.6839521817378795
+    ]
+  }
+]
