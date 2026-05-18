@@ -1,9 +1,13 @@
 # ADR-013 — SCHEMA_VERSION 1.2.0: G3 GDOP-uncomputable sentinel + G4 L1-refused-prominence enum
 
-**Status:** PROPOSED
+**Status:** ACCEPTED (2026-05-18; propagation deferred — see "Execution order" below)
 **Date:** 2026-05-18
-**Author:** lead-Opus (drafting per the 2026-05-18 project audit; bumps + propagation pending Maciej sign-off).
+**Author:** lead-Opus (drafting per the 2026-05-18 project audit; ACCEPTED by Maciej on 2026-05-18).
 **SCHEMA_VERSION change:** 1.1.0 → **1.2.0** (MINOR, additive, backward-compatible).
+
+## Execution order
+
+ACCEPTED in principle; the 8-step propagation plan below is **queued for execution after first hardware smoke tests pass** on the WS-A-008 3-node bench. Rationale: the current G3/G4 honesty fabrications are documented in code and the demo runs correctly on 1.1.0, so propagating a SCHEMA bump before smoke tests would mean debugging two changes at once (real hardware bugs + workspace-wide `SchemaVersionT` tripwire noise). Propagation lands as the Phase 2 batch in `/root/.claude/plans/system-reminder-you-re-running-in-cheerful-wilkes.md`, against the proven-working 1.1.0 baseline.
 
 ## Context
 
