@@ -503,3 +503,50 @@ Numbers diverge from the YAML `expected_fix:` block by 10-25 % because the live 
 - Full pytest run -- 480+ passes (expected; see commit message for exact figure).
 
 No semantic contract change (D1 is a PATCH-level docs-vs-code correction per ADR-012; SCHEMA_VERSION unchanged at 1.1.0).
+
+
+---
+
+## 2026-05-18 overnight — autonomous Tier E + Tier S + G7 (Maciej asleep)
+
+Maciej granted full autonomy + permissions before sleep. Nine commits
+since 826d2c2; 520 tests pass (was 481 at sprint start). All council-
+reviewed at the end of the run.
+
+| Commit | Closes | Headline |
+|---|---|---|
+| 6cf0a87 | Phase C report | Bench PASS: Mast C 14.9 dB / 9 deg |
+| ec8740c | Tier D D1-D5 | Literal tripwire, headless relay, dead asserts, heights 10m, PseudospectrumPanel |
+| 79c6fc9 | Friend onboarding | ONBOARDING + BACKLOG + WORK-SPLIT + skeletons + PR template |
+| dee3779 | E2 | ADR-001/002/003 backfill (monorepo, contracts-as-Protocol, no-GNSS-TDOA-magnetometer) |
+| 8b402e5 | S1 + S2 | --channel-override CLI + scenarios/three_node_trench.yaml + bench-bringup recipe |
+| 839fb49 | E4 + S4 | l2_null_steering golden + 29 contract round-trip tests |
+| bee8413 | E1 | L1AmplitudeSweepEstimator.last_refusal_reason (operator-visible refusal) |
+| 27926ea | E3 | 6 new jury Q&A entries (Q10-Q15): latency, FHSS, MDS, broadband-jammer, site-selection, multipath-on-day |
+| 59d6acc | G7 | BearingScanPanel polar L1 sweep diagnostic |
+| 53eda24 | E5 | step-4 contingency re-anchored to A3 + Phase C committed artifacts |
+
+**Test count**: 481 -> 520 (+39 net new). mypy strict + ruff + lint-imports (6 KEPT) clean throughout.
+
+**Deferred to Maciej-awake**:
+- G3 + G4 (GDOP_UNCOMPUTABLE sentinel + L1_REFUSED enum value) — require SCHEMA_VERSION 1.2.0 bump per Invariant 1; lead sign-off required.
+- G2 AIC/MDL source-rank detector — architecturally significant, deserves human read before locking criterion choice.
+- WS-A-007 firmware C source — needs Maciej eyes + flash hardware.
+- C5 (re-MC at 10m geometry) — confirmed no-op: WS-CD-008 MC uses synthetic angle-noise, not channel models; antenna height change doesn't affect MC numbers. Existing `expected_fix:` block stays valid.
+
+**Tier F (post-Phase-C-recapture)**:
+- WS-A-005 RTLSDRDevice port — assigned to Friend per onboarding package.
+- WS-A-006 servo host driver port — Friend's second ticket.
+- WS-A-008 3-node bench bring-up — recipe at docs/hardware/3-node-bench-bringup.md.
+
+**Architectural state at 53eda24**:
+- 12 ADRs (001-012, all ACCEPTED).
+- 9 packages (rfmesh-contracts frozen at 1.1.0; rfmesh-servo still stub awaiting WS-A-006).
+- 1 app (apps/demo-replay, headless mode working post-D2).
+- 3 demo layouts (TRENCH 4x2 with PseudospectrumPanel; DEBUG 3x3 with all 9 panels; MINIMAL).
+- New BearingScanPanel (G7) is operator-action-driven, available but not yet in any default layout (requires projection="polar" subplot kwarg extension to PanelSpec).
+- Demo-replay 3-node scenario YAML ready for bench bring-up.
+
+**Friend onboarding ready to ship**: ONBOARDING.md + BACKLOG.md + WORK-SPLIT.md + TICKET-TEMPLATE.md + 4 skeleton tickets (WS-A-005, WS-A-006, WS-A-007, E2, G8, S4) + .github/PULL_REQUEST_TEMPLATE.md.
+
+No contract change tonight. SCHEMA_VERSION unchanged at 1.1.0.
