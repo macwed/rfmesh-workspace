@@ -594,3 +594,77 @@ Maciej resumed. Five commits, all on `main`, no contract change (SCHEMA_VERSION 
 - C3 + C4 (Mast C scenario YAML + simulator multipath calibration vs Mast A height-sweep data) — pending Maciej `.iqx` captures.
 
 Context state at this checkpoint: 72 % (717 k / 1 M tokens). Recommended `/clear` after this commit to fresh-eyes the council audit on next session — all load-bearing state in tracked files (ADRs, AGENTS.md B1-B7, SPRINT_LOG.md, INHERITED_CONTEXT.md, BACKLOG.md).
+
+
+---
+
+## 2026-05-18 evening — Phase 0 + Phase 1 source-complete + plan-proposition council review
+
+Lead-Opus pulled an ultraplan-session tarball (`rfmeshwsa006007a20260518.tar.gz`, 65 files: ADR-013 ACCEPTED flip + servo host driver salvage + ESP32-S2 firmware salvage + uvadd scratchpad). Local fixups landed three salvage-completeness gaps before commit. WS-A-005 (RTLSDR Receiver port) + WS-A-007b (LoRa beacon firmware) authored solo from `macwed/rf-mesh` + `lora_beacon_spec` scratch. Plan-proposition doc reviewed by council and council-recs folded into the doc itself.
+
+### Eight commits since `1b836db`
+
+| Commit | Track | What |
+|---|---|---|
+| `1d4c592` | Phase 0 | ADR-013 ACCEPTED — propagation deferred to post-smoke-test |
+| `a76d240` | Phase 0 | chore(settings) — claude permissions + remove dead `contracts-impact-analyzer` subagent ref |
+| `defd4d4` | WS-A-006 | Servo host driver port (3286 +, 4 −): `packages/rfmesh-servo/` + `docs/wire-protocols/servo_uart_v1.md` + pyserial uvadd. 100 unit tests + 5 hardware-skipped. |
+| `6acf482` | WS-A-007a | ESP32-S2 firmware port (6679 +): `firmware/` tree + 29 host-built Unity tests; USB-Serial-JTAG → TinyUSB CDC migration; wire spec unchanged. |
+| `a4576d3` | WS-A-005 | RTLSDR Receiver Protocol port (831 +): `packages/rfmesh-sdr/devices/rtlsdr.py` + 16 software unit tests + 2 hardware-gated. Salvage's `stream()` short-read silent fallback replaced with `HardwareError` (B3). |
+| `481288c` | WS-A-007b | LoRa reference beacon firmware (622 +): `firmware-beacon/` tree, SX1276 + RadioLib + PlatformIO. 868.100 MHz / SF7 / BW125 / CR4/5 / +14 dBm / sync 0x12 (private). 8-byte `"RFM\0"` + uint32 BE counter payload at 1 Hz. |
+| `cbf5958` | Plan-doc | Folded council recs into `docs/plan-proposition-18-05-2026.md` (G1 → MUST-HAVE, E5 → 1.5-2 d, C4 framing note, Phase 2 step-4 `refusal_reason` rendering criterion + filter-from-fix-not-wire rule). |
+
+### Council passes — 8× APPROVE
+
+Three council rounds, four reviewers each (architect / code-reviewer / rf-dsp-specialist / demo-integrity) per `CLAUDE.md` L23-49.
+
+| Round | Verdict | Non-blocking notes/recs |
+|---|---|---|
+| **Tarball batch** (ADR-013 + WS-A-006 + WS-A-007a) | 4× APPROVE | Demo-integrity: render `refusal_reason` verbatim on bearings panel when ADR-013 propagates (tracked for Phase 2). |
+| **WS-A-005** | 4× APPROVE | Demo-integrity REC: append cfg-freq/rate to short-read `HardwareError` message — applied inline (`rtlsdr.py:199-211`). |
+| **WS-A-007b** | 4× APPROVE | RF-DSP NOTE 1: spec §3 duty-cycle ceiling clarification — applied. RF-DSP NOTE 2: README RSSI rough accounting — applied. Demo-integrity REC 1: counter-rollover row in README failure table — applied. Demo-integrity REC 2: sync-word `0x12` note in gr-lora_sdr path — applied. |
+| **Plan-proposition** | 4× APPROVE | Folded as commit `cbf5958` (G1 promoted MUST-HAVE; E5 rebudgeted 1.5-2 d; C4 framing note; Phase 2 step-4 `refusal_reason` render acceptance + filter-from-fix-not-wire rule). |
+
+### Salvage-completeness fixups (lead-Opus, not from tarball)
+
+Tarball was author-only-mode (no signing service in remote container) and shipped with three salvage gaps that scoped verify caught:
+
+- `logger.trace()` + `{}`-placeholder loguru-isms in salvaged servo `driver.py` + `transport.py`. Stdlib `logging.Logger` has no `.trace`; `{}` placeholders need `%s/%d` lazy formatting. Rewrote all 4 sites.
+- Stale `from tests.scan.servo.conftest import ...` import path in `test_driver.py`. Updated to `from conftest import ...` (pytest rootdir discovery; tests/ is not a package per ADR-006).
+- 5 RUF059 unused-unpacks across `driver.py` + 2 tests — underscored.
+- Salvaged byte-exact wire-codec files (cobs.py, messages.py, protocol.py) tripped 16 PLR2004 (magic-value-in-comparison) + 4 RUF001/002 (ambiguous unicode in docstrings) + 1 PLR0911 + 1 PLC0415. Added scoped per-file-ignores in root `pyproject.toml` for codec files only (defensible: byte-exact mirror of firmware C tests; not a package-wide loosening).
+- `types-pyserial>=3.5` added to dev dependency group for mypy stub coverage.
+
+WS-A-005 + WS-A-007b authored fresh against the new contracts; no salvage gaps.
+
+### Suite verification
+
+`uv run pytest -m "not hardware"` post-`481288c`: **637 passed, 5 hardware-skipped, 2 deselected** (was 521 pre-batch; +116 net tests). `uv run mypy packages/` clean (104 source files). `uv run ruff check .` clean. Firmware C host-build tests still 29/29.
+
+### Completion estimate — ~82 % (council-aggregated)
+
+Per-lens revised completion numbers from the plan-proposition council pass:
+
+| Lens | % |
+|---|---|
+| Architect | 80-82 % |
+| Code-reviewer | ~78 % |
+| RF-DSP | 88-92 % |
+| Demo-integrity | ~80 % |
+| **Aggregate** | **~82 %** |
+
+WS-A track moved from 55 % at plan-authoring to ~85 % at `HEAD = 481288c`. Only WS-A-008 3-node bench bring-up (blocked on Maciej hardware) remains in Workstream A.
+
+### Open lead decisions
+
+1. **WS-A-008 bench bring-up window.** Awaiting Maciej's flash of WS-A-007a/b firmware + Mast A/C `.iqx` re-capture per `NOTES_mast_recapture_2026-05-19.md`.
+2. **ADR-013 propagation order.** Confirmed deferred to Phase 2 (post-smoke). The 8-step propagation plan in `docs/plan-proposition-18-05-2026.md` §"Phase 2" is the binding order; council pass per commit.
+3. **G1 Phase-C-failure replay** — promoted to MUST-HAVE per rf-dsp council. Defends the 10 m height choice in `three_node_trench.yaml` by demonstrating honest L1 refusal in the 3/2 m failure regime. 3 h work, lands once Maciej's C2 capture is in repo.
+
+### Deferred (unchanged from this batch)
+
+- G2 AIC/MDL source-rank detector — Phase 3 if slack; rf-dsp council confirmed deferral is defensible for single-emitter BoTH3.
+- Phase 2 ADR-013 propagation — gated on WS-A-008 smoke-test success.
+- E5 slide deck expansion — rebudgeted 1.5-2 d (was 1 d) per demo-integrity council.
+
+Context state at this checkpoint: tracked-files-only state of record. All council verdicts + recs captured in this entry; all commit messages reference Co-Authored-By and council 4× APPROVE.
