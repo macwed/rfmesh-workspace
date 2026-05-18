@@ -1516,6 +1516,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyserial"
+version = "3.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1e/7d/ae3f0a63f41e4d2f6cb66a5b57197850f919f59e558159a4dd3a818f5082/pyserial-3.5.tar.gz", hash = "sha256:3c77e014170dfffbd816e6ffc205e9842efb10be9f58ec16d3e8675b4925cddb", size = 159125, upload-time = "2020-11-23T03:59:15.045Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/bc/587a445451b253b285629263eb51c2d8e9bcea4fc97826266d186f96f558/pyserial-3.5-py2.py3-none-any.whl", hash = "sha256:c4451db6ba391ca6ca299fb3ec7bae67a5c55dde170964c7a14ceefec02f2cf0", size = 90585, upload-time = "2020-11-23T03:59:13.41Z" },
+]
+
+[[package]]
 name = "pytak"
 version = "6.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1801,11 +1810,15 @@ name = "rfmesh-servo"
 version = "0.1.0"
 source = { editable = "packages/rfmesh-servo" }
 dependencies = [
+    { name = "pyserial" },
     { name = "rfmesh-contracts" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "rfmesh-contracts", editable = "packages/rfmesh-contracts" }]
+requires-dist = [
+    { name = "pyserial", specifier = ">=3.5" },
+    { name = "rfmesh-contracts", editable = "packages/rfmesh-contracts" },
+]
 
 [[package]]
 name = "rfmesh-workspace"
@@ -1834,6 +1847,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "types-pyserial" },
     { name = "types-pyyaml" },
 ]
 
@@ -1861,6 +1875,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.23" },
     { name = "pytest-cov", specifier = ">=5" },
     { name = "ruff", specifier = ">=0.6" },
+    { name = "types-pyserial", specifier = ">=3.5" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260510" },
 ]
 
@@ -1988,6 +2003,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/8c/25/f1540879c8815387980e56f973e54605bd924612399ace31487f7444171c/stdlib_list-0.12.0.tar.gz", hash = "sha256:517824f27ee89e591d8ae7c1dd9ff34f672eae50ee886ea31bb8816d77535675", size = 60923, upload-time = "2025-10-24T19:21:22.849Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3b/3d/2970b27a11ae17fb2d353e7a179763a2fe6f37d6d2a9f4d40104a2f132e9/stdlib_list-0.12.0-py3-none-any.whl", hash = "sha256:df2d11e97f53812a1756fb5510393a11e3b389ebd9239dc831c7f349957f62f2", size = 87615, upload-time = "2025-10-24T19:21:20.619Z" },
+]
+
+[[package]]
+name = "types-pyserial"
+version = "3.5.0.20260518"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/48/9e/5bb983c2dc248ba6b0977629f4f698d0b7e2fb2d2d272d1ef6d00d5c39bf/types_pyserial-3.5.0.20260518.tar.gz", hash = "sha256:3fafbff0953a876d001cf09cc07b118119b9bd729ff20127b45d974c8375923f", size = 20457, upload-time = "2026-05-18T06:05:16.243Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d7/ef/ecd2094125c6e2a315a98436d2941a3e92aa275bc6c57da35a265097f4fb/types_pyserial-3.5.0.20260518-py3-none-any.whl", hash = "sha256:9a6c94526f068cc64a7df1929557463bf91a0ea8710a29b9ac402f9260685118", size = 25324, upload-time = "2026-05-18T06:05:15.347Z" },
 ]
 
 [[package]]

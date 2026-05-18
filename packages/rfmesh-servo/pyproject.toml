@@ -8,9 +8,18 @@ name = "rfmesh-servo"
 version = "0.1.0"
 description = "Host-side servo driver (UART) and antenna sweep control for rfmesh L1 nodes."
 requires-python = ">=3.12"
+# Runtime: pyserial for SerialTransport (lazy-imported inside transport.py
+# so the driver+codec are testable without it). The salvaged driver used
+# loguru; the port swapped to stdlib logging to keep the workspace
+# dependency footprint minimal (loguru was single-package convenience,
+# not load-bearing). See .claude/scratchpad/uvadd-pyserial-2026-05-18.md.
 dependencies = [
     "rfmesh-contracts",
+    "pyserial>=3.5",
 ]
+
+[project.scripts]
+rfmesh-servo-calibrate = "rfmesh_servo.cli.servo_calibrate:main"
 
 [build-system]
 requires = ["hatchling"]

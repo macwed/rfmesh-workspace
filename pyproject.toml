@@ -69,6 +69,7 @@ dev = [
     "import-linter>=2.11",
     "pydeps>=3.0.6",
     "types-pyyaml>=6.0.12.20260510",
+    "types-pyserial>=3.5",
     "pytest-asyncio>=0.23",
 ]
 
@@ -102,7 +103,17 @@ ignore = [
     "S101",      # assert in tests — pytest needs assert
     "ANN401",    # Any in protocol return types when unavoidable
 ]
-per-file-ignores = { "**/tests/**" = ["S", "ANN", "PLR2004", "PLC0415"] }
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S", "ANN", "PLR2004", "PLC0415"]
+# WS-A-006: salvaged servo wire codec mirrors firmware C byte-exact —
+# magic values and unicode arrows in docstrings are part of the contract,
+# not nits. Lazy `import serial` in transport.py is intentional (keeps
+# pyserial optional at module-import time; raised cleanly on construction).
+"packages/rfmesh-servo/src/rfmesh_servo/cobs.py" = ["PLR2004"]
+"packages/rfmesh-servo/src/rfmesh_servo/messages.py" = ["PLR2004", "RUF002"]
+"packages/rfmesh-servo/src/rfmesh_servo/protocol.py" = ["PLR2004", "RUF001", "RUF002"]
+"packages/rfmesh-servo/src/rfmesh_servo/transport.py" = ["PLC0415"]
+"packages/rfmesh-servo/src/rfmesh_servo/cli/servo_calibrate.py" = ["PLR0911"]
 
 [tool.mypy]
 python_version = "3.12"
