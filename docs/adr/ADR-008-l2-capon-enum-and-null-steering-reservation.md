@@ -33,7 +33,7 @@
 `Capability.L2_MVDR_NULL` was frozen into the v1.0.0 contracts to label
 **the actual null-steering capability** — the dual-use sibling of L2
 MUSIC that synthesises a spatial null toward a jammer (the "one matrix,
-two products" pitch in `HANDOFF_TO_CLAUDE_CODE_LEAD.md §0` Advantage #4).
+two products" pitch in `docs/ADVANTAGES.md` Advantage #4).
 
 WS-B-004 then shipped a **Capon (MVDR-spectrum) DoA estimator** under
 the same enum value — because the enum was the only L2-non-MUSIC label
@@ -123,7 +123,7 @@ single-channel SDR.
 
 Per Demo-Integrity review:
 
-- HANDOFF §0 Advantage #4 caption: *"One matrix, two products: target
+- docs/ADVANTAGES.md §1 Advantage #4 caption: *"One matrix, two products: target
   geolocation for kinetic effect, null-steering for own-comms
   protection — back-to-back from one R per snapshot."* The "back-to-
   back from one R" replaces "simultaneously" — same R, sequential
@@ -137,7 +137,7 @@ Per Demo-Integrity review:
   *"What operational value is a receive null if you are not also
   transmitting through this array?"*
 
-These edits land in HANDOFF (historical, no edit needed — this ADR
+These edits land in docs/ADVANTAGES.md (historical, no edit needed — this ADR
 supersedes), in the eventual pitch deck, and in the ops-dashboard
 panel text.
 

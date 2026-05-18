@@ -7,7 +7,7 @@ the per-workstream agent-name column ("Mid-level agent") is a
 historical fossil and is now an annotation only (see note below).
 **Audience:** lead-Opus + council subagents, Maciej as project owner.
 **Date:** 2026-05-14 (original); §0 + §1 header amended 2026-05-17 for
-the lead-Opus handoff per `HANDOFF_TO_CLAUDE_CODE_LEAD.md` §2.
+the lead-Opus handoff per `AGENTS.md` §1.
 
 This document is **the** ownership map. It says who owns which package,
 what each workstream delivers, in what order, against what acceptance

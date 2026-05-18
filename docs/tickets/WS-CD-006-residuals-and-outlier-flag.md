@@ -38,8 +38,8 @@ node and that downgrades `HIGH → MEDIUM` in the confidence policy.
 - Module: `packages/rfmesh-fusion/src/rfmesh_fusion/exceptions.py`
   (`FusionError` base class — used for the defensive non-positive sigma
   refusal, Invariant B3).
-- HANDOFF §0 Advantage #6 (honesty payload, residuals + outlier flag =
-  self-diagnosis); HANDOFF §2 B3 (no silent fallbacks), B4 (demo honesty
+- docs/ADVANTAGES.md §1 Advantage #6 (honesty payload, residuals + outlier flag =
+  self-diagnosis); AGENTS.md §1 B3 (no silent fallbacks), B4 (demo honesty
   payload), B5 (pure fusion).
 - Prior tickets this depends on: WS-CD-001 (ENU projection helpers),
   WS-CD-002 (Stansfield + exceptions), WS-CD-003 (MLE refinement —
@@ -139,7 +139,7 @@ node and that downgrades `HIGH → MEDIUM` in the confidence policy.
   solution for the `FixEvent` payload. Same arithmetic in two places,
   by design (one feeds the iteration, the other the operator).
 - Do NOT add IRLS / outlier down-weighting / iterative reweighting
-  on the solver path. Per HANDOFF §3 and ADR-007 D3, sprint-1 is
+  on the solver path. Per CLAUDE.md (council review protocol) and ADR-007 D3, sprint-1 is
   honesty-over-robustness: the solver does not reject the outlier;
   the dashboard shows it.
 - Do NOT introduce a new exception class — `FusionError` is the
@@ -220,7 +220,7 @@ is_outlier_i = abs(r_i_deg) / sigma_i_deg > 3.0
 
 `sigma_i_deg` is `b.azimuth_sigma_deg` — that node's *own* reported
 1-σ uncertainty (which `BearingEstimator`s in WS-B have already
-calibrated to the ±20% honesty band, per HANDOFF §2 B2). Not a
+calibrated to the ±20% honesty band, per AGENTS.md §1 B2). Not a
 global σ. Not a re-derived empirical σ across the fix.
 
 The contract validator enforces `azimuth_sigma_deg > 0`; we trust

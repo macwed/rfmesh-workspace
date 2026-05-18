@@ -158,7 +158,7 @@ ends with the lead bumping `SCHEMA_VERSION` in `version.py`, which — because
 every message pins `schema_version` as a `Literal[SCHEMA_VERSION]` — is
 caught by `mypy` in every workstream still built against the old version.
 This is the type-system tripwire that protects parallel agents from silent
-drift. `AGENTS.md`'s "Five Invariants" enforces the procedural side; the
+drift. `AGENTS.md`'s "Seven Binding Invariants" enforces the procedural side; the
 `Literal` enforces the technical side. Together they make contract drift
 hard to introduce by accident.
 
@@ -359,7 +359,7 @@ For navigation:
 - **`ARCHITECTURE.md`** (this file) — the *why*. Binding invariants.
 - **`INTERFACES.md`** — the *what*. Semantic dictionary of every contract type.
 - **`WORKSTREAMS.md`** — the *who*. Workstream ownership, dependencies, salvage column.
-- **`AGENTS.md`** — the *how*. Rules for AI agents: the Five Invariants, allowed commands, escalation, ticket format.
+- **`AGENTS.md`** — the *how*. Rules for AI agents: the Seven Binding Invariants, allowed commands, escalation, ticket format.
 - **`INHERITED_CONTEXT.md`** — the *what we already learned*. Knowledge from the previous project that cannot be derived from the code alone.
 - **`SALVAGE_AUDIT.md`** — file-by-file disposition of the old repo (`github.com/macwed/rf-mesh`) into the new workspace.
 - **Three workstream bootstraps** — one-page onboarding for each Opus 4.7 mid-level agent: A (SDR + simulator), B (DSP + ML), C+D (fusion + CoT + node runtime).

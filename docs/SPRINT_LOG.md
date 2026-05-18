@@ -529,7 +529,7 @@ reviewed at the end of the run.
 **Test count**: 481 -> 520 (+39 net new). mypy strict + ruff + lint-imports (6 KEPT) clean throughout.
 
 **Deferred to Maciej-awake**:
-- G3 + G4 (GDOP_UNCOMPUTABLE sentinel + L1_REFUSED enum value) — require SCHEMA_VERSION 1.2.0 bump per Invariant 1; lead sign-off required.
+- G3 + G4 (GDOP_UNCOMPUTABLE sentinel + L1_REFUSED enum value) — require SCHEMA_VERSION 1.2.0 bump per Invariant B1; lead sign-off required.
 - G2 AIC/MDL source-rank detector — architecturally significant, deserves human read before locking criterion choice.
 - WS-A-007 firmware C source — needs Maciej eyes + flash hardware.
 - C5 (re-MC at 10m geometry) — confirmed no-op: WS-CD-008 MC uses synthetic angle-noise, not channel models; antenna height change doesn't affect MC numbers. Existing `expected_fix:` block stays valid.

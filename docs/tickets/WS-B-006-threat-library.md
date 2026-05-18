@@ -28,7 +28,7 @@ for inputs that match no profile.
   `None` vs `EmitterClass.UNKNOWN` distinction this module preserves:
   `None` = "classifier did not run"; `UNKNOWN` = "classifier ran,
   unsure" — WS-B-006 returns `UNKNOWN`, never `None`.
-- Architecture: `HANDOFF_TO_CLAUDE_CODE_LEAD.md` §0 Advantage #5
+- Architecture: `docs/ADVANTAGES.md` §1 Advantage #5
   ("Open, extensible threat library as moat"). WS-B-005 ships the
   modulation-class layer; **WS-B-006 ships the wrapper that turns it
   into a credible Advantage #5 demo artefact** — an operator can open
@@ -761,7 +761,7 @@ stub_reason: |
 
 ### Why this exists
 
-The threat library is **Advantage #5** in the BoTH3 pitch (`HANDOFF`
+The threat library is **Advantage #5** in the BoTH3 pitch (`docs/ADVANTAGES.md`
 §0):
 
 > *"Open, extensible threat library as moat. The L3 classifier in

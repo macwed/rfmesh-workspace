@@ -33,7 +33,7 @@ separate ADRs) is justified by:
   B-006). Splitting into four ADRs would serialise work that is already
   paid-for by the architect's design pass.
 - None of them touch `rfmesh-contracts`. Invariant B1 untouched.
-- None of them remove a HANDOFF §0 advantage. Council protocol §1 not
+- None of them remove a docs/ADVANTAGES.md advantage. Council protocol §1 not
   triggered.
 
 The four are catalogued as D1-D4 below. Each is binding once this ADR
@@ -230,7 +230,7 @@ ergonomics for nested rule lists.
   loudly on malformed/schema-invalid YAML; honesty gate preserved.
 - **B5 (DSP/Fusion pure)**: untouched. `pyyaml` is `rfmesh-ml`'s dep,
   not `rfmesh-dsp`/`rfmesh-fusion`. Loading "vendor data tables at
-  import" is the documented exception in Invariant 5.
+  import" is the documented exception in Invariant B5.
 
 ### Applies to
 
@@ -319,8 +319,8 @@ WS-B-006 builder uses `import yaml` (the standard import path
 
 ## Sign-off
 
-Council review skipped per HANDOFF §2 — all four decisions are scoped
-small, do not touch contracts, do not remove a HANDOFF §0 advantage.
+Council review skipped per AGENTS.md §1 — all four decisions are scoped
+small, do not touch contracts, do not remove a docs/ADVANTAGES.md advantage.
 Lead-Opus accepts; Maciej accepts ("I accept your Recommendation,
 ratify all four", 2026-05-17). ADR is therefore ACCEPTED on first
 read.

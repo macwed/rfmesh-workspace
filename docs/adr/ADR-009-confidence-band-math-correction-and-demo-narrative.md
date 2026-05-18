@@ -58,7 +58,7 @@ this hardware + this node count.
 This is reality, not a defect. RTL-SDR amplitude-comparison DF cannot
 deliver 0.23° bearing accuracy. The pitch (per Maciej, 2026-05-17) is
 **deliberately** "we deliver worse-than-spec precision, with reliability
-and EW-resilience as the compensating advantages." See HANDOFF §0
+and EW-resilience as the compensating advantages." See docs/ADVANTAGES.md
 Advantage #1: *"scaling through deployment density, not per-sensor
 magic."*
 
@@ -93,7 +93,7 @@ The CRLB analysis subagent surfaced three options. Lead reviewed:
 
 - **Option 3 — Add hardware to the demo** (a second L2, or a fourth
   L1). The 1% line may then be reachable. Cost: a second bladeRF in
-  the partner pool is not guaranteed (HANDOFF §6 R5: Pluto+ / bladeRF
+  the partner pool is not guaranteed (docs/ADVANTAGES.md §6 R5: Pluto+ / bladeRF
   availability is best-effort); a fourth L1 stretches the deployment
   ergonomics that Maciej-side is already sized for three nodes.
 

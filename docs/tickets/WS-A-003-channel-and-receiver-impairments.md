@@ -134,7 +134,7 @@ Same diff:
 - Hardware drivers. WS-A-005 territory.
 - Modulations beyond CW. (LoRa-chirp emitters when L3 classifier
   needs them.)
-- Mutating `packages/rfmesh-contracts/**` (Invariant 1).
+- Mutating `packages/rfmesh-contracts/**` (Invariant B1).
 
 ## Files you may touch
 
@@ -154,8 +154,8 @@ Same diff:
 
 ## Files you may NOT touch
 
-- `packages/rfmesh-contracts/**` (Invariant 1).
-- Other workstream packages (Invariant 2).
+- `packages/rfmesh-contracts/**` (Invariant B1).
+- Other workstream packages (Import-discipline rule WD-1).
 - Existing WS-A-001 / WS-A-002 test files. If any of them break
   because of a change you made, STOP and surface — that means the
   backward-compat regression anchor (test 1.h) is doing its job.

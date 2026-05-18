@@ -23,14 +23,14 @@ training-pipeline + ONNX export — runtime stays pure-numpy in v1.0).
 - `INTERFACES.md` §1 `EmitterClass` enum semantics — particularly
   the `UNKNOWN` member's load-bearing role and the "stub at v1.0.0"
   status of `POLE21` / `VOLNOREZ` / `DRONEID`.
-- Architecture: `HANDOFF_TO_CLAUDE_CODE_LEAD.md` §0 Advantage #5 —
+- Architecture: `docs/ADVANTAGES.md` §1 Advantage #5 —
   *"Open, extensible threat library as moat."* This ticket delivers
   the **modulation-class** layer of that pitch; WS-B-006 delivers
   the `EmitterClass` mapping on top (e.g. `cw` + 868 MHz LoRa profile
   = ELRS LoRa-FHSS hint). v1.0 visible artefact: a deterministic
   classifier the demo can run on synthetic IQ with honest "unknown"
   output at low SNR.
-- `HANDOFF_TO_CLAUDE_CODE_LEAD.md` §5 "Workstream B remaining" — WS-B-005
+- `docs/BACKLOG.md` "Workstream B remaining" — WS-B-005
   and WS-B-006 are the last two B tickets before B stands down.
 - `WORKSTREAMS.md` §1 Workstream B row (owns `packages/rfmesh-ml/`)
   and §2 Workstream B deliverables item 5 (L3 pipeline — STFT features,
@@ -535,7 +535,7 @@ class ModulationClassifier:
 
 ### Why this exists
 
-The pitch slide on Advantage #5 (`HANDOFF` §0) needs a v1.0
+The pitch slide on Advantage #5 (`docs/ADVANTAGES.md` §0) needs a v1.0
 deliverable that **demonstrates classification capability on
 stage, deterministically, with no hardware**. The modulation-
 class layer (CW / FHSS / FSK / LoRa) is the credible v1.0:

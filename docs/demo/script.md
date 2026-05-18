@@ -56,7 +56,7 @@ Word count: ≈ 195 words. Receipts: 360 m semi-major / 3 km standoff
 is Beat D semi-major = 358 m (WS-CD-008 results — Beat D mean bias
 check uses `0.5 × semi_minor = 62.34 m`, semi-minor = 124.7 m;
 trench-geometry §2.2 reports Beat D semi-major = 359 m — rounded to
-360 m for spoken English). Eight advantages from HANDOFF §0
+360 m for spoken English). Eight advantages from docs/ADVANTAGES.md
 collapsed to six short clauses; advantages #7 (simulator-first) and
 #8 (€250 budget) are absorbed into the opening's framing ("€250-per-
 node hardware" + "recorded IQ … same code path").
@@ -94,7 +94,7 @@ No cross-fix yet."
 > reports the same emitter inside our 100 ms batch window, we have
 > no position. The system is not pretending otherwise."
 
-**Engineering point for the jury.** No silent fallbacks (HANDOFF
+**Engineering point for the jury.** No silent fallbacks (docs/ADVANTAGES.md
 B3) — the system does not invent a fix from one bearing. The σ-wedge
 is what an honest bearing looks like.
 
@@ -122,7 +122,7 @@ wide — two bearings only constrain position along one axis."
 > swapping radios."
 
 **Engineering point.** This is the bottom of the deployment-density
-ladder (HANDOFF Advantage #1). The number 49 % is the receipt the
+ladder (docs/ADVANTAGES.md §1 Advantage #1). The number 49 % is the receipt the
 jury watches shrink across the next two beats.
 
 **Receipts.** Geometry doc §2.2 row "B (two L1)": semi-major 589 m
@@ -322,7 +322,7 @@ delivers — no improvisation needed under jury pressure.
 > claim sub-degree from a Yagi-on-servo. The accuracy comes from
 > the geometry, not from any one sensor."
 
-Receipts: HANDOFF §1 sigma honesty band; trench-geometry §2.2 σ
+Receipts: docs/BACKLOG.md sigma honesty band; trench-geometry §2.2 σ
 values; WS-CD-008 Frobenius ratios ≤ 1.15 confirm σ-to-covariance
 chain is honest end-to-end.
 
@@ -339,7 +339,7 @@ chain is honest end-to-end.
 > the price tag wins."
 
 Receipts: Beat D semi-major 358 m at ≈ 3 km standoff (≈ 12 %);
-HANDOFF §0 advantage clauses.
+docs/ADVANTAGES.md advantage clauses.
 
 **Q3. "How does it scale with more nodes?"**
 
@@ -453,7 +453,7 @@ Receipts: ADR-008 §D5 ("anti-desense, not ECM" binding framing).
 > denial as an EW indicator while the mesh continues to function."
 
 Receipts: ARCHITECTURE §6 (no GNSS / no TDOA / no magnetometer);
-HANDOFF §0 Advantage #2 (GNSS-denied by construction).
+docs/ADVANTAGES.md §1 Advantage #2 (GNSS-denied by construction).
 
 ### Block D — operational / latency / minimum-detectable
 
@@ -693,7 +693,7 @@ an ADR or INHERITED_CONTEXT receipt.
 - **No closed-form sub-degree bearing claim on L1.** The L1
   estimator delivers σ ≈ 5° at SNR 20 dB. Slides quoting "1°" or
   better for L1 are wrong; only the L2 MUSIC path gets to ~1.5°.
-  Receipt: HANDOFF §1; trench-geometry §2.2 σ table.
+  Receipt: docs/BACKLOG.md; trench-geometry §2.2 σ table.
 
 - **No "real-time threat classification" with confidence claims
   for classified threats.** Pole-21 and Volnorez profiles are
@@ -786,6 +786,6 @@ Everything else has a receipt traceable to (a) WS-CD-008 Results,
   receive-pattern API the side panel reads from.
 - `ARCHITECTURE.md` §7 — the canonical demo surface.
 - `INHERITED_CONTEXT.md` §1.3 — no power calibration (no dBm).
-- `HANDOFF_TO_CLAUDE_CODE_LEAD.md` §0 — the eight advantages this
+- `docs/ADVANTAGES.md` — the eight advantages this
   script is the spoken expression of; §8 — Maciej's voice and
   jury expectations.

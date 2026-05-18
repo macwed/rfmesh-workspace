@@ -39,12 +39,12 @@ implementation — turning a batch of `BearingReport`s into a fully-populated
   (95%-scale correction → trench-demo Beat D produces `MEDIUM`, not
   `HIGH` — `test_fuser_trench_demo_beat_d_high_band_NOT_reached`
   pins this at the implementation level).
-- HANDOFF references:
-  HANDOFF §0 Advantage #6 (honesty payload — every field on `FixEvent`
+- docs/ADVANTAGES.md references:
+  docs/ADVANTAGES.md §1 Advantage #6 (honesty payload — every field on `FixEvent`
   must be populated honestly; placeholders or magic constants in
   covariance/ellipse are exactly the silent-failure mode the demo's
   credibility depends on avoiding);
-  HANDOFF §2 B1 (contracts frozen — do not change `Fuser` Protocol),
+  AGENTS.md §1 B1 (contracts frozen — do not change `Fuser` Protocol),
   B3 (no silent fallbacks — `fallback_centroid` is loud and labelled,
   not silent), B4 (demo honesty payload), B5 (pure fusion).
 - Demo geometry that this ticket's test pins:
@@ -154,7 +154,7 @@ implementation — turning a batch of `BearingReport`s into a fully-populated
   `residuals.py`, `geometry.py`, `projection.py`, or `exceptions.py`.
   These are upstream tickets; their conventions are inherited.
 - Do NOT introduce outlier rejection / IRLS inside the solver — per
-  ADR-007 D3 / HANDOFF §3, sprint-1 is honesty-over-robustness: the
+  ADR-007 D3 / CLAUDE.md (council review protocol), sprint-1 is honesty-over-robustness: the
   outlier flag downgrades display confidence, the solver does not drop
   the bearing.
 - Do NOT add `scipy` (closed-form 2x2 / per-bearing math is enough).

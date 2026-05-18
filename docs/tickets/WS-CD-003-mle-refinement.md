@@ -178,7 +178,7 @@ gap that the Stansfield estimator carries by construction.
   and never imported from `mle.py` itself.
 - Do NOT introduce IRLS or any outlier-down-weighting iteration on top
   of the inverse-variance weights. Sprint-1 honesty-over-robustness is
-  explicit (ADR-007 §"Negative consequences", `HANDOFF.md` §4 item 8).
+  explicit (ADR-007 §"Negative consequences", `docs/ADVANTAGES.md.md` §4 item 8).
 - Do NOT add a "default σ if `BearingReport.azimuth_sigma_deg` is zero"
   fallback. The contract validator enforces strict positivity; trusting
   that is Invariant B3.

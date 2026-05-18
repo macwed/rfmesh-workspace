@@ -166,7 +166,7 @@ the visible proof that subspace DF is running on coherent IQ
 accuracy on D replaces five degrees on three L1 nodes — but it is the
 **geometry diversity** that buys the precision, not the sensor alone."
 
-This is the demo's central pitch slide (HANDOFF §0 advantage #1:
+This is the demo's central pitch slide (docs/ADVANTAGES.md §1 Advantage #1:
 **deployment density, not per-sensor magic**). The story is:
 
 - The L1 nodes alone were already at GDOP ≈ 1.2 — geometrically near-
@@ -310,6 +310,6 @@ band the fix lands in.
 - `packages/rfmesh-dsp/src/rfmesh_dsp/l2_music.py` — L2 σ honesty band.
 - `packages/rfmesh-fusion/src/rfmesh_fusion/{projection,geometry,stansfield}.py`
   — the modules that will solve this scenario at runtime.
-- `HANDOFF_TO_CLAUDE_CODE_LEAD.md` §0 — the eight pitch advantages
+- `docs/ADVANTAGES.md` — the eight pitch advantages
   this geometry is designed to surface (notably #1 deployment density
   and #3 heterogeneous mesh).

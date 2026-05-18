@@ -31,10 +31,10 @@ is a measured fact rather than an assertion.
   (the 1-σ vs 95% scale correction this test makes impossible to forget
   silently — if the ellipse is at the wrong scale, the inclusion rate
   falls outside the 92-98% band).
-- HANDOFF references:
-  HANDOFF §0 Advantage #6 (honesty payload — the ellipse is honest iff
+- docs/ADVANTAGES.md references:
+  docs/ADVANTAGES.md §1 Advantage #6 (honesty payload — the ellipse is honest iff
   the Monte Carlo inclusion rate matches the declared 95% level);
-  HANDOFF §1 sprint-1 acceptance gate; §2 B2 (σ honesty), B4 (honesty
+  docs/BACKLOG.md sprint-1 acceptance gate; §2 B2 (σ honesty), B4 (honesty
   payload — empirically validated by THIS test); §2 B5 (pure fusion —
   this test is pytest-only, no hardware).
 - Demo geometry:
@@ -112,7 +112,7 @@ is a measured fact rather than an assertion.
   match ADR-009 narrative, the policy or the test is wrong — diagnose
   via scratchpad.
 - Do NOT introduce outlier rejection / IRLS — sprint-1 is honesty-over-
-  robustness (ADR-007 D3, HANDOFF §3).
+  robustness (ADR-007 D3, CLAUDE.md (council review protocol)).
 - Do NOT change the existing `tests/conftest.py` fixtures; reuse
   `seeded_rng`, `make_bearing`, `make_position`, `origin`,
   `azimuth_node_to_emitter_deg` as-is.

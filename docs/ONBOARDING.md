@@ -4,7 +4,7 @@
 
 **Last refreshed:** 2026-05-18 against commit `ec8740c`.
 **Lead:** Maciej (`macwed`, logmaciej@gmail.com), Poznań.
-**Active lead-agent:** Claude Code Opus 4.7 on `main` directly per `HANDOFF_TO_CLAUDE_CODE_LEAD.md` §2.
+**Active lead-agent:** Claude Code Opus 4.7 on `main` directly per `AGENTS.md` §1.
 
 ---
 
@@ -23,7 +23,7 @@ In order, do **not** skip:
 1. **`ARCHITECTURE.md`** — the *why*. Binding invariants, capability layers, operating envelope.
 2. **`INTERFACES.md`** — the *what*. Semantic dictionary of every contract type (mirrors `packages/rfmesh-contracts/` at `SCHEMA_VERSION = "1.1.0"`).
 3. **`INHERITED_CONTEXT.md`** — knowledge from the prior project at `github.com/macwed/rf-mesh`. Especially **§3.1.1** (Phase C failure modes) and **§5** (regression anchors).
-4. **`AGENTS.md`** — rules for agents (you + me + future). The **Five Invariants** are absolute.
+4. **`AGENTS.md`** — rules for agents (you + me + future). The **Seven Binding Invariants** are absolute.
 5. **`docs/phase-c-report/findings.md`** — the load-bearing empirical result. L1 baseline is no longer hypothesis.
 
 After those five, read your workstream-specific files (see §5 below).
@@ -122,9 +122,9 @@ Per `CLAUDE.md` §"Council review protocol" the council is **sequential**: archi
 
 Pull the cord (post in escalation channel, do not push) if:
 
-1. **Contracts touched.** `packages/rfmesh-contracts/src/` is editable only by the lead, only via an accepted ADR. (Invariant 1.) If your ticket appears to require a contract change, stop and write a `CHANGE-REQUEST ADR` under `docs/adr/` with status `PROPOSED`, then ping Maciej. Do **not** start work that assumes the change.
-2. **Cross-workstream import needed.** Every cross-package import must resolve to `rfmesh_contracts` or to your own package. If you find yourself wanting to import from a sibling workstream's package, stop. (Invariant 2.)
-3. **Silent failure tempted.** Anywhere code could fail silently, it must fail loudly. (Invariant 4.) If you can't see how to fail loudly without breaking other things, stop and ask.
+1. **Contracts touched.** `packages/rfmesh-contracts/src/` is editable only by the lead, only via an accepted ADR. (Invariant B1.) If your ticket appears to require a contract change, stop and write a `CHANGE-REQUEST ADR` under `docs/adr/` with status `PROPOSED`, then ping Maciej. Do **not** start work that assumes the change.
+2. **Cross-workstream import needed.** Every cross-package import must resolve to `rfmesh_contracts` or to your own package. If you find yourself wanting to import from a sibling workstream's package, stop. (Import-discipline rule WD-1.)
+3. **Silent failure tempted.** Anywhere code could fail silently, it must fail loudly. (Invariant B3.) If you can't see how to fail loudly without breaking other things, stop and ask.
 4. **Physical-world question.** Hardware mounts, antennas, polarisation, mast design, deployment ergonomics — Maciej's domain. Do not second-guess physical assumptions; treat them as facts.
 5. **Council split verdict.** If reviewers disagree and there is no obvious resolution, stop and ask Maciej.
 

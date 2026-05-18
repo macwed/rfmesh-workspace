@@ -37,7 +37,7 @@ ADR-009 fix, closing the honesty-payload half of the `FixEvent` (covariance
   documents the project's azimuth convention and the exact Jacobian
   shape; `covariance.py` mirrors that convention (a sign flip between
   the two would silently bias every ellipse).
-- AGENTS.md / HANDOFF.md invariants: B1 (contracts frozen — read-only
+- AGENTS.md / docs/ADVANTAGES.md.md invariants: B1 (contracts frozen — read-only
   imports), B3 (no silent fallbacks — singular `JᵀWJ` raises), B4
   (demo honesty payload — covariance + ellipse are what the dashboard
   shows), B5 (`rfmesh-fusion` stays pure: numpy only).

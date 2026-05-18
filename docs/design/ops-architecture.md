@@ -54,7 +54,7 @@
 
 A builder agent who picks up one of the four packages reads, in order:
 
-1. `HANDOFF_TO_CLAUDE_CODE_LEAD.md` §0 (the eight advantages — each
+1. `docs/ADVANTAGES.md` (the eight advantages — each
    panel maps to one).
 2. `ARCHITECTURE.md` §7 (the demo, scene by scene).
 3. `INTERFACES.md` §3 `FixEvent` / §5 `CotPublisher` / §5 `Bearer`.
@@ -445,7 +445,7 @@ class run_fusion_main:
     """
 ```
 
-**Capability dispatch is data, not code (per HANDOFF §0 Advantage #3
+**Capability dispatch is data, not code (per docs/ADVANTAGES.md §1 Advantage #3
 "heterogeneous mesh"):**
 
 The dispatch table in `build_estimators()` is a `dict[Capability,
@@ -550,7 +550,7 @@ class run_dashboard_main:
 
 **Panel-to-Advantage mapping (the demo-honesty audit checklist):**
 
-| Panel | Advantage (HANDOFF §0) | Data source |
+| Panel | Advantage (docs/ADVANTAGES.md) | Data source |
 |---|---|---|
 | FixPanel + percentage display | #1 deployment density, #6 honesty | `FixEvent` |
 | BearingsPanel σ-wedges | #2 sigma honesty | `BearingReport.azimuth_sigma_deg` |
@@ -1106,7 +1106,7 @@ ours to settle today:
 
 ## §7 Cross-references
 
-- `HANDOFF_TO_CLAUDE_CODE_LEAD.md` §0 — the eight architectural
+- `docs/ADVANTAGES.md` — the eight architectural
   advantages this design surfaces.
 - `ARCHITECTURE.md` §3 (star dependency), §7 (the demo surface),
   §8 (binding vs not).

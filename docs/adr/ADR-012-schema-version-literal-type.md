@@ -78,4 +78,4 @@ uv run pytest -m "not hardware"         # 480 tests still pass
 - Council audit (2026-05-18), architect finding F1.
 - `version.py:5-37` governance text.
 - `messages.py:17-25` module docstring.
-- `AGENTS.md` §1 Invariant 1 (contracts frozen — this ADR is the lead authorisation).
+- `AGENTS.md` §1 Invariant B1 (contracts frozen — this ADR is the lead authorisation).

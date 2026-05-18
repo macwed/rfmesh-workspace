@@ -76,8 +76,8 @@ Before opening:
 
 - [ ] `just verify` is green locally
 - [ ] No contract touched (or ADR proposal attached if a contract change is genuinely needed)
-- [ ] No silent fallbacks introduced (Invariant 4)
-- [ ] Test coverage matches the touched code (golden test for new DSP per Invariant 3)
+- [ ] No silent fallbacks introduced (Invariant B3)
+- [ ] Test coverage matches the touched code (golden test for new DSP per Import-discipline rule WD-2)
 - [ ] No `# noqa` / `# type: ignore` clusters without inline justification
 - [ ] PR description follows the template
 
@@ -154,7 +154,7 @@ Architecture Decision Records live at `docs/adr/ADR-<NNN>-<short-title>.md`. The
 
 - Any change to `packages/rfmesh-contracts/src/`
 - Any SCHEMA_VERSION bump
-- Removing or weakening any of the Five Invariants (`AGENTS.md` §1)
+- Removing or weakening any of the Seven Binding Invariants (`AGENTS.md` §1)
 - A foundational decision that future agents will need to know the rationale of
 
 ### ADR lifecycle
@@ -220,10 +220,10 @@ A ticket is **not done** if:
 
 ## §9 Glossary
 
-- **Lead-Opus** — the active Claude Code agent on `main` (currently Opus 4.7). Single agent, single session, operates on `main` directly per `HANDOFF_TO_CLAUDE_CODE_LEAD.md` §2.
+- **Lead-Opus** — the active Claude Code agent on `main` (currently Opus 4.7). Single agent, single session, operates on `main` directly per `AGENTS.md` §1.
 - **Council subagents** — four reviewer agents at `.claude/agents/*.yaml`. Lead-Opus invokes them; humans don't.
 - **Worktree** — `.claude/worktrees/` isolated git checkouts that Lead-Opus subagents may auto-create. Friend does not need to worry about these; they're orchestration internals.
-- **Five Invariants** — `AGENTS.md` §1. Absolute. No ticket overrides them.
+- **Seven Binding Invariants** — `AGENTS.md` §1. Absolute. No ticket overrides them.
 - **SCRATCHPAD** — `.claude/scratchpad/<workstream>-<date>.md`. Agent-side note when stuck. Surfaces to lead.
 - **BoTH3** — Belgian Defence Counter-Jamming Challenge 2 demo target. Roughly 2026-06-12 (25 days from this doc's refresh date).
 

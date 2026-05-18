@@ -20,7 +20,7 @@ computes the resulting receive pattern for the demo A/B polar plot.
 - ADR: `docs/adr/ADR-008-l2-capon-enum-and-null-steering-reservation.md`
   — D6 (this module's binding API shape), D8 (the ≤20 dB UI-claim
   cap), §"Rationale" (anti-desense framing).
-- Architecture: `HANDOFF_TO_CLAUDE_CODE_LEAD.md` §0 Advantage #4.
+- Architecture: `docs/ADVANTAGES.md` §1 Advantage #4.
 - Council review (folded in): the three subagent verdicts from the
   2026-05-17 L2-null-steering council session (Architect approve;
   RF-DSP four corrections; Demo-Integrity cap-the-claimed-depth).
