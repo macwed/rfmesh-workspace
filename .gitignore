@@ -50,6 +50,9 @@ Thumbs.db
 firmware/build/
 firmware/build_tests/
 firmware/.pio/
+firmware-beacon/.pio/
+firmware-beacon/.pioenvs/
+firmware-beacon/.piolibdeps/
 
 # Vendor / generated
 packages/*/vendor/
