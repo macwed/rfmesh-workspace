@@ -40,6 +40,22 @@ class CalibrationFailedError(RuntimeError):
     """
 
 
+class HardwareError(RuntimeError):
+    """Raised when a hardware-side Receiver implementation cannot proceed.
+
+    Surfaces the failure mode loudly rather than silently degrading. Concrete
+    cases the WS-A-005 ``RTLSDRDevice`` raises through this:
+
+    * ``rtl_sdr`` / ``rtl_eeprom`` binary missing from PATH.
+    * Requested centre frequency or sample rate outside the RTL-SDR V4
+      tuner bounds (per `INHERITED_CONTEXT.md` Section 1.3).
+    * Configured serial does not enumerate on any attached dongle.
+    * ``rtl_sdr`` subprocess exited non-zero, or its stdout closed before
+      the requested sample count was delivered (the B3 surface for
+      hardware short reads).
+    """
+
+
 class MalformedIQFileError(ValueError):
     """Raised when an on-disk ``.iq`` capture cannot be interpreted as uint8 IQ.
 

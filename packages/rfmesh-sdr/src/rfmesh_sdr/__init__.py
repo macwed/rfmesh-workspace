@@ -11,8 +11,10 @@ impairments (WS-A-003). Hardware backends arrive in later tickets.
 
 from __future__ import annotations
 
+from .devices import RTLSDRDevice, RTLSDRDeviceCapabilities
 from .exceptions import (
     CalibrationFailedError,
+    HardwareError,
     InvalidReadSizeError,
     MalformedIQFileError,
     ReceiverNotOpenError,
@@ -54,6 +56,7 @@ __all__ = [
     "DCOffset",
     "EmitterSpec",
     "FreeSpaceChannel",
+    "HardwareError",
     "IQImbalance",
     "IQMetadata",
     "IQReader",
@@ -63,6 +66,8 @@ __all__ = [
     "LogNormalShadowing",
     "MalformedIQFileError",
     "MultipathFIRChannel",
+    "RTLSDRDevice",
+    "RTLSDRDeviceCapabilities",
     "ReceiverImpairments",
     "ReceiverNotOpenError",
     "SimulationScenario",
