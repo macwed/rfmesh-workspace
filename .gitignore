@@ -48,6 +48,7 @@ Thumbs.db
 
 # Firmware build artefacts
 firmware/build/
+firmware/build_tests/
 firmware/.pio/
 
 # Vendor / generated

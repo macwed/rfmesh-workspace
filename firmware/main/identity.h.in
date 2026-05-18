@@ -1,0 +1,7 @@
+// Auto-generated from identity.h.in by CMake. Do not edit identity.h.
+#pragma once
+
+#define FW_VERSION_MAJOR 0
+#define FW_VERSION_MINOR 1
+#define FW_VERSION_PATCH 0
+#define FW_GIT_SHORT_SHA "@FW_GIT_SHORT_SHA@"
