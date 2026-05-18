@@ -15,11 +15,7 @@
 
 | ID | Title | Status | Effort | Skill | Suggested owner | Depends on |
 |---|---|---|---|---|---|---|
-| WS-A-005 | RTLSDRDevice → Receiver Protocol port | open | ½-1 day | PY | **Friend** | SALVAGE_AUDIT.md Part 4d |
-| WS-A-006 | Servo host driver port (6 modules + firmware-C-test parity) | open | 1 day | PY + EMB | **Friend** | WS-A-005 (sets pattern for Receiver/Protocol seating) |
-| WS-A-007a | ESP32-S2 firmware port (USB-Serial-JTAG → TinyUSB CDC) | open | 3-4 hr (source); **flash blocked on Maciej** | EMB | **Lead-Opus** (source) + Maciej (flash) | INHERITED_CONTEXT §1.1 |
-| WS-A-007b | LoRa beacon firmware (RadioLib + SX1276) | open | ½ day (source); **flash blocked on Maciej** | EMB | **Lead-Opus** (source) + Maciej (flash) | `lora_beacon_spec.md` |
-| WS-A-008 | Multi-node bench bring-up (3 nodes + fusion + dashboard + CoT) | blocked-hw | 1-2 days | PY + RF | **Maciej** + Friend | WS-A-005, WS-A-006, Maciej bench prep |
+| WS-A-008 | Multi-node bench bring-up (3 nodes + fusion + dashboard + CoT) | blocked-hw | 1-2 days | PY + RF | **Maciej** + Lead-Opus | WS-A-005/006/007a/007b (closed); Maciej flash + Mast A/C `.iqx` |
 
 ---
 
@@ -27,11 +23,7 @@
 
 | ID | Title | Status | Effort | Skill | Suggested owner | Depends on |
 |---|---|---|---|---|---|---|
-| E1 | L1-refused dashboard caption (minimum-viable G7) | open | 2-3 hr | PY | Lead-Opus | RF-DSP audit F2 |
-| E2 | ADR-001/002/003 backfill (monorepo, contracts-as-Protocol, no-GNSS/TDOA/magnetometer) | open | 2 hr | PM | Lead-Opus | Architect F6 |
-| E3 | Jury Q&A rehearsal entries — latency, FHSS, MDS, broadband-jammer, Phase C site selection (3 from `findings.md`) | open | 3-4 hr | RF + PM | Lead-Opus | Demo-integrity F6 |
-| E4 | Golden test for `l2_null_steering.compute_receive_pattern` | open | 1 hr | DSP | Lead-Opus | Architect F4 |
-| E5 | Slide deck stub OR step-3-only contingency re-cut | open | 1 day | PM + RF | Friend (PM hat) OR Lead-Opus | Demo-integrity F7 |
+| E5+ | Slide deck *expanded* (was E5 stub, closed) — full RF/EW-jury content set | open | 1.5-2 d | PM + RF | Lead-Opus | none (Phase 3 step 1) |
 
 ---
 
@@ -51,14 +43,14 @@
 
 | ID | Title | Status | Effort | Skill | Suggested owner | Depends on |
 |---|---|---|---|---|---|---|
-| G1 | Phase-C-failure replay scenario (Mast A `.iqx` integration test) | blocked-hw | 3 hr | DSP | Lead-Opus | C2 |
-| G2 | AIC/MDL source-rank detector for L2 MUSIC | open | ½ day | DSP | Friend (DSP hat) or Lead-Opus | none (P1) |
-| G3 | `GDOP_UNCOMPUTABLE` sentinel + SCHEMA_VERSION 1.2.0 ADR | blocked-decision | 1 day | PY + PM | Lead-Opus + Maciej-sign-off | ADR for SCHEMA bump |
-| G4 | `BearingReport.method` extended for L1 refusal (wire-level diagnostic) | blocked-decision | 1 day | PY + PM | Lead-Opus + Maciej-sign-off | ADR for SCHEMA bump |
+| G1 | Phase-C-failure replay scenario (Mast A `.iqx` integration test) | **MUST-HAVE** (blocked-hw on C2) | 3 hr | DSP | Lead-Opus | C2 (Mast A `.iqx`); promoted by rf-dsp council 2026-05-18 |
+| G2 | AIC/MDL source-rank detector for L2 MUSIC | open (P1, cuttable) | ½ day | DSP | Lead-Opus | needs Maciej read on criterion choice before lock |
+| G3 | `GDOP_UNCOMPUTABLE` sentinel — queued for ADR-013 propagation | queued (Phase 2) | included in ADR-013 batch | PY | Lead-Opus | WS-A-008 smoke PASS (gates SCHEMA 1.2.0 bump) |
+| G4 | `BearingReport.refusal_reason` + `Capability.L1_REFUSED_PROMINENCE` — queued for ADR-013 propagation | queued (Phase 2) | included in ADR-013 batch | PY | Lead-Opus | WS-A-008 smoke PASS |
 | G5 | Multi-site Phase C campaign (2-3 more Mast-C-class sites) | parking-lot | 1 day per site | RF (bench) | Maciej | post-BoTH3 |
 | G6 | Bearing-truth dataset library | parking-lot | incremental | RF + PY | Lead-Opus | G5 |
-| G7 | Full polar diagnostic panel (live RSSI-vs-azimuth + prominence ring) | open | ½ day | PY (matplotlib) | Lead-Opus | none (P1 — pairs with E1) |
-| G8 | `rfmesh-find-reference` CLI (btsearch.pl site-selection helper) | open | ½ day | PY | Friend (PM hat) | none (P2) |
+| G7-extend | Wire `BearingScanPanel` into `DEBUG_LAYOUT` (PanelSpec `projection="polar"`) | open (Phase 3, if slack) | ½ day | PY (matplotlib) | Lead-Opus | none |
+| G8 | `rfmesh-find-reference` CLI (btsearch.pl site-selection helper) | open (P2) | ½ day | PY | Lead-Opus | none |
 
 ---
 
@@ -66,11 +58,8 @@
 
 | ID | Title | Status | Effort | Skill | Suggested owner | Depends on |
 |---|---|---|---|---|---|---|
-| S1 | `--channel-override` CLI flag for `rfmesh-demo-replay` (A3 NEXT-2) | open | 1 hr | PY | Lead-Opus | none |
-| S2 | 3-node trench scenario YAML (`scenarios/three_node_trench.yaml`) | open | 2 hr | PY + RF | Lead-Opus | none |
-| S3 | Demo-replay multi-process orchestrator scaffold (v1.0→v1.5 lift) | parking-lot | 1-2 days | PY | Lead-Opus or Friend | none (P2) |
-| S4 | `rfmesh-contracts` round-trip tests (`model_validate(model_dump())` per message) | open | 2 hr | PY | Friend (PM hat) or Lead-Opus | none (P2) |
-| S5 | rfmesh-ml threat-profile YAML fuzzing | open | 2 hr | ML + PY | Friend (ML hat) | none (P2) |
+| S3 | Demo-replay multi-process orchestrator scaffold (v1.0→v1.5 lift) | parking-lot | 1-2 days | PY | Lead-Opus | none (P2) |
+| S5 | rfmesh-ml threat-profile YAML fuzzing | open | 2 hr | ML + PY | Lead-Opus | none (P2) |
 
 ---
 
@@ -85,35 +74,17 @@
 
 ---
 
-## Recommended ordering — next 4 days
+## Recommended ordering
 
-Assuming friend starts tonight, Maciej bench prep continues, lead-Opus works non-stop in parallel:
-
-```
-Day 1 (Friend)         Day 1 (Lead-Opus)      Day 1 (Maciej)
-WS-A-005 part 1        E2 (ADR backfill)      Bench prep
-WS-A-005 part 2        E4 (golden test)       Bench prep
-                       E1 (L1-refused caption)
-                       S1 (--channel-override)
-                       S2 (3-node scenario YAML)
-
-Day 2 (Friend)         Day 2 (Lead-Opus)      Day 2 (Maciej)
-WS-A-005 review/merge  E3 (jury Q&A)          Bench prep / Phase C re-capture
-WS-A-006 part 1        E5 (slide stub)        C1 + C2 (capture .iqx)
-                       C5 (re-MC at 10m)
-
-Day 3 (Friend)         Day 3 (Lead-Opus)      Day 3 (Maciej)
-WS-A-006 part 2        G7 (polar panel)       Bench bring-up
-                       C3 (Mast-C scenario)   WS-A-007a flash
-                       WS-A-007a source
-
-Day 4 (Friend)         Day 4 (Lead-Opus)      Day 4 (Maciej)
-WS-A-006 review/merge  C4 (sim calibration)   WS-A-008 multi-node
-G8 (find-reference)    WS-A-007b source       WS-A-007b flash
-or G2 (AIC/MDL)        S4 (contract round-trip tests)
-```
-
-After Day 4: integration rehearsal + bug fix iteration cycle. Demo day is at +25 from 2026-05-18.
+Superseded by `docs/plan-proposition-18-05-2026.md` (council-reviewed 4×
+APPROVE, 2026-05-18 evening). The plan-proposition doc carries the
+binding 3-phase / 25-day schedule + per-phase council acceptance
+criteria. The "next 4 days" block that lived here is retired —
+Phase 0 + Phase 1 source are 100 % complete as of `HEAD = 21b3f74`
+(WS-A-005, WS-A-006, WS-A-007a, WS-A-007b all merged); the project is
+in **Phase 1.5 — Maciej's hardware enablement window** (flash + Mast
+A/C `.iqx` re-capture), which unblocks Phase 2 (WS-A-008 smoke +
+ADR-013 propagation).
 
 ---
 
@@ -128,6 +99,24 @@ Sub-list of items shipped at this sprint's commits, for reference. **Do not re-o
 - Phase C bench result PASS — `6cf0a87`
 - Tier D D1-D5 (Literal[SCHEMA_VERSION] tripwire, headless relay fix, dead assert removal, trench heights 10m, PseudospectrumPanel) — `ec8740c`
 - ADR-012 schema_version Literal type — `ec8740c`
+- E1 L1-refused caption (`last_refusal_reason`) — `bee8413`
+- E2 ADR-001/002/003 backfill — `dee3779`
+- E3 jury Q&A entries Q10-Q15 — `27926ea`
+- E4 l2_null_steering golden test — `839fb49`
+- E5 step-4 contingency re-anchored to A3 + Phase C artifacts — `53eda24`
+- G7 BearingScanPanel (polar L1 sweep diagnostic; not yet in default layout — G7-extend) — `59d6acc`
+- S1 `--channel-override` CLI flag + S2 three_node_trench.yaml — `8b402e5`
+- S4 contract round-trip tests (29 messages) — `839fb49`
+- ADR-013 PROPOSED — `8350ec9`
+- 3-node simulator smoke artifacts — `794fa75`
+- ADR-013 ACCEPTED (propagation deferred to post-smoke) — `1d4c592`
+- chore(settings) claude permissions allowlist — `a76d240`
+- WS-A-006 servo host driver port (3286 +, 100 unit tests) — `defd4d4`
+- WS-A-007a ESP32-S2 firmware port (6679 +, 29 host C tests, wire spec unchanged) — `6acf482`
+- WS-A-005 RTLSDR Receiver Protocol port (831 +, 16 unit tests, B3 short-read surface) — `a4576d3`
+- WS-A-007b LoRa reference beacon firmware (622 +, SX1276 + RadioLib + PlatformIO) — `481288c`
+- Plan-proposition council fold (G1 → MUST-HAVE, E5 → 1.5-2 d, C4 framing, refusal_reason render) — `cbf5958`
+- 2026-05-18 evening sprint-log row — `21b3f74`
 
 ---
 
