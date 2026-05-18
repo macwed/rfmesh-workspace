@@ -52,3 +52,9 @@ firmware/.pio/
 
 # Vendor / generated
 packages/*/vendor/
+
+HANDOFF_TO_CLAUDE_CODE_LEAD.md
+
+phase-c-tutorial*
+NOTES_mast_recapture_2026-05-19.md
+NOTES_*.md
