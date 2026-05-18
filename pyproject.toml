@@ -83,6 +83,8 @@ target-version = "py312"
 line-length = 100
 extend-exclude = [
     ".claude/worktrees",
+    ".claude/scratchpad",
+    "docs/demo/crlb_analysis.py",
     "packages/*/vendor/",
     "firmware/build/",
 ]

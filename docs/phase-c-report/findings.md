@@ -84,7 +84,7 @@ INHERITED_CONTEXT §3.1's binary architectural question — "*does the bearing-s
 
 **Architectural read.** **L1 amplitude-comparison DF works** on this hardware (ATK-10 + RTL-SDR V4) at this band (~958 MHz) at the architecture's operating standoff (~3 km, inside the 2-5 km envelope). The system's core hypothesis is no longer hypothetical.
 
-**Note on file naming.** Raw bench report `phase-c-report.md` Mast C section has `bearing_to_tower_deg = 336` / `distance_to_tower_m = 2200` — this is a copy-paste from Mast B's metadata block (operator-side typo at the bench). The correct expected bearing for Mast C is **306°** (verified separately, see §2 PNG title at `phase_c_polar.png` which renders "expected 306°"); distance is "few km, picked from map", reported as 3 km in the prose at line 6 of the bench report. The numerical analysis above uses the corrected values.
+**Note on file naming.** Raw bench report `phase-c-report.md` Mast C section has `bearing_to_tower_deg = 336` / `distance_to_tower_m = 2200` — this is a copy-paste from Mast B's metadata block (operator-side typo at the bench). The correct expected bearing for Mast C is **306°** (verified separately, see §2 PNG title at `phase_c_polar_C.png` which renders "expected 306°"); distance is "few km, picked from map", reported as 3 km in the prose at line 6 of the bench report. The numerical analysis above uses the corrected values.
 
 ---
 

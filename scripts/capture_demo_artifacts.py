@@ -35,7 +35,7 @@ from rfmesh_ops.dashboard import Dashboard
 from rfmesh_ops.layouts import DEMO_LAYOUT_TRENCH
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCENARIO_PATH = REPO_ROOT / "scenarios" / "trench_demo_artifact.yaml"
+SCENARIO_PATH = REPO_ROOT / "scenarios" / "trench_demo.yaml"
 ARTIFACT_DIR = REPO_ROOT / "docs" / "demo" / "artifacts"
 
 

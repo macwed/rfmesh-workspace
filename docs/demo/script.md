@@ -623,7 +623,8 @@ replay` process dies mid-beat:
 4. **If the simulator also fails**, Maciej falls back to the
    committed A3 artifact PNGs at `docs/demo/artifacts/trench_demo_
    beat_{A,B,C,D}.png` + the Phase C polar plots at
-   `docs/phase-c-report/phase_c_polar_{A,B,C}.png`. These are
+   `docs/phase-c-report/phase_c_polar_{A,B,C}.png` (renamed from
+   `phase_c_polar.png` for Mast C on 2026-05-18). These are
    pre-rendered honest evidence: same code path, simulator
    numbers, real Phase C bench polar shapes. Maciej walks through
    them as the demo replacement. No live system, no panic, no
