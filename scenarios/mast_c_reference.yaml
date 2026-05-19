@@ -1,0 +1,225 @@
+# mast_c_reference.yaml — empirical anchor against 2026-05-19 Mast C captures
+#
+# STATUS: single-node real-world reference scenario, NOT a multi-node demo.
+# Its job is to anchor the simulator's free-space + light-shadowing path
+# against measured reality at the BoTH3 demo standoff range (~3 km on an
+# isolated GSM-900-extension carrier).
+#
+# Source captures (operator-personal, recordings/ is gitignored):
+#   recordings/2026-05-19-mast-c/
+#     mast_c_baseline_800_980MHz.csv     spectrum baseline at the site
+#     mast_c_h{0,45,90,135,180,225,270,315}deg_958695000Hz.iq
+#                                         8-heading coarse polar sweep
+#     mast_c_fine_h{285,295,305,315,325,335,345}deg_958695000Hz.iq
+#                                         fine 10-deg sweep around peak
+#     mast_c_peak_60s_{295,305,315,216}deg_958695000Hz.iq
+#                                         60-s stationarity captures
+#     mast_c_skypointing_calibration.iq   noise-floor reference
+#
+# Cross-references:
+#   docs/phase-c-report/findings.md §1 Mast C (the original
+#     2026-05-18 PASS narrative; numbers updated below per
+#     2026-05-19 recapture)
+#   docs/hardware/phase-c-bench-checklist.md §0 (PASS criteria)
+#   recordings/recapture_report.md (operator-personal capture log)
+
+scenario_id: mast_c_reference_v1
+description: >
+  Single-node, single-emitter empirical anchor at ~3 km on an isolated
+  GSM-extension carrier (958.695 MHz). Captured 2026-05-19 at site
+  near Marche-les-Dames analog terrain (~52.43 N, 16.53 E). Anchors
+  the simulator's free-space + light-shadowing channel model against
+  measured RSSI, angular response, SNR-vs-sky-noise-floor, and
+  60-second stationarity. NOT a multi-node demo; the multi-node
+  scenarios (trench_demo.yaml, three_node_trench.yaml) consume the
+  channel-model parameters this scenario calibrates.
+
+# ENU origin co-located with the receive site (single-node anchor).
+enu_origin:
+  lat_deg: 52.43694
+  lon_deg: 16.53167
+  hae_m: 89.5
+
+# Emitter (Mast C — the target the operator was geolocating).
+emitter:
+  emitter_id: mast_c_958695khz
+  # Bearing 306 deg from operator, range 2980 m. Resolved into ENU:
+  #   east  = 2980 * sin(306 deg) = -2410 m
+  #   north = 2980 * cos(306 deg) =  1751 m
+  enu_position_m: [-2410.0, 1751.0]
+  center_freq_hz: 958.695e6
+  modulation: gsm_downlink_or_lte_b8     # operator-attributed; spec
+                                         # baseline shows isolated
+                                         # carrier in the GSM-900
+                                         # extension band
+  emit_power_db_above_noise: 14.0        # back-derived from the +11.4
+                                         # dB SNR at receive minus
+                                         # ~2.6 dB free-space + Yagi
+                                         # gain budget at 3 km; rough
+  expected_class: UNKNOWN                # not classified; emitter is
+                                         # a reference, not a target
+  notes: >
+    The emit_power_db_above_noise is a back-derived figure, not a
+    measured transmit power (no RTL-SDR power calibration; see
+    INHERITED_CONTEXT.md §1.3). It exists to make the simulator
+    produce +11.4 dB receive-SNR-vs-sky-noise at 2980 m range with
+    free-space + light-shadowing channel — which is the empirical
+    anchor this scenario calibrates.
+
+# Receive node — the operator at the site.
+nodes:
+  - node_id: node-mast-c-rx
+    enu_position_m: [0.0, 0.0]
+    capabilities: [L1_RSSI]
+    sdr:
+      driver: rtlsdr
+      center_freq_hz: 958.695e6
+      sample_rate_hz: 2048000.0
+      gain_db: 40.0
+      bias_tee: false
+      serial: null
+    array: null                          # single-channel only
+    heading_deg: 0.0                     # operator-rotated, not
+                                         # servo-pointed; heading is
+                                         # per-capture in the JSON
+                                         # sidecar
+    bearer:
+      kind: WIFI                         # not applicable for this
+                                         # single-node anchor; kept
+                                         # for schema completeness
+    fusion_endpoint: "udp://127.0.0.1:9000"
+
+# Measured behaviour at this site, 2026-05-19. The simulator
+# calibration target (C4) is to reproduce these numbers within stated
+# tolerances using free-space + light-shadowing channel.
+measured_behaviour:
+
+  spectrum_baseline:
+    # mast_c_baseline_800_980MHz.csv
+    target_freq_hz: 958.695e6
+    target_power_db_relative: -28.39    # at the target bin
+    strongest_in_band_freq_hz: 925.590e6
+    strongest_in_band_power_db_relative: 3.79
+    target_to_strongest_margin_db: -32.18  # target is *not* the
+                                           # strongest carrier in the
+                                           # 800-980 MHz scan, but it
+                                           # is the strongest in its
+                                           # own 2 MHz analysis
+                                           # baseband (no in-band
+                                           # capture interference)
+
+  coarse_polar_sweep_8_headings:
+    # 8 captures, 45-deg steps, at 958.695 MHz
+    heading_deg_to_rssi_db_relative:
+      0:   -4.79
+      45:  -9.43
+      90:  -14.97
+      135: -9.50
+      180: -10.29
+      225: -8.63
+      270: -0.60
+      315: -0.07     # nearest grid point to true peak; mistaken on
+                     # 2026-05-17 as "9 deg azimuth bias", but the
+                     # fine sweep below shows the true peak is at
+                     # 305-307 deg (within one grid bin of 306 deg).
+    front_back_ratio_db: 14.90  # peak (315) minus opposite (135)
+                                # this is a Yagi-pattern quantity,
+                                # NOT signal-vs-noise SNR
+
+  fine_polar_sweep_7_headings:
+    # 7 captures, 10-deg steps centred on expected 306 deg
+    heading_deg_to_rssi_db_relative:
+      285: -0.26
+      295: -0.15
+      305:  0.13       # peak
+      315:  0.03
+      325: -0.20
+      335: -1.17
+      345: -3.48
+    peak_heading_deg: 305
+    parabolic_fit_peak_deg: 307
+    angular_uncertainty_deg: 10.0   # 1-sigma at this SNR
+                                    # (peak margin 0.13 dB vs
+                                    # per-sample std 0.17 dB)
+    peak_within_grid_of_expected: true   # expected 306 deg, peak at
+                                         # 305 deg = adjacent grid
+
+  stationarity_60s_at_peak:
+    # mast_c_peak_60s_305deg_958695000Hz.iq
+    heading_deg: 305
+    mean_rssi_db_relative: -0.78
+    std_dB: 0.17
+    peak_to_peak_dB: 0.80
+    drift_5s_dB: 0.12
+    n_one_second_windows: 70
+
+  stationarity_60s_off_axis:
+    # mast_c_peak_60s_216deg_958695000Hz.iq
+    heading_deg: 216
+    mean_rssi_db_relative: -6.63
+    std_dB: 0.60
+    peak_to_peak_dB: 2.94
+    drift_5s_dB: -1.07
+
+  sky_pointing_noise_floor:
+    # mast_c_skypointing_calibration.iq
+    # Antenna pointed straight up, nulls horizon-derived cellular
+    # ingress; dominant noise is RTL-SDR receiver chain (R828D NF
+    # ~3-4 dB). NOT an absolute power reference — INHERITED_CONTEXT
+    # §1.3 (no SDR in scope is power-calibrated).
+    rssi_db_relative: -12.16
+    capture_length_s: 11.7
+
+  derived_snr_above_sky_noise:
+    peak_snr_db: 11.38           # peak (-0.78) minus sky (-12.16)
+    off_axis_snr_db: 5.53        # 216 deg (-6.63) minus sky
+
+# Simulator calibration target.
+#
+# The C4 ticket consumes this scenario as the empirical anchor for
+# the simulator's free-space + light-shadowing channel. The simulator
+# is calibrated as honest iff a SyntheticReceiver configured with
+# this scenario produces L1 polar-sweep numbers within the
+# tolerances below.
+simulator_calibration_target:
+  channel_model: free_space_plus_log_normal_shadowing
+  channel_params:
+    log_normal_shadowing_sigma_db: 1.5  # tunable in C4; this is a
+                                        # starting estimate
+
+  # Tolerances against the measured numbers above. C4 succeeds iff
+  # the simulator matches WITHIN these.
+  tolerance:
+    snr_peak_above_sky_db: [10.0, 13.0]      # measured 11.38
+    snr_off_axis_above_sky_db: [4.0, 7.0]    # measured 5.53
+    stationarity_std_db_max: 0.3             # measured 0.17
+    peak_heading_within_grid_of_expected: true
+    front_back_ratio_db: [12.0, 17.0]        # measured 14.90
+
+# Top-level expectations (mirrors trench_demo.yaml shape).
+expected_outcomes:
+  l1_peak_prominence_db_min: 10.0      # well above the 6 dB gate
+                                       # measured: 14.9 dB
+  l1_peak_within_angular_grid: true
+  l1_emit_bearing_report: true         # i.e. NOT refused
+  confidence_level_at_this_site: MEDIUM  # single-node; no
+                                          # cross-fix possible at this
+                                          # scenario
+
+# What this scenario does NOT measure (mirrors findings.md §2
+# does-not):
+out_of_scope:
+  - sigma_honesty_against_ground_truth  # n=1 PASS, no statistics
+  - l2_phase_coherent_df                # single-channel only
+  - cross_fix_geometry_for_fusion       # single-node; no ENU triangulation
+  - multi_day_repeatability             # one capture session
+  - absolute_power_calibration          # RTL-SDR uncalibrated per
+                                        # INHERITED_CONTEXT §1.3
+
+# Cross-references
+references:
+  bench_checklist: docs/hardware/phase-c-bench-checklist.md
+  phase_c_findings: docs/phase-c-report/findings.md
+  inherited_context: INHERITED_CONTEXT.md §1.3 §3.1
+  trench_demo: scenarios/trench_demo.yaml
+  three_node_trench: scenarios/three_node_trench.yaml
