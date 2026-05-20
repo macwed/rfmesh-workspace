@@ -174,8 +174,14 @@ class BearingScanPanel(Panel):
         # Draw the gate as a dashed ring at the gate radius.
         theta_ring = np.linspace(0.0, 2.0 * np.pi, 360)
         gate_ring = np.full_like(theta_ring, gate_db)
-        self.ax.plot(theta_ring, gate_ring, "--", color="red", linewidth=1.2,
-                     label=f"prominence gate ({self._prominence_gate_db:.1f} dB)")
+        self.ax.plot(
+            theta_ring,
+            gate_ring,
+            "--",
+            color="red",
+            linewidth=1.2,
+            label=f"prominence gate ({self._prominence_gate_db:.1f} dB)",
+        )
 
         # Title + annotation.
         peak_db = float(np.max(rssi))

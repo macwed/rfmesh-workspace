@@ -414,9 +414,7 @@ def test_bearing_scan_panel_renders_refusal_for_flat_disk() -> None:
         [-0.17, -0.30, -1.23, 0.69, 0.73, 0.73, 0.51, -0.15],
         dtype=np.float64,
     )
-    refusal_text = (
-        "L1 refused: prominence 1.96 dB < gate 6.0 dB (multipath dominance?)"
-    )
+    refusal_text = "L1 refused: prominence 1.96 dB < gate 6.0 dB (multipath dominance?)"
     panel.set_sweep(
         headings_deg=headings,
         rssi_dbfs=rssi,

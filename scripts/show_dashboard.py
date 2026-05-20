@@ -30,24 +30,27 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import logging
 import sys
 from pathlib import Path
 
 import matplotlib
+import matplotlib.pyplot as plt
+from rfmesh_cot.publisher import PyTAKCotPublisher
+from rfmesh_demo_replay.replay import ReplayOrchestrator
+from rfmesh_demo_replay.scenario import ScenarioLoader
+from rfmesh_ops.client import DashboardClient
+from rfmesh_ops.dashboard import Dashboard
+from rfmesh_ops.layouts import LAYOUTS_BY_NAME
 
 # Pick an interactive backend explicitly so this runs whether the
 # default matplotlib config picks Agg or Qt or Wayland. TkAgg is the
-# safest default across Fedora / Ubuntu / Wayland desktops.
+# safest default across Fedora / Ubuntu / Wayland desktops. Calling
+# matplotlib.use() after pyplot import is supported on matplotlib
+# >= 3.3 as long as no figure has been created yet (which is true at
+# this point — figures are created inside _async_main).
 matplotlib.use("TkAgg")
-import matplotlib.pyplot as plt  # noqa: E402
-
-from rfmesh_cot.publisher import PyTAKCotPublisher  # noqa: E402
-from rfmesh_demo_replay.replay import ReplayOrchestrator  # noqa: E402
-from rfmesh_demo_replay.scenario import ScenarioLoader  # noqa: E402
-from rfmesh_ops.client import DashboardClient  # noqa: E402
-from rfmesh_ops.dashboard import Dashboard  # noqa: E402
-from rfmesh_ops.layouts import LAYOUTS_BY_NAME  # noqa: E402
 
 _LOG = logging.getLogger("show_dashboard")
 
@@ -179,10 +182,8 @@ async def _async_main(scenario_path: Path, layout_name: str, cot_url: str | None
         if not task.done():
             task.cancel()
     for task in (dashboard_task, gui_task, orch_task):
-        try:
+        with contextlib.suppress(asyncio.CancelledError, RuntimeError):
             await task
-        except (asyncio.CancelledError, RuntimeError):
-            pass
     return 0
 
 

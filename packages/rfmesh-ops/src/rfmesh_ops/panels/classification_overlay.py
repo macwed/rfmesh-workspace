@@ -75,13 +75,8 @@ class ClassificationOverlayPanel(Panel):
     def update(self, msg: DashboardMessage) -> None:
         if isinstance(msg, BearingReport):
             # Track latest classification confidence per emitter class.
-            if (
-                msg.emitter_class is not None
-                and msg.classification_confidence is not None
-            ):
-                self._confidence_by_class[msg.emitter_class] = float(
-                    msg.classification_confidence
-                )
+            if msg.emitter_class is not None and msg.classification_confidence is not None:
+                self._confidence_by_class[msg.emitter_class] = float(msg.classification_confidence)
             return
         if not isinstance(msg, FixEvent):
             return

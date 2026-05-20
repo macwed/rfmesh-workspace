@@ -383,8 +383,7 @@ class L1AmplitudeSweepEstimator:
         var_vertex_x /= _CHI2_MEDIAN_OVER_DOF
         if not math.isfinite(var_vertex_x) or var_vertex_x <= 0.0:
             self._last_refusal_reason = (
-                f"L1 refused: non-finite variance {var_vertex_x} "
-                "(numerically unrecoverable fit)"
+                f"L1 refused: non-finite variance {var_vertex_x} (numerically unrecoverable fit)"
             )
             return None
 

@@ -207,12 +207,8 @@ class GdopHeatmapPanel(Panel):
         if finite_mask.any() and gdop_grid[finite_mask].min() < _GDOP_WARN_THRESHOLD:
             with contextlib.suppress(ValueError, RuntimeError):
                 self.ax.contour(
-                    np.linspace(
-                        -_GRID_HALF_WIDTH_M, _GRID_HALF_WIDTH_M, _GRID_RESOLUTION
-                    ),
-                    np.linspace(
-                        -_GRID_HALF_WIDTH_M, _GRID_HALF_WIDTH_M, _GRID_RESOLUTION
-                    ),
+                    np.linspace(-_GRID_HALF_WIDTH_M, _GRID_HALF_WIDTH_M, _GRID_RESOLUTION),
+                    np.linspace(-_GRID_HALF_WIDTH_M, _GRID_HALF_WIDTH_M, _GRID_RESOLUTION),
                     gdop_grid,
                     levels=[_GDOP_WARN_THRESHOLD],
                     colors="white",

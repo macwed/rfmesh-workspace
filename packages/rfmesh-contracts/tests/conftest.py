@@ -61,9 +61,7 @@ def sample_bearing_report(sample_position: GeodeticPosition) -> BearingReport:
 
 
 @pytest.fixture
-def sample_fix_event(
-    sample_position: GeodeticPosition, sample_ellipse: EllipseENU
-) -> FixEvent:
+def sample_fix_event(sample_position: GeodeticPosition, sample_ellipse: EllipseENU) -> FixEvent:
     return FixEvent(
         fix_id=UUID("12345678-1234-5678-1234-567812345678"),
         t_unix_ns=_DEFAULT_T_UNIX_NS,

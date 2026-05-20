@@ -78,9 +78,7 @@ def test_demo_layout_debug_bearing_scan_uses_polar_projection() -> None:
     the polar projection in the layout.
     """
     layout = DEMO_LAYOUT_DEBUG
-    bearing_scan_specs = [
-        spec for spec in layout.panels if spec.panel_cls is BearingScanPanel
-    ]
+    bearing_scan_specs = [spec for spec in layout.panels if spec.panel_cls is BearingScanPanel]
     assert len(bearing_scan_specs) == 1
     spec = bearing_scan_specs[0]
     assert spec.subplot_kwargs.get("projection") == "polar"

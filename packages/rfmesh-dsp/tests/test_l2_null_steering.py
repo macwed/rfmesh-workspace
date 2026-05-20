@@ -778,9 +778,7 @@ def test_two_emitter_factory_smoke(
 
 
 _GOLDEN_DIR = Path(__file__).parent / "golden"
-_NULL_STEERING_GOLDEN = (
-    _GOLDEN_DIR / "l2_null_steering_pattern_uca4_30deg_signal_100deg_jammer.npz"
-)
+_NULL_STEERING_GOLDEN = _GOLDEN_DIR / "l2_null_steering_pattern_uca4_30deg_signal_100deg_jammer.npz"
 
 
 def test_null_steering_receive_pattern_matches_golden() -> None:
@@ -840,15 +838,7 @@ def test_null_steering_receive_pattern_matches_golden() -> None:
         result.weights, **_uca4_kwargs(), scan_step_deg=0.5
     )
 
-    np.testing.assert_array_almost_equal(
-        azimuths_deg, golden["azimuths_deg"], decimal=6
-    )
-    np.testing.assert_array_almost_equal(
-        gain_db, golden["gain_db"], decimal=3
-    )
-    assert result.null_depth_db == pytest.approx(
-        float(golden["null_depth_db"]), abs=0.1
-    )
-    assert result.look_gain_db == pytest.approx(
-        float(golden["look_gain_db"]), abs=0.01
-    )
+    np.testing.assert_array_almost_equal(azimuths_deg, golden["azimuths_deg"], decimal=6)
+    np.testing.assert_array_almost_equal(gain_db, golden["gain_db"], decimal=3)
+    assert result.null_depth_db == pytest.approx(float(golden["null_depth_db"]), abs=0.1)
+    assert result.look_gain_db == pytest.approx(float(golden["look_gain_db"]), abs=0.01)
