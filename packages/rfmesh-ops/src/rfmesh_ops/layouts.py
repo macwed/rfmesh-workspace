@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from rfmesh_ops.panels import (
+    BearingScanPanel,
     BearingsPanel,
     ClassificationOverlayPanel,
     FixPanel,
@@ -150,9 +151,17 @@ _check_no_overlap(DEMO_LAYOUT_TRENCH)
 
 
 # -- DEMO_LAYOUT_DEBUG ----------------------------------------------------
-# All nine panels in a 3 x 3 grid (one panel per cell). Big-screen
-# bench-side layout. Order is the architect-mandated panel list from
-# docs/design/ops-architecture.md §2.3.
+# Ten panels in a 4 x 3 grid. Big-screen bench-side layout. Order is
+# the architect-mandated panel list from docs/design/ops-architecture.md
+# §2.3, with BearingScanPanel (G7-extend) wired into row 3 as the
+# operator's L1-sweep diagnostic. The remaining two cells in row 3 are
+# left intentionally empty for future expansion (e.g. wireshark-style
+# bearer-telemetry tile, per backlog G8).
+#
+# BearingScanPanel uses ``projection="polar"`` — the panel itself
+# guards each polar-axis call with hasattr, so a rectilinear Axes
+# would not crash, but the rendered figure would be wrong. The polar
+# projection is wired explicitly in the subplot_kwargs.
 DEMO_LAYOUT_DEBUG = DashboardLayout(
     panels=(
         PanelSpec(panel_cls=FixPanel, subplot_kwargs={"row": 0, "col": 0}),
@@ -164,8 +173,12 @@ DEMO_LAYOUT_DEBUG = DashboardLayout(
         PanelSpec(panel_cls=NodeStatusPanel, subplot_kwargs={"row": 2, "col": 0}),
         PanelSpec(panel_cls=ClassificationOverlayPanel, subplot_kwargs={"row": 2, "col": 1}),
         PanelSpec(panel_cls=NullSteeringPanel, subplot_kwargs={"row": 2, "col": 2}),
+        PanelSpec(
+            panel_cls=BearingScanPanel,
+            subplot_kwargs={"row": 3, "col": 0, "projection": "polar"},
+        ),
     ),
-    grid_shape=(3, 3),
+    grid_shape=(4, 3),
 )
 _check_no_overlap(DEMO_LAYOUT_DEBUG)
 

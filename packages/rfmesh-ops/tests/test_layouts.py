@@ -12,6 +12,7 @@ from rfmesh_ops.layouts import (
     _check_no_overlap,
 )
 from rfmesh_ops.panels import (
+    BearingScanPanel,
     BearingsPanel,
     ClassificationOverlayPanel,
     FixPanel,
@@ -47,8 +48,8 @@ def test_demo_layout_trench_builds() -> None:
     assert layout.grid_shape == (4, 2)
 
 
-def test_demo_layout_debug_has_all_nine_panels() -> None:
-    """DEMO_LAYOUT_DEBUG renders every panel the architect named in §2.3."""
+def test_demo_layout_debug_has_all_ten_panels() -> None:
+    """DEMO_LAYOUT_DEBUG renders §2.3 panels plus G7-extend BearingScanPanel."""
     layout = DEMO_LAYOUT_DEBUG
     panel_classes = {spec.panel_cls for spec in layout.panels}
     expected_panels = {
@@ -61,9 +62,28 @@ def test_demo_layout_debug_has_all_nine_panels() -> None:
         NodeStatusPanel,
         ClassificationOverlayPanel,
         NullSteeringPanel,
+        BearingScanPanel,
     }
     assert panel_classes == expected_panels
-    assert layout.grid_shape == (3, 3)
+    assert layout.grid_shape == (4, 3)
+
+
+def test_demo_layout_debug_bearing_scan_uses_polar_projection() -> None:
+    """BearingScanPanel in DEBUG_LAYOUT carries projection='polar' subplot_kwarg.
+
+    The panel renders RSSI(theta) as a polar plot; with default rectilinear
+    Axes the matplotlib polar-specific calls (set_theta_zero_location,
+    set_theta_direction) are silently skipped via hasattr guards, but the
+    bearing-scan rendering is then misleading. This regression test pins
+    the polar projection in the layout.
+    """
+    layout = DEMO_LAYOUT_DEBUG
+    bearing_scan_specs = [
+        spec for spec in layout.panels if spec.panel_cls is BearingScanPanel
+    ]
+    assert len(bearing_scan_specs) == 1
+    spec = bearing_scan_specs[0]
+    assert spec.subplot_kwargs.get("projection") == "polar"
 
 
 def test_demo_layout_minimal_is_fix_only() -> None:
