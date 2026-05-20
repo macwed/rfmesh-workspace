@@ -57,6 +57,8 @@ firmware-beacon/.piolibdeps/
 # Vendor / generated
 packages/*/vendor/
 
+recordings/
+
 HANDOFF_TO_CLAUDE_CODE_LEAD.md
 
 phase-c-tutorial*
