@@ -102,63 +102,77 @@ is what an honest bearing looks like.
 
 **On screen.** Nodes A and B at `(−1800, +1800)` and `(+1800,
 +1800)` ENU come online. Two bearing lines cross. The first
-`FixEvent` renders: 95 % ellipse, wide oblong oriented roughly
-east-west; band badge **LOW**; percentage display **49.1 %**; GDOP
+`FixEvent` renders: 95 % ellipse, oblong oriented roughly
+east-west (semi-major 598 m, semi-minor 383 m — aspect ratio 1.6);
+band badge **MEDIUM**; percentage display **19.9 %**; GDOP
 **1.53**; method `stansfield+mle`; spec-band reference (≤ 1 %)
 visible as a faint shaded ring inside the ellipse.
 
 **Caption (dashboard).** "Two posts. Cross-fix appears. Ellipse is
-wide — two bearings only constrain position along one axis."
+oblong — two bearings only constrain position along one axis."
 
 **What Maciej reads aloud.**
-> "Forty-nine percent of range. GDOP one-point-five. LOW band."
+> "Twenty percent of range. GDOP one-point-five. MEDIUM band."
 
 **What Maciej says (≤ 30 s).**
 > "Two posts means a cross-fix, but two bearings can only constrain
-> us along one axis — the ellipse is oblong, oriented east-west. The
-> dashboard shows forty-nine percent of range at GDOP one-point-
-> five. The band is LOW. This is the honest geometry of N=2 — and
-> it is the floor we will improve on by adding posts, not by
-> swapping radios."
+> us along one axis — the ellipse is oblong, oriented east-west,
+> aspect ratio one-point-six. The dashboard shows twenty percent of
+> range at GDOP one-point-five. The band is MEDIUM. This is the
+> honest geometry of N=2 — the starting point on the deployment-
+> density ladder, and the floor we will improve on by adding posts,
+> not by swapping radios."
 
 **Engineering point.** This is the bottom of the deployment-density
-ladder (docs/ADVANTAGES.md §1 Advantage #1). The number 49 % is the receipt the
-jury watches shrink across the next two beats.
+ladder (docs/ADVANTAGES.md §1 Advantage #1). The aspect ratio 1.6
+and the 20 % figure are the receipts the jury watches shrink across
+the next two beats. Beat B is **MEDIUM at honest steady state for
+this geometry** — the demo's improvement story is "ellipse shrinks
+within MEDIUM as posts add", not "we climb from LOW to MEDIUM".
 
-**Receipts.** Geometry doc §2.2 row "B (two L1)": semi-major 589 m
-at 1200 m range = 49 %; GDOP 1.53. LOW band per ADR-005 D1
-(semi/range = 49 % is well above 5 % threshold) and ADR-009
-narrative.
+**Receipts.** Geometry doc §2.2 row "B (two L1)": semi-major 598 m
+at 3000 m range = 19.9 %; GDOP 1.53. MEDIUM band per ADR-005 D1
+(semi/range 19.9 % is above the 5 % HIGH threshold but well below
+the LOW band; the band stays MEDIUM throughout this trench-demo
+geometry). Pre-C5 the demo claimed LOW here — that was inherited
+from an older emitter geometry with range 1200 m; post-C5 the
+honest band at this geometry is MEDIUM. See `scenarios/trench_demo.yaml`
+`expected_fix:` block and the 2026-05-20 sprint-log row.
 
 ### Beat C — three nodes (~15 s)
 
 **On screen.** Node C joins (`(0, +900)`). Triangle closes. The
-ellipse contracts visibly — semi-major **393 m**, semi-minor 357 m,
-oriented near north-south now. Band badge **MEDIUM**. Percentage
-display **26.2 %**. GDOP **1.16**. Residuals panel populated, all
-three nodes within band, no outlier flag.
+ellipse contracts visibly — semi-major **393 m**, semi-minor 355 m,
+nearly circular (aspect ratio 1.10 — orientation effectively
+undefined). Band badge **MEDIUM**. Percentage display
+**13.1 %**. GDOP **1.16**. Residuals panel populated, all three
+nodes within band, no outlier flag.
 
-**Caption (dashboard).** "Three posts. Ellipse halves. GDOP one-
-point-two — geometry is good. Working — not yet competition-grade."
+**Caption (dashboard).** "Three posts. Ellipse shrinks by a third.
+GDOP one-point-two — geometry is good. Working — not yet
+competition-grade."
 
 **What Maciej reads aloud.**
-> "Twenty-six percent of range. GDOP one-point-two. MEDIUM band."
+> "Thirteen percent of range. GDOP one-point-two. MEDIUM band."
 
 **What Maciej says (≤ 30 s).**
 > "A third post closes the triangle. GDOP drops below one-point-two
 > — geometrically near-optimal for an L1-only mesh. The percentage
-> halved, from forty-nine to twenty-six. The band is MEDIUM. We are
-> working but not yet inside competition tolerance, and the
-> dashboard says so. No node is flagged as an outlier — three
-> bearings, three honest σs, post-fit residuals consistent."
+> shrank by a third, from twenty to thirteen, and the aspect ratio
+> drops from one-point-six to one-point-one — the ellipse is now
+> nearly circular. The band stays MEDIUM. We are working but not
+> yet inside competition tolerance, and the dashboard says so. No
+> node is flagged as an outlier — three bearings, three honest σs,
+> post-fit residuals consistent."
 
 **Engineering point.** This is the deployment-density story
-landing. The percentage halved because we added a node, not a
-radio. The MEDIUM band is honest about where we are — the system
-self-describes, the jury does not have to forgive it.
+landing. The percentage shrank by a third and the ellipse went from
+oblong to round because we added a node, not a radio. The MEDIUM
+band stays MEDIUM — that is the architecture's honest steady state
+at this geometry, not a failure to climb to HIGH.
 
 **Receipts.** Geometry doc §2.2 row "C (three L1)": semi-major
-393 m at 1500 m range = 26 %; GDOP 1.16. WS-CD-008 Results: Beat C
+393 m at 3000 m range = 13.1 %; GDOP 1.16. WS-CD-008 Results: Beat C
 **100 % MEDIUM** in 1000 Monte-Carlo trials, inclusion rate
 **93.7 %** (inside the [0.92, 0.98] honesty band), Frobenius ratio
 1.146 (inside ×1.5 band), mean bias 7.23 m (well below 0.5 ×
@@ -171,10 +185,9 @@ ENU) joins. The MUSIC pseudospectrum tile on D **lights up** with a
 sharp peak at the emitter bearing — visible proof that subspace DF
 is running on coherent IQ (ARCHITECTURE §7). The ellipse on the
 main fix panel **narrows into a slot**: semi-major **358 m**, but
-semi-minor collapses from 357 m to **125 m** — a 65 % reduction.
-Band badge **MEDIUM**. Percentage display **32.0 %**. GDOP
-**1.02**. The percentage display does *not* drop monotonically —
-this is honest and intentional.
+semi-minor collapses from 355 m to **125 m** — a 65 % reduction.
+Band badge **MEDIUM**. Percentage display **11.9 %**. GDOP
+**1.02**.
 
 **Caption (dashboard).** "Coherent partner-pool radio joins.
 Semi-minor collapses by 65 %. Ellipse narrows into a slot. GDOP
@@ -182,7 +195,7 @@ near one — geometry is essentially perfect. Band stays MEDIUM —
 this is what current L1+L2 hardware honestly delivers."
 
 **What Maciej reads aloud.**
-> "Thirty-two percent of range. GDOP one-point-zero-two. MEDIUM
+> "Twelve percent of range. GDOP one-point-zero-two. MEDIUM
 > band. Semi-minor down sixty-five percent."
 
 **What Maciej says (≤ 45 s).**
@@ -190,32 +203,32 @@ this is what current L1+L2 hardware honestly delivers."
 > the MUSIC pseudospectrum — sharp peak at the emitter bearing,
 > that is what subspace DF on phase-coherent IQ actually looks like.
 > The ellipse on the main panel narrows into a slot — semi-minor
-> drops from three-fifty-seven down to one-twenty-five metres,
-> sixty-five percent. The percentage display, though, moved from
-> twenty-six to thirty-two. That is the centroid shifting toward
-> the L2 node — *range_m* in the denominator gets smaller. This is
-> why we publish the **absolute** ellipse next to the percentage:
-> the operator sees the actual shape, not just a number. The band
-> stays MEDIUM. Crossing into HIGH at this geometry would require a
+> drops from three-fifty-five down to one-twenty-five metres,
+> sixty-five percent. The percentage display also drops — from
+> thirteen percent at Beat C to twelve percent here — a small
+> additional shrink, but the *directional* collapse is what matters:
+> the ellipse goes from round to a slot, the operator can SEE the
+> shape change even without reading the number. The band stays
+> MEDIUM. Crossing into HIGH at this geometry would require a
 > second L2 or a fifth L1 — see the next slide."
 
 **Engineering point.** Three things at once: (i) Advantage #3 —
 heterogeneous mesh, one σ=1.5° node weighted alongside three σ=5°
 nodes by inverse variance; (ii) Advantage #6 — honesty payload,
-the percentage going *up* when geometry improves is a signal the
-operator needs to read correctly, and the dashboard makes it
-readable; (iii) Advantage #1 — to cross HIGH on the percentage we
+the directional collapse (semi-minor 65 %) is the visible-shape
+change the operator reads at a glance even without reading the
+number; (iii) Advantage #1 — to cross HIGH on the percentage we
 add nodes, not radios.
 
 **Receipts.** Geometry doc §2.2 row "D (three L1 + L2)":
-semi-major 359 m at 1118 m range = 32 %; GDOP 1.02; semi-minor
+semi-major 358 m at 3000 m range = 11.9 %; GDOP 1.02; semi-minor
 125 m. Trench-demo §3 Beat D narrative: "semi-minor collapses from
-357 m to 125 m". WS-CD-008 Results: Beat D **100 % MEDIUM**
+355 m to 125 m". WS-CD-008 Results: Beat D **100 % MEDIUM**
 in 1000 trials, inclusion rate **94.8 %**, Frobenius ratio 1.020,
 mean bias 5.76 m (below 0.5 × semi_minor = 62.34 m). The 358 m
-spoken value vs 359 m table value: rounded for spoken English; the
-dashboard renders 358.5 m (one decimal place per ADR-005 D5(b)
-sibling convention applied to semi-major).
+spoken value vs 358 m table value: rounded for spoken English; the
+dashboard renders one decimal place per ADR-005 D5(b) sibling
+convention applied to semi-major.
 
 ---
 
@@ -395,15 +408,18 @@ correction).
 > "The fusion solver runs again on whatever remains, weighted by
 > their honest σs. If we drop from four to three nodes mid-fix,
 > the ellipse grows back toward the Beat C size — about 393 m
-> semi-major, 26 % of range — and the band stays MEDIUM. If we
-> drop to two, the band goes LOW and the ellipse is the 590-metre
-> oblong from Beat B. If we drop to one, no fix at all —
+> semi-major, 13 % of range, nearly circular — and the band stays
+> MEDIUM. If we drop to two, the ellipse becomes the ~600-metre
+> oblong from Beat B at 20 % of range; the band stays MEDIUM but
+> the operator can SEE the ellipse stretch back to its starting
+> shape. If we drop to one, no fix at all —
 > `min_bearings_for_fix = 2` is enforced. The CoT marker on ATAK
 > expands honestly; the dashboard surfaces a node-stale flag
 > after six seconds of silence per `FusionConfig.node_stale_after_s`.
 > The system degrades, it does not lie."
 
-Receipts: trench-geometry §2.2 (Beat B = 589 m, Beat C = 393 m);
+Receipts: trench_demo.yaml `expected_fix:` C5-regenerated 2026-05-20
+(Beat B = 598 m, Beat C = 393 m, all at range 3000 m);
 ARCHITECTURE §7 "node killed mid-demo, marker expands honestly";
 ADR-005 D4 boundary cases.
 
