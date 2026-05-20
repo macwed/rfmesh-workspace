@@ -668,3 +668,84 @@ WS-A track moved from 55 % at plan-authoring to ~85 % at `HEAD = 481288c`. Only 
 - E5 slide deck expansion — rebudgeted 1.5-2 d (was 1 d) per demo-integrity council.
 
 Context state at this checkpoint: tracked-files-only state of record. All council verdicts + recs captured in this entry; all commit messages reference Co-Authored-By and council 4× APPROVE.
+
+
+---
+
+## 2026-05-19 / 2026-05-20 — Mast A + C recapture, C3/C4/C5, slide deck, Beat E preload, ADR-014
+
+Eleven commits since the 2026-05-18 evening row (`21b3f74`). Phase C empirical anchor tightened from the original 3-mast composite to Mast C alone; simulator calibrated against that anchor; demo materials regenerated; operator-side stage-helper shipped.
+
+### Field session 2026-05-19 — Mast A + Mast C recapture
+
+Maciej drove to the operator-side bench location (52.41 N, 16.60 E for Mast A; 52.44 N, 16.53 E for Mast C). Expanded protocol vs 2026-05-17:
+
+- 8-heading polar at 45° steps at each mast.
+- Mast A: multi-height sweep (1.0 / 1.5 / 1.8 m AGL) for two-ray null discrimination; V/H polarisation cross-check; on-axis 60-s capture.
+- Mast C: fine sweep at 10° steps around expected 306°; 60-s captures at 295/305/315/216°; sky-pointing capture for instrument-noise floor; spectrum baseline.
+- Both masts: `rtl_power` 800-980 MHz baseline.
+
+Raw captures live at `recordings/2026-05-19-mast-{a,c}/` (operator-personal, gitignored — `recordings/` ignore rule already in place pre-session).
+
+### Mast C — the anchor
+
+Numbers analysed end-to-end:
+
+| Quantity | Measured |
+|---|---|
+| Peak heading (45° grid) | 305° (one bin from expected 306°) |
+| Peak heading (10° fine sweep) | 305° (parabolic 307°) |
+| Front-back ratio | 15.1 dB |
+| Sky-pointing instrument-noise floor | −12.16 dB |
+| Peak SNR vs sky-noise | **+11.4 dB** |
+| 60-s stationarity at peak | std 0.17 dB, drift 0.12 dB |
+
+The Mast C measurement is now the project's empirical anchor for the 2-5 km envelope claim. Codified in `scenarios/mast_c_reference.yaml` (commit `547a5ea`); pinned by a deterministic simulator-calibration test (commit `780195d`); cited as the load-bearing Phase C evidence on the BoTH3 slide deck (commit `34d8bc6`); formally established as the architectural anchor by ADR-014 (commit `8e919c2`, status PROPOSED).
+
+### Mast A — operator-personal disposition
+
+The 2026-05-19 Mast A recapture surfaced uncertainty in the original 2026-05-17 "multipath dominance" interpretation. Three observations: (a) the spectrum baseline shows the actual strong carrier near our 936.568 MHz target was at **936.804 MHz, +23 dB hotter**, 236 kHz off — captured in the 2.048 MS/s baseband as **in-band wideband capture**, not spectral mask leakage; (b) the multi-height sweep at 1.0 / 1.5 / 1.8 m gave 0.49 dB total swing — rules out two-ray null *only for h_tx ∈ [27, 48] m*, but h_tx was never measured; (c) V/H cross-check at the configured target frequency gave 0.25 dB drop — non-diagnostic because the configured target is below the noise floor.
+
+The L1 estimator's refusal at Mast A is still correct (no prominence above gate); the cause attribution was incorrect on day 1.
+
+**Disposition.** Operator decision: the tracked `docs/phase-c-report/findings.md` stays as the 2026-05-17 record. The corrected analysis lives in `NOTES_phase_c_amendment_2026-05-20.md` (operator-personal, gitignored). The architectural impact is captured in ADR-014 §"Subsequent measurements" without naming the Mast A re-diagnosis as a public claim. Future Mast A re-survey at the actual dominant carrier (936.804 MHz) + a clinometer-derived h_tx is procedurally documented in `NOTES_mast_a_resurvey.md` (operator-personal, gitignored).
+
+### Eleven commits (in topological order)
+
+| Commit | Item | Council |
+|---|---|---|
+| `eadc110` | ew-specialist agent profile (5th Council member, RF/EW operational lens) | — |
+| `547a5ea` | C3 — `scenarios/mast_c_reference.yaml` empirical anchor | — |
+| `868b8b1` | G7-extend — `BearingScanPanel` into `DEMO_LAYOUT_DEBUG` with polar projection | — |
+| `780195d` | C4 — `test_c4_mast_c_calibration.py` simulator calibration test | — |
+| `28d7e88` | C5 — `scenarios/trench_demo.yaml` `expected_fix:` regen from 5000-trial MC | — |
+| `ec81a8f` | demo script Beat B LOW → MEDIUM, B/C/D number refresh per C5 | — |
+| `34d8bc6` | E5+ slide deck `docs/demo/slide_deck.md` (~535 LoC, marp-compatible) | **3× APPROVE-WITH-FIXES** (EW + demo-integrity + architect; 11 fixes applied) |
+| `122036d` | Beat E preload helper — `apps/demo-replay/.../beat_e_preload.py` + CLI | **1× APPROVE-WITH-FIXES** (demo-integrity; 2 fixes applied) |
+| `b24d573` | Beat E preload — bar-chart numbers in cache + dashboard `--beat-e-cache` wiring | — |
+| `8e919c2` | ADR-014 PROPOSED — Mast C single empirical anchor for the 2-5 km envelope | — |
+
+**Test count.** 638 → 656 pass (+18 net new). Hardware-skipped 5; deselected 2.
+
+mypy strict workspace-wide clean (104 source files); ruff + format clean on all new + modified files. Pre-existing 8-file format-noise on `main` (rfmesh-dsp/l1.py, rfmesh-ops/panels/* etc.) is out of scope for this session.
+
+### What was deliberately NOT done
+
+- **`findings.md` amendment.** Per operator decision earlier in the session — the 2026-05-17 tracked record stays as-is. The corrected analysis lives only in `NOTES_phase_c_amendment_2026-05-20.md` (operator-personal). ADR-014 establishes the empirical anchor at `scenarios/mast_c_reference.yaml` without amending findings.md.
+- **`ARCHITECTURE.md` §0 edit.** ADR-014 is PROPOSED, not ACCEPTED; no binding-text change to `ARCHITECTURE.md` yet. The 2-5 km envelope claim continues to be supported by the existing tracked evidence; future Maciej-led ACCEPT of ADR-014 unblocks the §0 amendment if desired.
+- **Live hardware smoke (WS-A-008).** Still blocked on Maciej's bench session — flash WS-A-007a + WS-A-007b firmware, capture against the 3-node demo geometry.
+- **Mast A re-survey at 936.804 MHz.** Procedure documented in `NOTES_mast_a_resurvey.md`; blocked on Maciej's bench availability.
+
+### Open lead decisions
+
+1. **ADR-014 ACCEPT / REJECT.** Status PROPOSED at HEAD; Maciej-decision. If ACCEPTED, the next architectural commit can cite ADR-014 when editing `ARCHITECTURE.md` §0; if REJECTED, the Mast C anchor stays as scenario YAML + calibration test without ADR backing.
+2. **Mast A re-survey window.** When Maciej's bench is free, run `NOTES_mast_a_resurvey.md` procedure. Outcome either extends the anchor set (a second PASS at 600 m) or confirms the 2-5 km envelope on physics-other-than-two-ray (urban scatter, near-field, Fresnel obstruction at sub-1 km).
+3. **WS-A-008 bench bring-up.** Three-node bench against the trench-demo geometry. Flash WS-A-007a S2 firmware + WS-A-007b LoRa beacon first. Captures land at `recordings/2026-05-XX-ws-a-008/`. After this, ADR-013 propagation (the SCHEMA 1.1.0 → 1.2.0 bump, per the plan-proposition's Phase 2) unblocks.
+4. **Slide deck render check.** `marp` not installed in the workspace; Maciej should verify `marp docs/demo/slide_deck.md --pdf` produces a clean PDF before the BoTH3 deadline.
+
+### Deferred (carries over)
+
+- ADR-013 8-step propagation (gated on WS-A-008 smoke PASS).
+- G2 AIC/MDL source-rank detector — pure DSP, ~½ day, parked pending Maciej read on criterion choice.
+- E5 slide deck cosmetics — marp-render check + any iterative tightening after Maciej reads it.
+
