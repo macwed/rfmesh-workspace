@@ -1,7 +1,7 @@
 # ADR-014 — Mast C single empirical anchor for the 2-5 km envelope claim
 
-**Status:** PROPOSED (2026-05-20)
-**Date:** 2026-05-20
+**Status:** ACCEPTED (2026-05-20)
+**Date:** 2026-05-20 (PROPOSED), 2026-05-20 (ACCEPTED by lead)
 **Author:** lead-Opus (drafting per the 2026-05-20 council pass on the BoTH3 slide deck + the C3 / C4 / C5 ticket close-outs).
 **SCHEMA_VERSION change:** none. This ADR is documentation / architectural-rationale change-control; no contract field, enum, or wire-format byte is touched.
 
