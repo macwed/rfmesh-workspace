@@ -172,13 +172,32 @@ demo_beats:
     duration_s: 10
     active_nodes: [node-l1-west, node-l1-east]
     expected_fix:
-      semi_major_m: 589
-      semi_minor_m: 393
+      # C5 (2026-05-20) regenerated from 5000-trial MC at current
+      # geometry (emitter at (0, 3000) m ENU, west/east nodes at
+      # (-+1800, 1800) m, sigma 5 deg). Previous numbers were stale
+      # against an older emitter ENU; range_m / semi_over_range_pct
+      # were inherited from that. Per-node geometry unchanged by D4
+      # (heights 3/2 m -> 10/10 m); MC is height-agnostic.
+      semi_major_m: 598
+      semi_minor_m: 383
       orientation_deg: 0.0
-      range_m: 1200
-      semi_over_range_pct: 49.1
+      range_m: 3000
+      semi_over_range_pct: 19.9
       gdop: 1.53
-      confidence_level: LOW
+      confidence_level: MEDIUM      # NOTE: previous YAML said LOW;
+                                    # MC at current geometry +
+                                    # confidence policy emits MEDIUM
+                                    # (semi/range 19.9%, well below
+                                    # the LOW threshold). Demo
+                                    # narrative for Beat B claims
+                                    # "ellipse is wide" — pre-D4
+                                    # this was LOW. Post-D4 it's
+                                    # MEDIUM. Demo-script review
+                                    # ticket (E5+ slide-deck pass)
+                                    # to either tighten the
+                                    # narrative or adjust the
+                                    # scenario geometry to recover
+                                    # LOW.
     dashboard_caption: >
       Two posts. The cross-fix appears, but the ellipse is wide —
       two bearings only constrain the position along one axis.
@@ -191,13 +210,19 @@ demo_beats:
       - node-l1-east
       - node-l1-south
     expected_fix:
+      # C5 (2026-05-20) regenerated from 5000-trial MC.
       semi_major_m: 393
-      semi_minor_m: 357
-      orientation_deg: 90.0
-      range_m: 1500
-      semi_over_range_pct: 26.2
+      semi_minor_m: 355
+      orientation_deg: 7.3       # nearly-circular ellipse (axis
+                                 # ratio 1.10); orientation is
+                                 # statistically noisy
+                                 # (std ~80 deg). Visual orientation
+                                 # is effectively undefined here.
+      range_m: 3000
+      semi_over_range_pct: 13.1
       gdop: 1.16
-      confidence_level: MEDIUM            # see geometry doc §4
+      confidence_level: MEDIUM   # see geometry doc §4
+
     dashboard_caption: >
       Three posts. Ellipse halves. GDOP under 1.2 — the geometry is
       good. Working, not yet competition-grade.
@@ -211,17 +236,24 @@ demo_beats:
       - node-l1-south
       - node-l2-overwatch
     expected_fix:
-      semi_major_m: 359
+      # C5 (2026-05-20) regenerated from 5000-trial MC.
+      semi_major_m: 358
       semi_minor_m: 125
-      orientation_deg: -165.6
-      range_m: 1118
-      semi_over_range_pct: 32.1            # see geometry doc §4
+      orientation_deg: -165.6    # MC circular mean 14.4 deg = mod-180
+                                 # equivalent of -165.6 (an ellipse
+                                 # major axis is direction-agnostic);
+                                 # YAML retains the -165.6 form for
+                                 # demo-narrative continuity.
+      range_m: 3000
+      semi_over_range_pct: 11.9
       gdop: 1.02
       confidence_level: MEDIUM             # honest re-statement; HIGH
                                            # transition awaits the
                                            # ADR-005 amendment per
                                            # geometry doc §4 option 2
       semi_minor_m_drop_pct: 65            # the visible "shrink" beat
+                                           # 65% = (355 - 125) / 355 from
+                                           # Beat C semi_minor to Beat D semi_minor
     dashboard_caption: >
       Coherent partner-pool radio joins. Semi-minor collapses 65 %.
       It is the geometry diversity that buys the precision — not the
@@ -240,17 +272,21 @@ expected_outcomes:
 # Phase-C pessimism budget — what happens under 1.5x / 2x sigma
 # inflation (per INHERITED_CONTEXT §3.1.1). Documented here so the
 # demo replay can run a pessimism overlay if needed.
+# C5 (2026-05-20) refreshed: semi_major_m unchanged (scales linearly
+# with sigma; pre-C5 numbers were already at the right magnitude);
+# semi_over_range_pct recomputed against range_m = 3000 m (was
+# pinned to a stale older range).
 phase_c_pessimism:
   sigma_inflation_factor_1_5x:
     beat_c_semi_major_m: 589
-    beat_c_semi_over_range_pct: 39.3
+    beat_c_semi_over_range_pct: 19.6
     beat_d_semi_major_m: 538
-    beat_d_semi_over_range_pct: 48.1
+    beat_d_semi_over_range_pct: 17.9
   sigma_inflation_factor_2_0x:
     beat_c_semi_major_m: 785
-    beat_c_semi_over_range_pct: 52.4
+    beat_c_semi_over_range_pct: 26.2
     beat_d_semi_major_m: 718
-    beat_d_semi_over_range_pct: 64.2
+    beat_d_semi_over_range_pct: 23.9
 
 # Cross-references
 references:
