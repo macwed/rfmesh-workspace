@@ -136,6 +136,51 @@ class NullSteeringPanel(Panel):
             self._claimed_depth_db = claimed_depth_db
         self._render()
 
+    def set_pattern_from_arrays(
+        self,
+        azimuths_deg: npt.NDArray[np.float64],
+        gain_db: npt.NDArray[np.float64],
+        *,
+        claimed_depth_db: float | None = None,
+    ) -> None:
+        """Render a pre-computed pattern without calling ``compute_receive_pattern``.
+
+        For the demo's Beat E preload path: the operator pre-renders the
+        baseline (Beat E.0) and engaged-null (Beat E.1) patterns before
+        stage time via ``apps/demo-replay/.../beat_e_preload.py`` and
+        the dashboard loads them in < 50 ms instead of the 2-3 s the
+        full DSP path takes. The arrays come from a cached ``.npz``
+        produced by the ``rfmesh-beat-e-preload`` CLI.
+
+        Args:
+            azimuths_deg: ``(M,) float64`` azimuth scan grid.
+            gain_db: ``(M,) float64`` receive gain in dB. Must match
+                ``azimuths_deg.shape`` exactly.
+            claimed_depth_db: Optional explicit depth value for the
+                UI caption (capped at 20 dB per ADR-008 §D8). ``None``
+                means compute the look:null delta from the pattern.
+
+        Raises:
+            ValueError: If shapes don't match or arrays are empty.
+        """
+        if azimuths_deg.shape != gain_db.shape:
+            msg = (
+                f"NullSteeringPanel.set_pattern_from_arrays: "
+                f"shape mismatch — azimuths_deg {azimuths_deg.shape} "
+                f"vs gain_db {gain_db.shape}."
+            )
+            raise ValueError(msg)
+        if azimuths_deg.size == 0:
+            msg = "NullSteeringPanel.set_pattern_from_arrays: empty pattern."
+            raise ValueError(msg)
+        self._azimuths_deg = azimuths_deg.astype(np.float64)
+        self._gain_db = gain_db.astype(np.float64)
+        if claimed_depth_db is None:
+            self._claimed_depth_db = float(np.max(self._gain_db) - np.min(self._gain_db))
+        else:
+            self._claimed_depth_db = claimed_depth_db
+        self._render()
+
     def _format_depth_text(self) -> str:
         """ADR-008 §D8 cap on quoted depth in all UI text."""
         if self._claimed_depth_db is None:

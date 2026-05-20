@@ -33,6 +33,7 @@ dependencies = [
 [project.scripts]
 rfmesh-demo-replay = "rfmesh_demo_replay.cli.run_replay:run_replay_main"
 rfmesh-demo-record = "rfmesh_demo_replay.cli.run_record:run_record_main"
+rfmesh-beat-e-preload = "rfmesh_demo_replay.cli.preload_beat_e:main"
 
 [build-system]
 requires = ["hatchling"]
