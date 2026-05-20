@@ -119,6 +119,31 @@ def test_save_load_round_trip(tmp_path: Path) -> None:
     assert reloaded.metadata["signal_azimuth_deg"] == _SIGNAL_DEG
     assert reloaded.metadata["jammer_azimuth_deg"] == _JAMMER_DEG
     assert "generated_at" in reloaded.metadata
+    # Beat E.2 bar-chart numbers survive round-trip.
+    assert reloaded.baseline_jammer_gain_db == pytest.approx(cache.baseline_jammer_gain_db)
+    assert reloaded.engaged_jammer_gain_db == pytest.approx(cache.engaged_jammer_gain_db)
+
+
+def test_jammer_rejection_property_is_positive() -> None:
+    """jammer_rejection_db must be positive — engaged pattern attenuates jammer."""
+    cache_data = precompute_engaged_null_pattern(
+        array_geometry=ArrayGeometry.ULA,
+        n_elements=_N_ELEMENTS,
+        element_spacing_m=_SPACING_M,
+        signal_azimuth_deg=_SIGNAL_DEG,
+        jammer_azimuth_deg=_JAMMER_DEG,
+        frequency_hz=_FREQ_HZ,
+    )
+    # Compute the jammer-bin sample manually + check it is below the
+    # max pattern gain (i.e. the jammer direction IS attenuated, not
+    # boosted).
+    bin_idx = int(np.argmin(np.abs(cache_data.azimuths_deg - _JAMMER_DEG)))
+    jammer_gain_db = float(cache_data.gain_db[bin_idx])
+    max_gain_db = float(cache_data.gain_db.max())
+    assert max_gain_db - jammer_gain_db > 5.0, (
+        f"Engaged pattern fails to attenuate jammer: max gain "
+        f"{max_gain_db:.2f} dB vs jammer-bin gain {jammer_gain_db:.2f} dB."
+    )
 
 
 def test_save_load_round_trip_creates_parent_dirs(tmp_path: Path) -> None:

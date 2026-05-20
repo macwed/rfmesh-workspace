@@ -98,11 +98,29 @@ class BeatECache:
 
     Loaded via :func:`load_pattern_cache`. Written via
     :func:`save_pattern_cache`.
+
+    The ``baseline_jammer_gain_db`` and ``engaged_jammer_gain_db``
+    fields hold the receive gain at the configured jammer azimuth on
+    each pattern; their difference is the Beat E.2 bar-chart "jammer
+    rejection" number (capped at 20 dB per ADR-008 §D8 for UI display).
     """
 
     baseline: BeatEPattern
     engaged: BeatEPattern
     metadata: dict[str, object]
+    baseline_jammer_gain_db: float
+    engaged_jammer_gain_db: float
+
+    @property
+    def jammer_rejection_db(self) -> float:
+        """Beat E.2 bar-chart number — engaged-vs-baseline gain at the jammer azimuth.
+
+        Positive means the engaged pattern attenuates the jammer
+        direction relative to the baseline (the intended outcome). The
+        raw value is uncapped; UI display should cap at 20 dB per
+        ADR-008 §D8.
+        """
+        return float(self.baseline_jammer_gain_db - self.engaged_jammer_gain_db)
 
 
 def _build_positions(
@@ -294,6 +312,8 @@ def save_pattern_cache(
         engaged_gain_db=cache.engaged.gain_db,
         baseline_depth_db=np.asarray(cache.baseline.depth_db, dtype=np.float64),
         engaged_depth_db=np.asarray(cache.engaged.depth_db, dtype=np.float64),
+        baseline_jammer_gain_db=np.asarray(cache.baseline_jammer_gain_db, dtype=np.float64),
+        engaged_jammer_gain_db=np.asarray(cache.engaged_jammer_gain_db, dtype=np.float64),
         metadata=np.asarray(metadata_json, dtype=np.str_),
     )
 
@@ -314,6 +334,8 @@ def load_pattern_cache(path: Path | str) -> BeatECache:
         engaged_gain_db = np.asarray(data["engaged_gain_db"], dtype=np.float64)
         baseline_depth_db = float(data["baseline_depth_db"])
         engaged_depth_db = float(data["engaged_depth_db"])
+        baseline_jammer_gain_db = float(data["baseline_jammer_gain_db"])
+        engaged_jammer_gain_db = float(data["engaged_jammer_gain_db"])
         metadata_json = str(data["metadata"])
     metadata: dict[str, object] = json.loads(metadata_json)
     baseline = BeatEPattern(
@@ -326,7 +348,13 @@ def load_pattern_cache(path: Path | str) -> BeatECache:
         gain_db=engaged_gain_db,
         depth_db=engaged_depth_db,
     )
-    return BeatECache(baseline=baseline, engaged=engaged, metadata=metadata)
+    return BeatECache(
+        baseline=baseline,
+        engaged=engaged,
+        metadata=metadata,
+        baseline_jammer_gain_db=baseline_jammer_gain_db,
+        engaged_jammer_gain_db=engaged_jammer_gain_db,
+    )
 
 
 def precompute_and_save(
@@ -368,6 +396,13 @@ def precompute_and_save(
         signal_snr_db=signal_snr_db,
         jammer_to_signal_db=jammer_to_signal_db,
     )
+    # Beat E.2 bar-chart numbers — receive gain at the configured
+    # jammer azimuth on both patterns. Nearest-bin lookup is honest
+    # (sub-bin interpolation would invent precision the scan grid
+    # does not support).
+    jammer_bin_idx = int(np.argmin(np.abs(baseline.azimuths_deg - jammer_azimuth_deg)))
+    baseline_jammer_gain_db = float(baseline.gain_db[jammer_bin_idx])
+    engaged_jammer_gain_db = float(engaged.gain_db[jammer_bin_idx])
     metadata: dict[str, object] = {
         "array_geometry": array_geometry.value,
         "n_elements": n_elements,
@@ -378,8 +413,15 @@ def precompute_and_save(
         "jammer_azimuth_deg": jammer_azimuth_deg,
         "signal_snr_db": signal_snr_db,
         "jammer_to_signal_db": jammer_to_signal_db,
+        "jammer_bin_idx": jammer_bin_idx,
         "generated_at": datetime.now(UTC).isoformat(),
     }
-    cache = BeatECache(baseline=baseline, engaged=engaged, metadata=metadata)
+    cache = BeatECache(
+        baseline=baseline,
+        engaged=engaged,
+        metadata=metadata,
+        baseline_jammer_gain_db=baseline_jammer_gain_db,
+        engaged_jammer_gain_db=engaged_jammer_gain_db,
+    )
     save_pattern_cache(out_path, cache)
     return cache
