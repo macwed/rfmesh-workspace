@@ -90,4 +90,22 @@ button.ghost { background: transparent; color: var(--text); border: 1px solid va
 .legend { font-size: 11px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
 .swatch-cyan { width: 12px; height: 12px; border-radius: 3px; background: #00e5ff; opacity: .5; display: inline-block; }
 
+/* investigation panel */
+#investigation h2 { margin: 10px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+#investigation .measured { font-size: 11px; color: var(--text); margin-bottom: 6px; }
+.cands { display: flex; flex-direction: column; gap: 6px; max-height: 230px; overflow-y: auto; }
+.cand { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; cursor: pointer; }
+.cand:hover { border-color: var(--accent); }
+.cand.unknown { cursor: default; opacity: .8; }
+.cand-top { display: flex; align-items: center; gap: 6px; }
+.cand-top b { font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conf { width: 54px; height: 6px; background: #0b0e12; border-radius: 3px; overflow: hidden; flex: none; }
+.conf > span { display: block; height: 100%; background: var(--accent); }
+.pct { font-size: 11px; color: var(--muted); width: 30px; text-align: right; }
+.cand-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; align-items: center; }
+.chip-t, .chip-e, .chip-m { font-size: 10px; padding: 1px 5px; border-radius: 8px; background: #0b0e12; border: 1px solid var(--line); color: var(--text); }
+.chip-e { color: var(--muted); }
+.act { font-size: 10px; font-weight: 700; color: #04121f; padding: 1px 6px; border-radius: 8px; margin-left: auto; }
+.wall { text-align: center; font-size: 10px; color: var(--muted); letter-spacing: 1px; margin: 10px 0 4px; border-top: 1px dashed var(--line); padding-top: 6px; }
+
 .node-label { background: rgba(0,0,0,.6); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; font-size: 10px; }

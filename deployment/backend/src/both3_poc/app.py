@@ -31,6 +31,7 @@ from rfmesh_cot import CotError
 from .config import Settings
 from .cot_send import CotSender
 from .geojson import bearings_feature_collection, fixes_feature_collection
+from .inference import investigate, load_catalog
 from .posterior import PosteriorEngine, nodes_for_fix
 from .seed import load_seed_bearings, load_seed_fixes_with_freq, parse_fix_and_freq
 from .store import Store
@@ -163,7 +164,9 @@ async def send_fix(fix_id: UUID) -> dict[str, Any]:
 
 
 @app.get("/fixes/{fix_id}/posterior")
-async def get_posterior(fix_id: UUID) -> JSONResponse:
+async def get_posterior(fix_id: UUID, emitter_h: float | None = None) -> JSONResponse:
+    """RF-plausibility posterior. Optional ``emitter_h`` (m) lets the UI re-weight
+    for a selected candidate's antenna height (mast vs trench)."""
     settings = _settings(app)
     store = _store(app)
     fix = store.get_fix(fix_id)
@@ -179,10 +182,30 @@ async def get_posterior(fix_id: UUID) -> JSONResponse:
         buffer_m=settings.posterior_buffer_m,
         floor=settings.rf_shadow_floor,
         scale_db=settings.diffraction_loss_scale_db,
-        emitter_h=settings.emitter_antenna_h_m,
+        emitter_h=emitter_h if emitter_h is not None else settings.emitter_antenna_h_m,
         node_h=settings.node_antenna_h_m,
     )
     return JSONResponse(fc)
+
+
+@app.get("/fixes/{fix_id}/investigate")
+async def get_investigate(fix_id: UUID) -> JSONResponse:
+    """Ranked candidate equipment + targets + deployment for a fix (two planes:
+    measured vs inferred, with a mandatory UNKNOWN mass). See inference.py."""
+    settings = _settings(app)
+    store = _store(app)
+    fix = store.get_fix(fix_id)
+    if fix is None:
+        raise HTTPException(status_code=404, detail=f"no fix with id {fix_id}")
+    emitter_class = fix.emitter_class.value if fix.emitter_class else None
+    catalog = load_catalog(settings.equipment_catalog_file)
+    result = investigate(
+        store.freq_for(fix_id),
+        None,  # occupied_bw_hz not carried by FixEvent; reserved
+        emitter_class,
+        catalog=catalog,
+    )
+    return JSONResponse(result.as_dict())
 
 
 # Static frontend last so it does not shadow the API routes above.

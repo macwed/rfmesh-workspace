@@ -18,6 +18,7 @@ const state = {
   selected: null,
   armed: false,   // send-confirm shown inline for the selected fix
   posterior: null, // { fixId, fc } RF-plausibility for the selected fix
+  investigation: null, // { fixId, data } ranked candidates for the selected fix
   firstFit: false,
 };
 
@@ -72,16 +73,87 @@ function activeFilters() {
   };
 }
 
-async function fetchPosterior(id) {
+async function fetchPosterior(id, emitterH) {
   if (!$("#show-posterior").checked) { state.posterior = null; return; }
+  const q = emitterH != null ? `?emitter_h=${emitterH}` : "";
   try {
-    const res = await fetch(`fixes/${id}/posterior`);
+    const res = await fetch(`fixes/${id}/posterior${q}`);
     if (!res.ok) throw new Error("HTTP " + res.status);
     state.posterior = { fixId: id, fc: await res.json() };
   } catch (e) {
     state.posterior = null;
   }
   render();
+}
+
+const TARGET_ICON = {
+  gnss_gps: "🛰GPS", glonass: "🛰GLO", starlink_leo_satcom: "📡SAT", gsm_cellular: "📶GSM",
+  wifi: "📶WiFi", fpv_2g4: "🚁2.4", fpv_5g8: "🚁5.8", rc_control_link: "🎮RC",
+  droneid: "🆔DID", satcom_lband: "📡L",
+};
+const MOBILITY_GLYPH = {
+  man_portable: "🚶man-portable", vehicle: "🚚vehicle", fixed: "⚓fixed",
+  mast: "🗼mast", airborne: "✈airborne",
+};
+const ACTION_COLOR = {
+  cue_fires: "#e74c3c", ew_counter: "#e67e22", re_route: "#f1c40f",
+  avoid: "#f1c40f", cue_isr: "#4aa8ff", report: "#8a94a3",
+};
+
+async function fetchInvestigation(id) {
+  try {
+    const res = await fetch(`fixes/${id}/investigate`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    state.investigation = { fixId: id, data: await res.json() };
+  } catch (e) {
+    state.investigation = null;
+  }
+  renderInvestigation();
+}
+
+function renderInvestigation() {
+  const box = $("#investigation");
+  if (!box) return;
+  const inv = state.investigation;
+  if (!inv || inv.fixId !== state.selected || !inv.data) { box.hidden = true; return; }
+  box.hidden = false;
+  const d = inv.data;
+  const m = d.measured || {};
+  const band = m.band_name || "unknown band";
+  const mhz = m.center_freq_hz ? (m.center_freq_hz / 1e6).toFixed(1) + " MHz" : "freq n/a";
+  const cards = (d.candidates || []).map((c) => {
+    if (c.is_unknown) {
+      return `<div class="cand unknown"><div class="cand-top"><b>UNKNOWN</b>
+        <span class="conf"><span style="width:${Math.round(c.confidence*100)}%"></span></span>
+        <span class="pct">${Math.round(c.confidence*100)}%</span></div>
+        <div class="muted small">evidence insufficient for a confident ID</div></div>`;
+    }
+    const h = (c.antenna_height_class_m && c.antenna_height_class_m.typ) || null;
+    const targets = (c.targets || []).map((t) => `<span class="chip-t">${TARGET_ICON[t] || t}</span>`).join("");
+    const ev = (c.evidence || []).slice(0, 4).map((e) => `<span class="chip-e">${e}</span>`).join("");
+    const act = (c.recommended_action || "report").toUpperCase().replace(/_/g, " ");
+    const acol = ACTION_COLOR[c.recommended_action] || "#8a94a3";
+    return `<div class="cand" data-h="${h ?? ""}" title="click to re-weight RF heat for this antenna height">
+      <div class="cand-top"><b>${c.name}</b>
+        <span class="conf"><span style="width:${Math.round(c.confidence*100)}%"></span></span>
+        <span class="pct">${Math.round(c.confidence*100)}%</span></div>
+      <div class="cand-row">${targets}
+        <span class="chip-m">${MOBILITY_GLYPH[c.mobility] || c.mobility || "?"}</span>
+        ${h != null ? `<span class="chip-m">↕${h}m</span>` : ""}
+        <span class="act" style="background:${acol}">${act}${c.time_critical ? " ⏱" : ""}</span></div>
+      ${ev ? `<div class="cand-row">${ev}</div>` : ""}
+    </div>`;
+  }).join("");
+  box.innerHTML = `
+    <h2>Investigation</h2>
+    <div class="measured">measured: <b>${band}</b> · ${mhz} · <span class="muted">no dBm (uncalibrated)</span></div>
+    <div class="cands">${cards}</div>`;
+  for (const el of box.querySelectorAll(".cand[data-h]")) {
+    el.onclick = () => {
+      const h = el.getAttribute("data-h");
+      if (h && state.selected) fetchPosterior(state.selected, h);
+    };
+  }
 }
 
 function passesFilter(props, f) {
@@ -229,6 +301,7 @@ function render() {
 
   renderList(f);
   renderDetail();
+  renderInvestigation();
 
   if (!state.firstFit && state.centers.size > 0) {
     const pts = [...state.centers.values()];
@@ -263,13 +336,16 @@ function renderDetail() {
   const empty = $("#detail-empty");
   const btn = $("#send-btn");
   const confirm = $("#send-confirm");
+  const wall = $("#engage-wall");
   const p = state.selected ? state.fixes.get(state.selected) : null;
   if (!p) {
     dl.hidden = true; btn.hidden = true; confirm.hidden = true; empty.hidden = false;
+    if (wall) wall.hidden = true;
     state.armed = false;
     return;
   }
   empty.hidden = true; dl.hidden = false;
+  if (wall) wall.hidden = false;
   // arm-then-send: either the Send button OR the inline confirm, never both.
   btn.hidden = state.armed;
   confirm.hidden = !state.armed;
@@ -309,7 +385,9 @@ function selectFix(id) {
   if (id !== state.selected) {
     state.armed = false; // picking another fix defers any pending send
     state.posterior = null; // drop stale heat until the new one loads
+    state.investigation = null;
     fetchPosterior(id);     // async; re-renders when it arrives
+    fetchInvestigation(id); // async; ranked candidate panel
   }
   state.selected = id;
   const c = state.centers.get(id);
