@@ -22,9 +22,11 @@ COPY packages/rfmesh-contracts /src/rfmesh-contracts
 COPY packages/rfmesh-cot       /src/rfmesh-cot
 
 # Third-party deps first (so the local --no-deps wheels resolve against them).
+# rasterio/shapely/pyproj ship manylinux wheels bundling GDAL/GEOS/PROJ (no apt).
 RUN pip wheel --wheel-dir /wheels \
         fastapi "uvicorn[standard]" "pydantic>=2.11" "numpy>=2.1" \
-        "cryptography>=42" "pytak>=6,<7"
+        "cryptography>=42" "pytak>=6,<7" \
+        "rasterio>=1.3" "shapely>=2.0" "pyproj>=3.6"
 # Local packages: contracts then cot, --no-deps (deps already wheeled above).
 RUN pip wheel --no-deps --wheel-dir /wheels /src/rfmesh-contracts /src/rfmesh-cot
 # MGRS is display-only and may lack a wheel on some platforms; best-effort.
@@ -33,9 +35,14 @@ RUN pip wheel --wheel-dir /wheels mgrs packaging || echo "WARN: mgrs wheel unava
 
 # ---- runtime: prod image, code baked in, no source bind mounts ----
 FROM base AS runtime
+# rasterio/pyproj manylinux wheels bundle GDAL/GEOS/PROJ but still dlopen a few
+# system libs (libexpat) absent from python:slim.
+RUN apt-get update && apt-get install -y --no-install-recommends libexpat1 \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /wheels /wheels
 RUN pip install --no-index --find-links=/wheels \
-        fastapi "uvicorn[standard]" rfmesh-contracts rfmesh-cot
+        fastapi "uvicorn[standard]" rfmesh-contracts rfmesh-cot \
+        rasterio shapely pyproj
 RUN pip install --no-index --find-links=/wheels mgrs packaging \
         || echo "WARN: mgrs not installed; MGRS display disabled"
 RUN rm -rf /wheels
@@ -47,6 +54,7 @@ ENV PYTHONPATH=/app/backend/src \
 COPY deployment/backend/src  /app/backend/src
 COPY deployment/frontend     /app/frontend
 COPY deployment/backend/seed /app/seed
+COPY deployment/backend/data /app/data
 
 EXPOSE 8000
 CMD ["uvicorn", "both3_poc.app:app", "--host", "0.0.0.0", "--port", "8000"]

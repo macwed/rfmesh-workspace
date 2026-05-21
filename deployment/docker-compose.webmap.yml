@@ -1,0 +1,43 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# FreeTAKHub-WebMap OVERRIDE — the live CoT "moving map" ("what the troops see").
+#
+# The FTS admin UI (:5055) is only a dashboard; it does NOT render a marker map.
+# The marker map is THIS separate component: FreeTAKHub-WebMap. It connects to our
+# bundled FreeTAKServer's CoT TCP port (freetakserver:8087) as a client, parses the
+# live CoT XML stream, and plots each marker on a Leaflet worldmap at /tak-map.
+#
+# Bring up alongside the running stack (run from the WORKSPACE ROOT):
+#   BACKEND_HOST_PORT=8088 FTSUI_HOST_PORT=5055 \
+#   docker compose -f deployment/docker-compose.yml \
+#                  -f deployment/docker-compose.dev.yml \
+#                  -f deployment/docker-compose.webmap.yml up -d
+#
+# Then open:  http://localhost:8081/tak-map
+#
+# IMPORTANT operator caveats (full writeup in deployment/webmap/README.md):
+#   * The webmap holds NO history — a marker shows ONLY while live CoT is flowing.
+#   * Markers go stale ~30 s after a send (rfmesh-cot stale window). Re-send within
+#     30 s (curl -X POST localhost:8088/fixes/<id>/send) to keep one visible.
+#   * Keep the browser tab OPEN — the map is a live websocket view, not a snapshot.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  webmap:
+    build:
+      context: ./webmap
+      dockerfile: Dockerfile
+    image: fth-webmap:local
+    hostname: webmap
+    depends_on:
+      - freetakserver
+    # Mount our config (FTH_FTS_URL=freetakserver, CoT 8087, API 19023). The binary
+    # reads it as its single CLI arg (see the image CMD).
+    volumes:
+      - ./webmap/webMAP_config.json:/config/webMAP_config.json:ro
+    ports:
+      # Container 8000 (/tak-map) -> host 8081. NOT 8000/5678/8088/5055/8087/19023.
+      # Host 8001 is reserved for the FTS-UI iframe target; the webmap stands alone
+      # on 8081 (verified free via netstat at bring-up).
+      - "${WEBMAP_HOST_PORT:-8081}:8000"
+    networks: [both3]
+    restart: unless-stopped

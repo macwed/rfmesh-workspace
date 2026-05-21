@@ -17,6 +17,7 @@ const state = {
   bearingByNode: new Map(), // node_id -> latest node feature props
   selected: null,
   armed: false,   // send-confirm shown inline for the selected fix
+  posterior: null, // { fixId, fc } RF-plausibility for the selected fix
   firstFit: false,
 };
 
@@ -27,9 +28,17 @@ L.tileLayer(TILE_URL, {
   attribution: "© OpenStreetMap contributors",
 }).addTo(map);
 
+const posteriorLayer = L.layerGroup().addTo(map);  // under the ellipse (added first)
 const ellipseLayer = L.layerGroup().addTo(map);
 const centerLayer = L.layerGroup().addTo(map);
 const bearingLayer = L.layerGroup().addTo(map);
+
+// RF-plausibility heat: inner (higher mass) = more opaque cyan.
+const POSTERIOR_STYLE = {
+  0.5: { fillOpacity: 0.40, color: "#00e5ff", weight: 1 },
+  0.8: { fillOpacity: 0.22, color: "#00e5ff", weight: 0.8 },
+  0.95: { fillOpacity: 0.10, color: "#00e5ff", weight: 0.6 },
+};
 
 // ---- helpers ----
 const $ = (sel) => document.querySelector(sel);
@@ -59,7 +68,20 @@ function activeFilters() {
     minNodes: parseInt($("#min-nodes").value || "2", 10),
     showStale: $("#show-stale").checked,
     showBearings: $("#show-bearings").checked,
+    showPosterior: $("#show-posterior").checked,
   };
+}
+
+async function fetchPosterior(id) {
+  if (!$("#show-posterior").checked) { state.posterior = null; return; }
+  try {
+    const res = await fetch(`fixes/${id}/posterior`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    state.posterior = { fixId: id, fc: await res.json() };
+  } catch (e) {
+    state.posterior = null;
+  }
+  render();
 }
 
 function passesFilter(props, f) {
@@ -148,9 +170,18 @@ function outlierNodes(props) {
 // ---- render ----
 function render() {
   const f = activeFilters();
+  posteriorLayer.clearLayers();
   ellipseLayer.clearLayers();
   centerLayer.clearLayers();
   bearingLayer.clearLayers();
+
+  // RF-plausibility posterior (under the ellipse), for the selected fix only.
+  if (f.showPosterior && state.posterior && state.posterior.fixId === state.selected) {
+    for (const feat of state.posterior.fc.features) {
+      const st = POSTERIOR_STYLE[feat.properties.p_band] || POSTERIOR_STYLE[0.95];
+      L.geoJSON(feat, { style: { ...st, fillColor: st.color } }).addTo(posteriorLayer);
+    }
+  }
 
   // ellipses + centers
   for (const [id, props] of state.fixes) {
@@ -275,7 +306,11 @@ function renderDetail() {
 }
 
 function selectFix(id) {
-  if (id !== state.selected) state.armed = false; // picking another fix defers any pending send
+  if (id !== state.selected) {
+    state.armed = false; // picking another fix defers any pending send
+    state.posterior = null; // drop stale heat until the new one loads
+    fetchPosterior(id);     // async; re-renders when it arrives
+  }
   state.selected = id;
   const c = state.centers.get(id);
   if (c) map.panTo(c, { animate: true });
@@ -317,10 +352,14 @@ $("#confirm-cancel").onclick = disarm;
 $("#confirm-send").onclick = doSend;
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") disarm(); });
 for (const el of document.querySelectorAll(
-  "#conf-filter input, #class-filter, #min-nodes, #show-stale, #show-bearings"
+  "#conf-filter input, #class-filter, #min-nodes, #show-stale, #show-bearings, #show-posterior"
 )) {
   el.addEventListener("change", () => { state.armed = false; render(); });
 }
+$("#show-posterior").addEventListener("change", (e) => {
+  if (e.target.checked && state.selected) fetchPosterior(state.selected);
+  else { state.posterior = null; render(); }
+});
 
 async function tick() {
   await Promise.all([pollFixes(), pollBearings()]);

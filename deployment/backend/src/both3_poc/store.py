@@ -20,13 +20,26 @@ class Store:
     def __init__(self) -> None:
         self._fixes: dict[UUID, FixEvent] = {}
         self._bearings: dict[tuple[str, int], BearingReport] = {}
+        self._fix_freq: dict[UUID, float | None] = {}
         self.seeded_fix_ids: set[UUID] = set()
 
     # ----- fixes -----
-    def upsert_fix(self, fix: FixEvent, *, seeded: bool = False) -> None:
+    def upsert_fix(
+        self, fix: FixEvent, *, seeded: bool = False, center_freq_hz: float | None = None
+    ) -> None:
         self._fixes[fix.fix_id] = fix
+        self._fix_freq[fix.fix_id] = center_freq_hz
         if seeded:
             self.seeded_fix_ids.add(fix.fix_id)
+
+    def freq_for(self, fix_id: UUID) -> float | None:
+        """Observed center frequency annotation for a fix (None if unknown).
+
+        FixEvent (frozen contract) has no frequency field, so the deployment
+        carries it as a side annotation, populated from the seed file's
+        ``center_freq_hz`` or the ingest payload.
+        """
+        return self._fix_freq.get(fix_id)
 
     def get_fix(self, fix_id: UUID) -> FixEvent | None:
         return self._fixes.get(fix_id)

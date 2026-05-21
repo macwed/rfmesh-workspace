@@ -100,6 +100,31 @@ def parse_fix(d: dict[str, Any]) -> FixEvent:
     return _flat_to_fix_event(d)
 
 
+def split_freq(rec: dict[str, Any]) -> tuple[dict[str, Any], float | None]:
+    """Pop the deployment-local ``center_freq_hz`` annotation off a fix record.
+
+    FixEvent has ``extra="forbid"``, so a nested payload carrying center_freq_hz
+    would be rejected — strip it before validation and return it separately.
+    """
+    rec = dict(rec)
+    raw = rec.pop("center_freq_hz", None)
+    return rec, (float(raw) if raw is not None else None)
+
+
+def parse_fix_and_freq(rec: dict[str, Any]) -> tuple[FixEvent, float | None]:
+    body, freq = split_freq(rec)
+    return parse_fix(body), freq
+
+
+def load_seed_fixes_with_freq(path: Path) -> list[tuple[FixEvent, float | None]]:
+    """Load demo fixes as (FixEvent, center_freq_hz) pairs. [] if file missing."""
+    if not path.exists():
+        return []
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    records = raw if isinstance(raw, list) else [raw]
+    return [parse_fix_and_freq(r) for r in records]
+
+
 def load_seed_fixes(path: Path) -> list[FixEvent]:
     """Load and parse the demo fixes seed file. Returns [] if the file is missing."""
     if not path.exists():

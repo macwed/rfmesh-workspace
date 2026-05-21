@@ -87,4 +87,7 @@ button.ghost { background: transparent; color: var(--text); border: 1px solid va
 .toast.ok { border-left: 3px solid var(--high); }
 .toast.err { border-left: 3px solid var(--low); }
 
+.legend { font-size: 11px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
+.swatch-cyan { width: 12px; height: 12px; border-radius: 3px; background: #00e5ff; opacity: .5; display: inline-block; }
+
 .node-label { background: rgba(0,0,0,.6); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; font-size: 10px; }

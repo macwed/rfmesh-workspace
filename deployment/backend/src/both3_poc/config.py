@@ -32,6 +32,16 @@ class Settings:
     cors_allow_origins: list[str]
     frontend_dir: Path
     lob_length_m: float
+    # ---- Phase 1: grid-posterior RF-shadow ----
+    dem_file: Path
+    posterior_cell_m: float
+    posterior_buffer_m: float
+    rf_shadow_floor: float
+    diffraction_loss_scale_db: float
+    emitter_antenna_h_m: float
+    node_antenna_h_m: float
+    # ---- Phase 2: emitter investigation ----
+    equipment_catalog_file: Path
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -50,4 +60,14 @@ class Settings:
             cors_allow_origins=[o.strip() for o in origins.split(",") if o.strip()],
             frontend_dir=Path(os.environ.get("FRONTEND_DIR", "/app/frontend")),
             lob_length_m=float(os.environ.get("LOB_LENGTH_M", "6000")),
+            dem_file=Path(os.environ.get("DEM_FILE", "/app/data/dem_aoi.tif")),
+            posterior_cell_m=float(os.environ.get("POSTERIOR_CELL_M", "60")),
+            posterior_buffer_m=float(os.environ.get("POSTERIOR_BUFFER_M", "800")),
+            rf_shadow_floor=float(os.environ.get("RF_SHADOW_FLOOR", "0.15")),
+            diffraction_loss_scale_db=float(os.environ.get("DIFFRACTION_LOSS_SCALE_DB", "25")),
+            emitter_antenna_h_m=float(os.environ.get("EMITTER_ANTENNA_H_M", "2.0")),
+            node_antenna_h_m=float(os.environ.get("NODE_ANTENNA_H_M", "3.0")),
+            equipment_catalog_file=Path(
+                os.environ.get("EQUIPMENT_CATALOG_FILE", "/app/data/equipment_catalog.json")
+            ),
         )

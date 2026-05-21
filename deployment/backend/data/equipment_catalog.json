@@ -1,0 +1,2374 @@
+{
+  "band_gate": {
+    "gnss_l1_gps_glonass": {
+      "hz": [
+        [
+          1559000000,
+          1610500000
+        ]
+      ],
+      "multi_use": true,
+      "plausible_systems": [
+        "GPS L1 C/A/E1-like GNSS",
+        "GLONASS L1",
+        "GNSS jammer",
+        "GNSS spoofer",
+        "Pole-21",
+        "R-330Zh Zhitel",
+        "generic C-UAS jammer"
+      ],
+      "targets": [
+        "gnss_gps",
+        "glonass"
+      ],
+      "notes": "Uncalibrated SDRs should treat raised noise, swept tones, or coherent GNSS-like replicas differently. GLONASS L1 spans around 1598-1609 MHz, while GPS L1 is centered at 1575.42 MHz.",
+      "sources": [
+        {
+          "url": "https://inertiallabs.com/frequencies-and-signals-for-gnss/",
+          "quality": "B"
+        },
+        {
+          "url": "https://roe.ru/pdfs/pdf_2066.pdf",
+          "quality": "A"
+        },
+        {
+          "url": "https://www.mdpi.com/1424-8220/20/3/814",
+          "quality": "A"
+        }
+      ]
+    },
+    "gsm_cellular_800_960": {
+      "hz": [
+        [
+          824000000,
+          960000000
+        ]
+      ],
+      "multi_use": true,
+      "plausible_systems": [
+        "GSM/LTE/NR cellular infrastructure",
+        "mobile handsets",
+        "R-330Zh Zhitel",
+        "cellular jammer",
+        "IMSI-catcher/fake base station",
+        "Volnorez-like sub-GHz C-UAS jammer",
+        "ELRS/Crossfire near 868/915 MHz"
+      ],
+      "targets": [
+        "gsm_cellular",
+        "rc_control_link"
+      ],
+      "notes": "Cellular, ISM/RC, and drone-jammer signatures overlap in this region. Raster, duplex pairing, and burst framing are critical discriminators.",
+      "sources": [
+        {
+          "url": "https://atisorg.s3.amazonaws.com/archive/3gpp-documents/Rel99-14/ATIS.3GPP.51.021.V9100-2014.pdf",
+          "quality": "A"
+        },
+        {
+          "url": "https://team-blacksheep.freshdesk.com/support/solutions/articles/4000134179-crossfire-band-range",
+          "quality": "A"
+        },
+        {
+          "url": "https://euromaidanpress.com/2024/08/15/ukraine-seizes-russian-volnorez-anti-drone-ew-system-with-docs-in-kursk-oblast/",
+          "quality": "B"
+        }
+      ]
+    },
+    "gsm_cellular_1800_1900": {
+      "hz": [
+        [
+          1710000000,
+          1990000000
+        ]
+      ],
+      "multi_use": true,
+      "plausible_systems": [
+        "GSM-1800",
+        "PCS/GSM-1900",
+        "LTE/NR cellular",
+        "R-330Zh Zhitel",
+        "cellular jammer",
+        "Borisoglebsk-2 wideband EW"
+      ],
+      "targets": [
+        "gsm_cellular"
+      ],
+      "notes": "Likely cellular if OFDM/GSM raster and duplex pairing are visible; likely jammer if broad noise or swept carriers blanket multiple paired allocations.",
+      "sources": [
+        {
+          "url": "https://atisorg.s3.amazonaws.com/archive/3gpp-documents/Rel99-14/ATIS.3GPP.51.021.V9100-2014.pdf",
+          "quality": "A"
+        },
+        {
+          "url": "https://roe.ru/pdfs/pdf_2066.pdf",
+          "quality": "A"
+        }
+      ]
+    },
+    "ism_433": {
+      "hz": [
+        [
+          433050000,
+          434790000
+        ]
+      ],
+      "multi_use": true,
+      "plausible_systems": [
+        "low-power ISM telemetry",
+        "garage/weather/sensor devices",
+        "legacy long-range RC",
+        "generic sub-GHz C-UAS jammer",
+        "Volnorez claimed 390-510 MHz band"
+      ],
+      "targets": [
+        "rc_control_link"
+      ],
+      "notes": "Very high false-positive band. Short OOK/FSK bursts are usually civilian ISM; sustained barrage noise suggests jammer.",
+      "sources": [
+        {
+          "url": "https://euromaidanpress.com/2024/08/15/ukraine-seizes-russian-volnorez-anti-drone-ew-system-with-docs-in-kursk-oblast/",
+          "quality": "B"
+        }
+      ]
+    },
+    "ism_868_915": {
+      "hz": [
+        [
+          863000000,
+          928000000
+        ]
+      ],
+      "multi_use": true,
+      "plausible_systems": [
+        "ELRS 868/915",
+        "TBS Crossfire",
+        "LoRa/LoRaWAN",
+        "FSK telemetry",
+        "ISM sensors",
+        "generic FPV control link",
+        "Volnorez",
+        "trench C-UAS jammer"
+      ],
+      "targets": [
+        "rc_control_link"
+      ],
+      "notes": "Hop/chirp structure helps separate ELRS/Crossfire/LoRa from broadband jammers and civilian LoRaWAN.",
+      "sources": [
+        {
+          "url": "https://www.expresslrs.org/",
+          "quality": "A"
+        },
+        {
+          "url": "https://team-blacksheep.freshdesk.com/support/solutions/articles/4000134179-crossfire-band-range",
+          "quality": "A"
+        },
+        {
+          "url": "https://www.semtech.com/products/wireless-rf/lora-plus",
+          "quality": "A"
+        }
+      ]
+    },
+    "wifi_bt_rc_fpv_2g4": {
+      "hz": [
+        [
+          2400000000,
+          2483500000
+        ]
+      ],
+      "multi_use": true,
+      "plausible_systems": [
+        "Wi-Fi",
+        "Bluetooth",
+        "Zigbee",
+        "ELRS 2.4",
+        "ImmersionRC Ghost",
+        "DJI OcuSync/Lightbridge",
+        "DJI DroneID",
+        "2.4 GHz FPV/control jammer"
+      ],
+      "targets": [
+        "wifi",
+        "fpv_2g4",
+        "rc_control_link",
+        "droneid"
+      ],
+      "notes": "This is a dense shared band. OFDM channel width points to Wi-Fi/DJI; LoRa/FLRC/FHSS points to RC control; broadband noise points to jammer.",
+      "sources": [
+        {
+          "url": "https://www.law.cornell.edu/cfr/text/47/15.249",
+          "quality": "A"
+        },
+        {
+          "url": "https://developer.dji.com/api-reference/android-api/Components/OcuSyncLink/DJIOcuSyncLink.html",
+          "quality": "A"
+        },
+        {
+          "url": "https://www.mdpi.com/1424-8220/23/17/7650",
+          "quality": "A"
+        }
+      ]
+    },
+    "wifi_fpv_5g8": {
+      "hz": [
+        [
+          5150000000,
+          5875000000
+        ]
+      ],
+      "multi_use": true,
+      "plausible_systems": [
+        "5 GHz Wi-Fi",
+        "5.8 GHz analog FPV video",
+        "DJI/Avatar/HDZero digital FPV",
+        "DJI OcuSync",
+        "DJI DroneID",
+        "5.8 GHz C-UAS jammer"
+      ],
+      "targets": [
+        "wifi",
+        "fpv_5g8",
+        "droneid"
+      ],
+      "notes": "Analog FPV is usually fixed-channel wide FM-like video around 5.6-5.9 GHz; digital FPV/Wi-Fi use OFDM-like channels. 5.8 GHz is also a common jammer band.",
+      "sources": [
+        {
+          "url": "https://www.law.cornell.edu/cfr/text/47/15.249",
+          "quality": "A"
+        },
+        {
+          "url": "https://oscarliang.com/fpv-channels/",
+          "quality": "B"
+        },
+        {
+          "url": "https://www.mdpi.com/1424-8220/23/17/7650",
+          "quality": "A"
+        }
+      ]
+    },
+    "starlink_leo_satcom_ku": {
+      "hz": [
+        [
+          10700000000,
+          12750000000
+        ],
+        [
+          12750000000,
+          13250000000
+        ],
+        [
+          14000000000,
+          14500000000
+        ]
+      ],
+      "multi_use": true,
+      "plausible_systems": [
+        "Starlink user terminal downlink/uplink",
+        "other Ku-band FSS/VSAT",
+        "Kalinka/Borshchevik-like Starlink locator",
+        "satellite TV downlink"
+      ],
+      "targets": [
+        "starlink_leo_satcom"
+      ],
+      "notes": "Terminal uplink is directional and in Ku-band; downlink may be satellite-origin rather than terminal-origin. Starlink attribution requires timing/channel behavior, direction/elevation, and local terminal Wi-Fi correlation.",
+      "sources": [
+        {
+          "url": "https://docs.fcc.gov/public/attachments/FCC-22-91A1_Rcd.pdf",
+          "quality": "A"
+        },
+        {
+          "url": "https://www.starlink.com/legal/documents/DOC-1411-27322-59",
+          "quality": "A"
+        },
+        {
+          "url": "https://arxiv.org/abs/2210.11578",
+          "quality": "A"
+        }
+      ]
+    },
+    "satcom_lband_inmarsat_iridium": {
+      "hz": [
+        [
+          1525000000,
+          1559000000
+        ],
+        [
+          1616000000,
+          1660500000
+        ]
+      ],
+      "multi_use": true,
+      "plausible_systems": [
+        "Inmarsat BGAN/FleetBroadband/Classic Aero",
+        "Iridium handset/Certus",
+        "R-330Zh Zhitel",
+        "L-band satcom jammer",
+        "GNSS-adjacent interference"
+      ],
+      "targets": [
+        "satcom_lband"
+      ],
+      "notes": "Inmarsat downlink is near 1525-1559 MHz, uplink near 1626.5-1660.5 MHz; Iridium occupies about 1616-1626.5 MHz. Adjacent GNSS/GLONASS observations can confound.",
+      "sources": [
+        {
+          "url": "https://www.law.cornell.edu/cfr/text/47/25.202",
+          "quality": "A"
+        },
+        {
+          "url": "https://www.everythingrf.com/community/what-frequency-does-the-iridium-satellite-system-use",
+          "quality": "B"
+        },
+        {
+          "url": "https://roe.ru/pdfs/pdf_2066.pdf",
+          "quality": "A"
+        }
+      ]
+    }
+  },
+  "equipment": [
+    {
+      "id": "ru_pole21_gnss_jammer",
+      "name": "Pole-21 / Pole-21E GNSS electronic countermeasures system",
+      "aka": [
+        "Polye-21",
+        "Field-21",
+        "Pole-21E"
+      ],
+      "country_origin": "Russia",
+      "role": "jammer",
+      "bands_hz": [
+        [
+          1176450000,
+          1610500000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 20000000,
+        "range": [
+          2000000,
+          80000000
+        ]
+      },
+      "waveform": [
+        "barrage_noise",
+        "spot_cw",
+        "swept_cw"
+      ],
+      "targets": [
+        "gnss_gps",
+        "glonass"
+      ],
+      "mobility": "fixed",
+      "antenna_type": "distributed mast/tower-mounted GNSS jamming modules, likely omnidirectional or sector antennas",
+      "antenna_height_class_m": {
+        "min": 10,
+        "typ": 30,
+        "max": 80
+      },
+      "erp_class": "high",
+      "signatures": {
+        "hop": {
+          "present": false,
+          "rate_hz": null,
+          "span_hz": null
+        },
+        "duty_cycle": "often continuous when active",
+        "modulation": [
+          "noise",
+          "cw",
+          "sweep"
+        ],
+        "channel_raster_hz": null,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "GNSS-only or GNSS-dominant interference",
+        "fixed or infrastructure-height emitter",
+        "may affect GPS, GLONASS, Galileo, and BeiDou-adjacent L-band together",
+        "no cellular duplex raster"
+      ],
+      "confounders": [
+        "generic GNSS jammer",
+        "GNSS spoofer with high noise floor",
+        "unintentional L-band interference",
+        "R-330Zh Zhitel operating on GNSS bands"
+      ],
+      "recommended_action": "report",
+      "time_critical": true,
+      "confidence_prior": 0.72,
+      "sources": [
+        {
+          "url": "https://www.armyrecognition.com/archives/archives-land-defense/land-defense-2016/pole-21-electronic-countermeasures-system-to-enter-in-service-with-russian-armed-forces-tass-11310161",
+          "type": "news",
+          "quality": "B",
+          "date": "2016-11-13"
+        },
+        {
+          "url": "https://tass.com/defense/1661283",
+          "type": "news",
+          "quality": "B",
+          "date": "2023-08-18"
+        },
+        {
+          "url": "https://www.armyupress.army.mil/Portals/7/military-review/Archives/English/so25/TOC/SO25-MR-ENG-UA1.pdf",
+          "type": "osint",
+          "quality": "B",
+          "date": "2025-09-01"
+        }
+      ]
+    },
+    {
+      "id": "ru_r330zh_zhitel",
+      "name": "R-330Zh Zhitel automated satellite/cellular/navigation jamming station",
+      "aka": [
+        "Zhitel",
+        "R-330ZH",
+        "R-330Zh",
+        "Jitel"
+      ],
+      "country_origin": "Russia",
+      "role": "jammer",
+      "bands_hz": [
+        [
+          100000000,
+          2000000000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 20000000,
+        "range": [
+          1000000,
+          400000000
+        ]
+      },
+      "waveform": [
+        "barrage_noise",
+        "swept_cw",
+        "spot_cw"
+      ],
+      "targets": [
+        "gnss_gps",
+        "satcom_lband",
+        "gsm_cellular",
+        "glonass"
+      ],
+      "mobility": "vehicle",
+      "antenna_type": "truck/trailer-mounted mast with multiple directional and omnidirectional antennas",
+      "antenna_height_class_m": {
+        "min": 3,
+        "typ": 10,
+        "max": 20
+      },
+      "erp_class": "very_high",
+      "signatures": {
+        "hop": {
+          "present": false,
+          "rate_hz": null,
+          "span_hz": null
+        },
+        "duty_cycle": "continuous or mission-window continuous",
+        "modulation": [
+          "noise",
+          "cw",
+          "sweep"
+        ],
+        "channel_raster_hz": null,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "broad 100 MHz-2 GHz threat envelope",
+        "known focus on GPS/NAVSTAR, Inmarsat, Iridium, and GSM",
+        "vehicle/trailer deployment rather than fixed tower",
+        "may combine DF/recon behavior with active jamming"
+      ],
+      "confounders": [
+        "Pole-21 on GNSS-only tasks",
+        "generic L-band satcom jammer",
+        "cellular jammer",
+        "Borisoglebsk-2 wideband EW"
+      ],
+      "recommended_action": "ew_counter",
+      "time_critical": true,
+      "confidence_prior": 0.82,
+      "sources": [
+        {
+          "url": "https://roe.ru/pdfs/pdf_2066.pdf",
+          "type": "vendor",
+          "quality": "A",
+          "date": "2024-01-01"
+        },
+        {
+          "url": "https://www.rusi.org/explore-our-research/publications/commentary/jamming-jdam-threat-us-munitions-russian-electronic-warfare",
+          "type": "osint",
+          "quality": "A",
+          "date": "2023-06-06"
+        },
+        {
+          "url": "https://www.janes.com/defence-intelligence-insights/defence-news-details/c4isr/ukraine-conflict-ukraine-destroys-key-russian-ew-system",
+          "type": "news",
+          "quality": "A",
+          "date": "2023-01-01"
+        }
+      ]
+    },
+    {
+      "id": "ru_borisoglebsk2_rb301b",
+      "name": "RB-301B Borisoglebsk-2 multifunction EW complex",
+      "aka": [
+        "Borisoglebsk-2",
+        "RB-301B",
+        "R-330KMV complex"
+      ],
+      "country_origin": "Russia",
+      "role": "jammer",
+      "bands_hz": [
+        [
+          3000000,
+          3000000000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 25000000,
+        "range": [
+          100000,
+          100000000
+        ]
+      },
+      "waveform": [
+        "barrage_noise",
+        "spot_cw",
+        "swept_cw"
+      ],
+      "targets": [
+        "gsm_cellular",
+        "rc_control_link",
+        "gnss_gps"
+      ],
+      "mobility": "vehicle",
+      "antenna_type": "tracked MT-LBu family vehicles with mast/whip/log-periodic antennas across HF/VHF/UHF",
+      "antenna_height_class_m": {
+        "min": 2,
+        "typ": 8,
+        "max": 15
+      },
+      "erp_class": "high",
+      "signatures": {
+        "hop": {
+          "present": false,
+          "rate_hz": null,
+          "span_hz": null
+        },
+        "duty_cycle": "intermittent to continuous by mission",
+        "modulation": [
+          "noise",
+          "cw",
+          "sweep"
+        ],
+        "channel_raster_hz": null,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "multi-vehicle complex",
+        "tactical-radio focus more than pure GNSS",
+        "can affect fixed-frequency and frequency-hopping radio links per OSINT claims",
+        "broad low-to-UHF coverage"
+      ],
+      "confounders": [
+        "R-330Zh",
+        "generic tactical comms jammer",
+        "cellular jammer",
+        "friendly high-power VHF/UHF networks"
+      ],
+      "recommended_action": "report",
+      "time_critical": true,
+      "confidence_prior": 0.63,
+      "sources": [
+        {
+          "url": "https://en.topwar.ru/112501-v-zvo-postupil-kompleks-reb-borisoglebsk-2.html",
+          "type": "news",
+          "quality": "C",
+          "date": "2017-04-04"
+        },
+        {
+          "url": "https://www.rand.org/content/dam/rand/pubs/research_reports/RRA2100/RRA2125-1/RAND_RRA2125-1.pdf",
+          "type": "osint",
+          "quality": "A",
+          "date": "2024-01-01"
+        },
+        {
+          "url": "https://www.armyupress.army.mil/Portals/7/military-review/Archives/English/so25/TOC/SO25-MR-ENG-UA1.pdf",
+          "type": "osint",
+          "quality": "B",
+          "date": "2025-09-01"
+        }
+      ]
+    },
+    {
+      "id": "ru_rb636_svetku",
+      "name": "RB-636AM2 Svet-KU electronic reconnaissance / technical-control complex",
+      "aka": [
+        "Svet-KU",
+        "RB-636",
+        "RB-636AM2"
+      ],
+      "country_origin": "Russia",
+      "role": "df",
+      "bands_hz": [
+        [
+          30000000,
+          18000000000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 0,
+        "range": [
+          0,
+          0
+        ]
+      },
+      "waveform": [],
+      "targets": [
+        "gsm_cellular",
+        "wifi",
+        "fpv_2g4",
+        "fpv_5g8",
+        "rc_control_link",
+        "droneid",
+        "starlink_leo_satcom"
+      ],
+      "mobility": "vehicle",
+      "antenna_type": "vehicle-mounted multi-band DF/ESM antenna suite",
+      "antenna_height_class_m": {
+        "min": 2,
+        "typ": 8,
+        "max": 15
+      },
+      "erp_class": "low",
+      "signatures": {
+        "hop": {
+          "present": false,
+          "rate_hz": null,
+          "span_hz": null
+        },
+        "duty_cycle": "passive receiver; no target-band emission expected",
+        "modulation": [],
+        "channel_raster_hz": null,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "should not be inferred from target-band jamming alone",
+        "30 MHz-18 GHz receive/DF coverage reported",
+        "associated with locating emitters and cueing suppressors rather than being the suppressor itself"
+      ],
+      "confounders": [
+        "any passive RF survey vehicle",
+        "spectrum-monitoring van",
+        "communications command vehicle",
+        "active jammer colocated nearby"
+      ],
+      "recommended_action": "report",
+      "time_critical": false,
+      "confidence_prior": 0.58,
+      "sources": [
+        {
+          "url": "https://xn--b1agacl3aeas4a.xn--p1ai/armament/rb-636-svet-ku/",
+          "type": "osint",
+          "quality": "B",
+          "date": "2026-05-01"
+        },
+        {
+          "url": "https://en.topwar.ru/84389-den-innovaciy-yuvo-kompleks-reb-rb-636am2-svet-ku.html",
+          "type": "news",
+          "quality": "C",
+          "date": "2015-10-14"
+        },
+        {
+          "url": "https://www.osce.org/files/f/documents/e/2/252866.pdf",
+          "type": "osint",
+          "quality": "B",
+          "date": "2016-06-01"
+        }
+      ]
+    },
+    {
+      "id": "ru_volnorez_vehicle_cuas",
+      "name": "Volnorez vehicle-mounted counter-FPV jammer",
+      "aka": [
+        "Breakwater",
+        "Volnorez",
+        "Волнорез"
+      ],
+      "country_origin": "Russia",
+      "role": "jammer",
+      "bands_hz": [
+        [
+          390000000,
+          510000000
+        ],
+        [
+          750000000,
+          1050000000
+        ],
+        [
+          2400000000,
+          2483500000
+        ],
+        [
+          5725000000,
+          5875000000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 20000000,
+        "range": [
+          10000000,
+          300000000
+        ]
+      },
+      "waveform": [
+        "barrage_noise",
+        "spot_cw"
+      ],
+      "targets": [
+        "rc_control_link",
+        "fpv_2g4",
+        "fpv_5g8",
+        "gnss_gps",
+        "glonass"
+      ],
+      "mobility": "vehicle",
+      "antenna_type": "compact magnetic/bolt-on dome or panel modules on armor/vehicles",
+      "antenna_height_class_m": {
+        "min": 1,
+        "typ": 2.5,
+        "max": 5
+      },
+      "erp_class": "medium",
+      "signatures": {
+        "hop": {
+          "present": false,
+          "rate_hz": null,
+          "span_hz": null
+        },
+        "duty_cycle": "continuous while vehicle protection is active",
+        "modulation": [
+          "noise"
+        ],
+        "channel_raster_hz": null,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "short-range vehicle self-protection profile",
+        "sub-GHz FPV control bands more diagnostic than GNSS alone",
+        "multiple separate modules may appear as several simultaneous noisy bands",
+        "low antenna height compared with mast systems"
+      ],
+      "confounders": [
+        "generic trench jammer",
+        "civilian ISM interference",
+        "other vehicle-mounted C-UAS domes",
+        "friendly drone-defense jammer"
+      ],
+      "recommended_action": "avoid",
+      "time_critical": true,
+      "confidence_prior": 0.56,
+      "sources": [
+        {
+          "url": "https://euromaidanpress.com/2024/08/15/ukraine-seizes-russian-volnorez-anti-drone-ew-system-with-docs-in-kursk-oblast/",
+          "type": "news",
+          "quality": "B",
+          "date": "2024-08-15"
+        },
+        {
+          "url": "https://www.unmannedairspace.info/counter-uas-systems-and-policies/russian-c-uas-tech-captured-by-ukrainian-military/",
+          "type": "osint",
+          "quality": "B",
+          "date": "2024-08-15"
+        },
+        {
+          "url": "https://www.forbes.com/sites/davidhambling/2024/04/09/russias-monster-jammer-tank-was-supposed-to-stop-all-drones-it-didnt/",
+          "type": "news",
+          "quality": "B",
+          "date": "2024-04-09"
+        }
+      ]
+    },
+    {
+      "id": "ru_kalinka_starlink_locator",
+      "name": "Kalinka Starlink/UAV satellite-link monitoring system",
+      "aka": [
+        "Kalinka",
+        "Starlink locator",
+        "Starlink monitoring system"
+      ],
+      "country_origin": "Russia",
+      "role": "recon",
+      "bands_hz": [
+        [
+          10700000000,
+          12750000000
+        ],
+        [
+          14000000000,
+          14500000000
+        ],
+        [
+          2400000000,
+          2483500000
+        ],
+        [
+          5150000000,
+          5875000000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 0,
+        "range": [
+          0,
+          0
+        ]
+      },
+      "waveform": [],
+      "targets": [
+        "starlink_leo_satcom",
+        "wifi"
+      ],
+      "mobility": "vehicle",
+      "antenna_type": "reported RF monitoring/locator antennas; exact antenna not publicly confirmed",
+      "antenna_height_class_m": {
+        "min": 1,
+        "typ": 3,
+        "max": 12
+      },
+      "erp_class": "low",
+      "signatures": {
+        "hop": {
+          "present": false,
+          "rate_hz": null,
+          "span_hz": null
+        },
+        "duty_cycle": "passive receiver or low-duty support links; public emission signature not confirmed",
+        "modulation": [],
+        "channel_raster_hz": null,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "public reporting frames it as detector/locator, not jammer",
+        "Starlink Ku-band plus possible local terminal Wi-Fi correlation",
+        "claims remain less technically documented than Zhitel or Starlink FCC filings"
+      ],
+      "confounders": [
+        "Ku-band spectrum monitor",
+        "Starlink terminal itself",
+        "other VSAT terminal locator",
+        "civilian satellite monitoring gear"
+      ],
+      "recommended_action": "report",
+      "time_critical": false,
+      "confidence_prior": 0.34,
+      "sources": [
+        {
+          "url": "https://newsukraine.rbc.ua/news/russia-develops-new-kalinka-monitoring-system-1734227856.html",
+          "type": "news",
+          "quality": "B",
+          "date": "2024-12-15"
+        },
+        {
+          "url": "https://en.topwar.ru/255724-v-rossii-razrabotali-sistemu-kalinka-dlja-monitoringa-signalov-starlink.html",
+          "type": "news",
+          "quality": "C",
+          "date": "2024-12-01"
+        },
+        {
+          "url": "https://www.euronews.com/my-europe/2026/02/03/fact-check-is-elon-musk-allowing-russia-to-use-starlink",
+          "type": "news",
+          "quality": "B",
+          "date": "2026-02-03"
+        }
+      ]
+    },
+    {
+      "id": "generic_gnss_l1_jammer",
+      "name": "Generic GNSS L1/G1 jammer",
+      "aka": [
+        "GPS jammer",
+        "GNSS jammer",
+        "L1 jammer",
+        "chirp jammer"
+      ],
+      "country_origin": "unknown",
+      "role": "jammer",
+      "bands_hz": [
+        [
+          1560000000,
+          1610000000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 12000000,
+        "range": [
+          100000,
+          60000000
+        ]
+      },
+      "waveform": [
+        "swept_cw",
+        "barrage_noise",
+        "spot_cw"
+      ],
+      "targets": [
+        "gnss_gps",
+        "glonass"
+      ],
+      "mobility": "man_portable",
+      "antenna_type": "small whip, patch, or magnetic-mount L-band antenna",
+      "antenna_height_class_m": {
+        "min": 0.5,
+        "typ": 1.5,
+        "max": 5
+      },
+      "erp_class": "low",
+      "signatures": {
+        "hop": {
+          "present": false,
+          "rate_hz": null,
+          "span_hz": null
+        },
+        "duty_cycle": "continuous or vehicle-powered intermittent",
+        "modulation": [
+          "linear_chirp",
+          "cw",
+          "noise"
+        ],
+        "channel_raster_hz": null,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "swept tone across GPS L1/Galileo E1 and sometimes GLONASS G1",
+        "no valid GNSS navigation data correlation",
+        "often narrow hardware-stable sweep repetition",
+        "low antenna height and localized footprint"
+      ],
+      "confounders": [
+        "Pole-21",
+        "R-330Zh",
+        "GNSS spoofer carry-off phase",
+        "unintentional L-band electronics noise"
+      ],
+      "recommended_action": "report",
+      "time_critical": true,
+      "confidence_prior": 0.88,
+      "sources": [
+        {
+          "url": "https://www.cambridge.org/core/journals/journal-of-navigation/article/gnss-jamming-resilience-for-close-to-shore-navigation-in-the-northern-sea/D4977ABD73B9C2E3B3E1E19EFCCDFDE0",
+          "type": "academic",
+          "quality": "A",
+          "date": "2016-09-01"
+        },
+        {
+          "url": "https://www.mdpi.com/1424-8220/20/3/814",
+          "type": "academic",
+          "quality": "A",
+          "date": "2020-02-01"
+        },
+        {
+          "url": "https://insidegnss.com/listening-for-rf-noise/",
+          "type": "measured",
+          "quality": "B",
+          "date": "2014-01-01"
+        }
+      ]
+    },
+    {
+      "id": "generic_gnss_l1_spoofer",
+      "name": "Generic civilian GNSS L1 spoofer/meaconer",
+      "aka": [
+        "GPS spoofer",
+        "GNSS spoofer",
+        "meaconer",
+        "carry-off spoofer"
+      ],
+      "country_origin": "unknown",
+      "role": "spoofer",
+      "bands_hz": [
+        [
+          1560000000,
+          1610000000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 2046000,
+        "range": [
+          1000000,
+          20000000
+        ]
+      },
+      "waveform": [
+        "gnss_like_dsss"
+      ],
+      "targets": [
+        "gnss_gps",
+        "glonass"
+      ],
+      "mobility": "man_portable",
+      "antenna_type": "L-band patch or active GNSS-style transmit antenna",
+      "antenna_height_class_m": {
+        "min": 0.5,
+        "typ": 2,
+        "max": 10
+      },
+      "erp_class": "low",
+      "signatures": {
+        "hop": {
+          "present": false,
+          "rate_hz": null,
+          "span_hz": null
+        },
+        "duty_cycle": "continuous during attack",
+        "modulation": [
+          "dsss",
+          "gnss_navigation_like"
+        ],
+        "channel_raster_hz": null,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "GNSS-like spread-spectrum structure rather than simple noise",
+        "may show multiple correlation peaks or coherent power increase",
+        "navigation solution anomalies without proportionate broadband noise rise"
+      ],
+      "confounders": [
+        "authentic GNSS satellite signals",
+        "multipath",
+        "meaconing replay",
+        "GNSS simulator in test range"
+      ],
+      "recommended_action": "report",
+      "time_critical": true,
+      "confidence_prior": 0.62,
+      "sources": [
+        {
+          "url": "https://satellite-navigation.springeropen.com/articles/10.1186/s43020-023-00094-6",
+          "type": "academic",
+          "quality": "A",
+          "date": "2023-03-01"
+        },
+        {
+          "url": "https://www.mdpi.com/1424-8220/24/13/4210",
+          "type": "academic",
+          "quality": "A",
+          "date": "2024-07-01"
+        },
+        {
+          "url": "https://www.mdpi.com/2079-9292/11/5/738",
+          "type": "academic",
+          "quality": "A",
+          "date": "2022-03-01"
+        }
+      ]
+    },
+    {
+      "id": "generic_fpv_trench_jammer",
+      "name": "Generic field/trench C-UAS FPV jammer",
+      "aka": [
+        "trench jammer",
+        "backpack drone jammer",
+        "FPV jammer",
+        "multi-band C-UAS jammer"
+      ],
+      "country_origin": "unknown",
+      "role": "jammer",
+      "bands_hz": [
+        [
+          390000000,
+          510000000
+        ],
+        [
+          750000000,
+          1050000000
+        ],
+        [
+          1560000000,
+          1610000000
+        ],
+        [
+          2400000000,
+          2483500000
+        ],
+        [
+          5725000000,
+          5875000000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 40000000,
+        "range": [
+          5000000,
+          500000000
+        ]
+      },
+      "waveform": [
+        "barrage_noise",
+        "spot_cw",
+        "swept_cw"
+      ],
+      "targets": [
+        "rc_control_link",
+        "fpv_2g4",
+        "fpv_5g8",
+        "gnss_gps",
+        "glonass"
+      ],
+      "mobility": "man_portable",
+      "antenna_type": "panel, sector, whip, or log-periodic antennas on tripod, backpack, or vehicle",
+      "antenna_height_class_m": {
+        "min": 1,
+        "typ": 2,
+        "max": 8
+      },
+      "erp_class": "medium",
+      "signatures": {
+        "hop": {
+          "present": false,
+          "rate_hz": null,
+          "span_hz": null
+        },
+        "duty_cycle": "push-to-talk or continuous when threat is present",
+        "modulation": [
+          "noise",
+          "cw",
+          "sweep"
+        ],
+        "channel_raster_hz": null,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "simultaneous noise in RC, FPV video, and GNSS bands",
+        "low-to-moderate antenna height",
+        "wideband energy not aligned to Wi-Fi/cellular channel masks"
+      ],
+      "confounders": [
+        "Volnorez",
+        "civilian ISM noise",
+        "Wi-Fi congestion",
+        "analog FPV transmitter overload",
+        "friendly C-UAS system"
+      ],
+      "recommended_action": "re_route",
+      "time_critical": true,
+      "confidence_prior": 0.76,
+      "sources": [
+        {
+          "url": "https://www.unmannedairspace.info/counter-uas-systems-and-policies/russian-c-uas-tech-captured-by-ukrainian-military/",
+          "type": "osint",
+          "quality": "B",
+          "date": "2024-08-15"
+        },
+        {
+          "url": "https://www.forbes.com/sites/davidhambling/2024/04/09/russias-monster-jammer-tank-was-supposed-to-stop-all-drones-it-didnt/",
+          "type": "news",
+          "quality": "B",
+          "date": "2024-04-09"
+        },
+        {
+          "url": "https://rt-sevastopol.ru/conf2023issn/articles/054.pdf",
+          "type": "osint",
+          "quality": "C",
+          "date": "2023-01-01"
+        }
+      ]
+    },
+    {
+      "id": "elrs_control_link",
+      "name": "ExpressLRS radio-control link",
+      "aka": [
+        "ELRS",
+        "ExpressLRS 2.4",
+        "ExpressLRS 868",
+        "ExpressLRS 915"
+      ],
+      "country_origin": "global/open-source",
+      "role": "control",
+      "bands_hz": [
+        [
+          863000000,
+          928000000
+        ],
+        [
+          2400000000,
+          2483500000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 500000,
+        "range": [
+          50000,
+          1600000
+        ]
+      },
+      "waveform": [
+        "lora_chirp",
+        "flrc",
+        "fhss",
+        "fsk"
+      ],
+      "targets": [
+        "rc_control_link"
+      ],
+      "mobility": "airborne",
+      "antenna_type": "small dipole, ceramic, T-style, or diversity antennas on controller and UAV",
+      "antenna_height_class_m": {
+        "min": 0.5,
+        "typ": 80,
+        "max": 1000
+      },
+      "erp_class": "low",
+      "signatures": {
+        "hop": {
+          "present": true,
+          "rate_hz": 50,
+          "span_hz": 83500000
+        },
+        "duty_cycle": "packetized low duty to high packet-rate continuous control",
+        "modulation": [
+          "LoRa",
+          "FLRC",
+          "FSK"
+        ],
+        "channel_raster_hz": null,
+        "burst_len_s": 0.02
+      },
+      "discriminators": [
+        "LoRa/FLRC short control bursts",
+        "known 900 MHz and 2.4 GHz ecosystems",
+        "telemetry/control cadence rather than video bandwidth",
+        "often very small occupied bandwidth compared with Wi-Fi or digital FPV"
+      ],
+      "confounders": [
+        "TBS Crossfire",
+        "LoRaWAN",
+        "ImmersionRC Ghost",
+        "proprietary FHSS RC links",
+        "ISM sensors"
+      ],
+      "recommended_action": "report",
+      "time_critical": true,
+      "confidence_prior": 0.84,
+      "sources": [
+        {
+          "url": "https://www.expresslrs.org/",
+          "type": "vendor",
+          "quality": "A",
+          "date": "2026-05-20"
+        },
+        {
+          "url": "https://www.expresslrs.org/hardware/hardware-selection/",
+          "type": "vendor",
+          "quality": "A",
+          "date": "2026-05-16"
+        },
+        {
+          "url": "https://www.semtech.com/products/wireless-rf/lora-plus",
+          "type": "vendor",
+          "quality": "A",
+          "date": "2026-05-01"
+        }
+      ]
+    },
+    {
+      "id": "tbs_crossfire_control_link",
+      "name": "Team BlackSheep Crossfire control link",
+      "aka": [
+        "TBS Crossfire",
+        "Crossfire 868",
+        "Crossfire 915",
+        "CRSF"
+      ],
+      "country_origin": "Hong Kong/Switzerland",
+      "role": "control",
+      "bands_hz": [
+        [
+          850000000,
+          870000000
+        ],
+        [
+          902000000,
+          928000000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 250000,
+        "range": [
+          50000,
+          1000000
+        ]
+      },
+      "waveform": [
+        "fhss",
+        "lora_chirp"
+      ],
+      "targets": [
+        "rc_control_link"
+      ],
+      "mobility": "airborne",
+      "antenna_type": "dipole or diversity antennas on RC transmitter and UAV receiver",
+      "antenna_height_class_m": {
+        "min": 0.5,
+        "typ": 80,
+        "max": 1000
+      },
+      "erp_class": "low",
+      "signatures": {
+        "hop": {
+          "present": true,
+          "rate_hz": null,
+          "span_hz": 26000000
+        },
+        "duty_cycle": "packetized control/telemetry",
+        "modulation": [
+          "proprietary spread-spectrum",
+          "LoRa-like"
+        ],
+        "channel_raster_hz": null,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "sub-GHz RC link with frequency hopping over 868 or 915 allocations",
+        "narrower than analog video and not on Wi-Fi raster",
+        "often paired with separate 5.8 GHz FPV video"
+      ],
+      "confounders": [
+        "ELRS 868/915",
+        "LoRaWAN",
+        "915 MHz telemetry radios",
+        "ISM sensors"
+      ],
+      "recommended_action": "report",
+      "time_critical": true,
+      "confidence_prior": 0.78,
+      "sources": [
+        {
+          "url": "https://team-blacksheep.freshdesk.com/support/solutions/articles/4000134179-crossfire-band-range",
+          "type": "vendor",
+          "quality": "A",
+          "date": "2018-12-10"
+        },
+        {
+          "url": "https://www.team-blacksheep.com/media/files/tbs-crossfire-manual.pdf",
+          "type": "vendor",
+          "quality": "A",
+          "date": "2025-01-01"
+        }
+      ]
+    },
+    {
+      "id": "immersionrc_ghost_control_link",
+      "name": "ImmersionRC Ghost 2.4 GHz control link",
+      "aka": [
+        "Ghost",
+        "GHST"
+      ],
+      "country_origin": "Hong Kong/United Kingdom",
+      "role": "control",
+      "bands_hz": [
+        [
+          2400000000,
+          2483500000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 1000000,
+        "range": [
+          100000,
+          5000000
+        ]
+      },
+      "waveform": [
+        "lora_chirp",
+        "fhss"
+      ],
+      "targets": [
+        "rc_control_link"
+      ],
+      "mobility": "airborne",
+      "antenna_type": "2.4 GHz dipole/diversity antennas",
+      "antenna_height_class_m": {
+        "min": 0.5,
+        "typ": 80,
+        "max": 1000
+      },
+      "erp_class": "low",
+      "signatures": {
+        "hop": {
+          "present": true,
+          "rate_hz": null,
+          "span_hz": 83500000
+        },
+        "duty_cycle": "packetized control/telemetry",
+        "modulation": [
+          "chirp_spread_spectrum",
+          "adaptive_fhss"
+        ],
+        "channel_raster_hz": null,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "2.4 GHz chirp spread spectrum plus adaptive FHSS",
+        "RC control cadence",
+        "not OFDM-shaped like Wi-Fi/DJI video"
+      ],
+      "confounders": [
+        "ELRS 2.4",
+        "Bluetooth",
+        "proprietary RC FHSS",
+        "Zigbee"
+      ],
+      "recommended_action": "report",
+      "time_critical": true,
+      "confidence_prior": 0.66,
+      "sources": [
+        {
+          "url": "https://www.immersionrc.com/fpv-products/ghost/",
+          "type": "vendor",
+          "quality": "A",
+          "date": "2020-08-06"
+        }
+      ]
+    },
+    {
+      "id": "dji_ocusync_droneid",
+      "name": "DJI OcuSync / Enhanced Wi-Fi DroneID family",
+      "aka": [
+        "OcuSync",
+        "Lightbridge",
+        "DJI DroneID",
+        "DJI Remote ID",
+        "Enhanced Wi-Fi"
+      ],
+      "country_origin": "China",
+      "role": "control",
+      "bands_hz": [
+        [
+          2400000000,
+          2483500000
+        ],
+        [
+          5725000000,
+          5875000000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 20000000,
+        "range": [
+          5000000,
+          40000000
+        ]
+      },
+      "waveform": [
+        "ofdm",
+        "fhss"
+      ],
+      "targets": [
+        "rc_control_link",
+        "fpv_2g4",
+        "fpv_5g8",
+        "droneid"
+      ],
+      "mobility": "airborne",
+      "antenna_type": "integrated patch/dipole antennas in UAV and controller, often diversity/MIMO",
+      "antenna_height_class_m": {
+        "min": 1,
+        "typ": 120,
+        "max": 500
+      },
+      "erp_class": "low",
+      "signatures": {
+        "hop": {
+          "present": true,
+          "rate_hz": null,
+          "span_hz": 83500000
+        },
+        "duty_cycle": "high duty during video/control plus periodic ID beacons",
+        "modulation": [
+          "OFDM",
+          "enhanced_wifi",
+          "fhss"
+        ],
+        "channel_raster_hz": 5000000,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "20 MHz OcuSync-like OFDM channels",
+        "DroneID enhanced Wi-Fi beacon behavior can occupy about 5 MHz",
+        "dual 2.4/5.8 GHz operation on many models",
+        "video/control traffic much wider than ELRS/Crossfire"
+      ],
+      "confounders": [
+        "ordinary Wi-Fi AP/client",
+        "digital FPV system",
+        "Bluetooth/Wi-Fi coexistence",
+        "non-DJI Remote ID beacons"
+      ],
+      "recommended_action": "report",
+      "time_critical": true,
+      "confidence_prior": 0.86,
+      "sources": [
+        {
+          "url": "https://developer.dji.com/api-reference/android-api/Components/OcuSyncLink/DJIOcuSyncLink.html",
+          "type": "vendor",
+          "quality": "A",
+          "date": "2026-05-01"
+        },
+        {
+          "url": "https://www.mdpi.com/1424-8220/23/17/7650",
+          "type": "academic",
+          "quality": "A",
+          "date": "2023-09-01"
+        },
+        {
+          "url": "https://arxiv.org/abs/2207.10795",
+          "type": "academic",
+          "quality": "A",
+          "date": "2022-07-21"
+        }
+      ]
+    },
+    {
+      "id": "analog_fpv_58_vtx",
+      "name": "Generic analog 5.8 GHz FPV video transmitter",
+      "aka": [
+        "analog FPV VTX",
+        "5.8G VTX",
+        "Raceband VTX"
+      ],
+      "country_origin": "global",
+      "role": "comms",
+      "bands_hz": [
+        [
+          5645000000,
+          5945000000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 30000000,
+        "range": [
+          6000000,
+          40000000
+        ]
+      },
+      "waveform": [
+        "wide_fm"
+      ],
+      "targets": [
+        "fpv_5g8"
+      ],
+      "mobility": "airborne",
+      "antenna_type": "small circularly polarized or linear whip/patch antennas on UAV and goggles",
+      "antenna_height_class_m": {
+        "min": 1,
+        "typ": 80,
+        "max": 1000
+      },
+      "erp_class": "low",
+      "signatures": {
+        "hop": {
+          "present": false,
+          "rate_hz": null,
+          "span_hz": null
+        },
+        "duty_cycle": "continuous while powered",
+        "modulation": [
+          "wideband_fm_video",
+          "ntsc_pal_like"
+        ],
+        "channel_raster_hz": 20000000,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "continuous fixed-channel video-like spectrum",
+        "5.8 GHz FPV channel plans rather than Wi-Fi DFS plan",
+        "often paired with separate 868/915 or 2.4 GHz control link"
+      ],
+      "confounders": [
+        "5.8 GHz Wi-Fi",
+        "DJI/Avatar digital FPV",
+        "wireless video sender",
+        "5.8 GHz jammer"
+      ],
+      "recommended_action": "report",
+      "time_critical": true,
+      "confidence_prior": 0.83,
+      "sources": [
+        {
+          "url": "https://oscarliang.com/fpv-channels/",
+          "type": "osint",
+          "quality": "B",
+          "date": "2021-05-16"
+        },
+        {
+          "url": "https://www.getfpv.com/learn/fpv-in-depth-and-technical/analogue-fpv-video/",
+          "type": "osint",
+          "quality": "B",
+          "date": "2017-01-01"
+        },
+        {
+          "url": "https://www.rf-links.com/newsite/pdf/vrx-58.pdf",
+          "type": "vendor",
+          "quality": "B",
+          "date": "2024-01-01"
+        }
+      ]
+    },
+    {
+      "id": "digital_fpv_58_system",
+      "name": "Generic digital 5.8 GHz FPV video system",
+      "aka": [
+        "DJI FPV",
+        "Walksnail Avatar",
+        "HDZero",
+        "Shark Byte",
+        "digital VTX"
+      ],
+      "country_origin": "global",
+      "role": "comms",
+      "bands_hz": [
+        [
+          5650000000,
+          5875000000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 20000000,
+        "range": [
+          10000000,
+          40000000
+        ]
+      },
+      "waveform": [
+        "ofdm"
+      ],
+      "targets": [
+        "fpv_5g8",
+        "droneid"
+      ],
+      "mobility": "airborne",
+      "antenna_type": "small linear/circular antennas, often diversity at receiver goggles",
+      "antenna_height_class_m": {
+        "min": 1,
+        "typ": 80,
+        "max": 1000
+      },
+      "erp_class": "low",
+      "signatures": {
+        "hop": {
+          "present": false,
+          "rate_hz": null,
+          "span_hz": null
+        },
+        "duty_cycle": "continuous high duty video",
+        "modulation": [
+          "OFDM",
+          "QAM"
+        ],
+        "channel_raster_hz": 5000000,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "OFDM-like video channel at 5.8 GHz",
+        "20-40 MHz channel width",
+        "not cellular duplexed",
+        "may coexist with separate sub-GHz or 2.4 GHz RC link"
+      ],
+      "confounders": [
+        "5 GHz Wi-Fi",
+        "DJI OcuSync",
+        "analog FPV if measured bandwidth only is available",
+        "5.8 GHz wireless bridge"
+      ],
+      "recommended_action": "report",
+      "time_critical": true,
+      "confidence_prior": 0.72,
+      "sources": [
+        {
+          "url": "https://oscarliang.com/fpv-channels/",
+          "type": "osint",
+          "quality": "B",
+          "date": "2021-05-16"
+        },
+        {
+          "url": "https://developer.dji.com/api-reference/android-api/Components/OcuSyncLink/DJIOcuSyncLink.html",
+          "type": "vendor",
+          "quality": "A",
+          "date": "2026-05-01"
+        }
+      ]
+    },
+    {
+      "id": "generic_wifi_ap_client",
+      "name": "Generic Wi-Fi AP/client/mesh radio",
+      "aka": [
+        "802.11",
+        "Wi-Fi",
+        "wireless bridge",
+        "hotspot"
+      ],
+      "country_origin": "global",
+      "role": "comms",
+      "bands_hz": [
+        [
+          2400000000,
+          2483500000
+        ],
+        [
+          5150000000,
+          5875000000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 20000000,
+        "range": [
+          20000000,
+          160000000
+        ]
+      },
+      "waveform": [
+        "ofdm",
+        "dsss"
+      ],
+      "targets": [
+        "wifi"
+      ],
+      "mobility": "fixed",
+      "antenna_type": "omni dipoles, patch/panel, sector, or integrated MIMO antennas",
+      "antenna_height_class_m": {
+        "min": 0.5,
+        "typ": 3,
+        "max": 30
+      },
+      "erp_class": "low",
+      "signatures": {
+        "hop": {
+          "present": false,
+          "rate_hz": null,
+          "span_hz": null
+        },
+        "duty_cycle": "bursty to high duty depending traffic",
+        "modulation": [
+          "DSSS",
+          "OFDM",
+          "QAM"
+        ],
+        "channel_raster_hz": 5000000,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "standard 20/40/80/160 MHz channel masks",
+        "beacons and association traffic",
+        "channel centers matching Wi-Fi plans",
+        "MIMO/OFDM spectral shape"
+      ],
+      "confounders": [
+        "DJI OcuSync",
+        "digital FPV",
+        "Starlink router local Wi-Fi",
+        "Bluetooth/Zigbee in 2.4 GHz"
+      ],
+      "recommended_action": "report",
+      "time_critical": false,
+      "confidence_prior": 0.9,
+      "sources": [
+        {
+          "url": "https://www.law.cornell.edu/cfr/text/47/15.249",
+          "type": "osint",
+          "quality": "A",
+          "date": "2026-05-01"
+        },
+        {
+          "url": "https://www.cisco.com/c/en/us/td/docs/wireless/controller/9800/technical-reference/wireless-rf-reference-guide.html",
+          "type": "vendor",
+          "quality": "A",
+          "date": "2024-01-01"
+        },
+        {
+          "url": "https://docs.fcc.gov/public/attachments/FCC-13-22A1_Rcd.pdf",
+          "type": "osint",
+          "quality": "A",
+          "date": "2013-02-20"
+        }
+      ]
+    },
+    {
+      "id": "starlink_user_terminal",
+      "name": "Starlink user terminal",
+      "aka": [
+        "Starlink dish",
+        "Dishy",
+        "Starlink Mini",
+        "Starlink UT"
+      ],
+      "country_origin": "United States",
+      "role": "comms",
+      "bands_hz": [
+        [
+          10700000000,
+          12750000000
+        ],
+        [
+          12750000000,
+          13250000000
+        ],
+        [
+          14000000000,
+          14500000000
+        ],
+        [
+          2400000000,
+          2483500000
+        ],
+        [
+          5150000000,
+          5875000000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 60000000,
+        "range": [
+          20000000,
+          250000000
+        ]
+      },
+      "waveform": [
+        "ofdm",
+        "phased_array_burst"
+      ],
+      "targets": [
+        "starlink_leo_satcom",
+        "wifi"
+      ],
+      "mobility": "fixed",
+      "antenna_type": "electronically steered Ku-band phased-array terminal plus local Wi-Fi router",
+      "antenna_height_class_m": {
+        "min": 0.2,
+        "typ": 1.5,
+        "max": 10
+      },
+      "erp_class": "medium",
+      "signatures": {
+        "hop": {
+          "present": true,
+          "rate_hz": null,
+          "span_hz": 2000000000
+        },
+        "duty_cycle": "bursty scheduled uplink plus continuous/near-continuous downlink reception environment",
+        "modulation": [
+          "proprietary_starlink_ku",
+          "OFDM_like",
+          "QPSK_QAM_reported"
+        ],
+        "channel_raster_hz": null,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "Ku-band uplink near 14 GHz from a low-height phased array",
+        "coincident 2.4/5 GHz local Wi-Fi from router",
+        "satellite-tracking beam behavior",
+        "not an L-band satphone"
+      ],
+      "confounders": [
+        "other Ku VSAT terminal",
+        "satellite TV downlink",
+        "Ku microwave link",
+        "Starlink satellite downlink not local terminal"
+      ],
+      "recommended_action": "report",
+      "time_critical": false,
+      "confidence_prior": 0.85,
+      "sources": [
+        {
+          "url": "https://docs.fcc.gov/public/attachments/FCC-22-91A1_Rcd.pdf",
+          "type": "osint",
+          "quality": "A",
+          "date": "2022-12-01"
+        },
+        {
+          "url": "https://www.starlink.com/legal/documents/DOC-1411-27322-59",
+          "type": "vendor",
+          "quality": "A",
+          "date": "2025-01-01"
+        },
+        {
+          "url": "https://arxiv.org/abs/2210.11578",
+          "type": "academic",
+          "quality": "A",
+          "date": "2022-10-20"
+        }
+      ]
+    },
+    {
+      "id": "inmarsat_bgan_lband_terminal",
+      "name": "Inmarsat L-band user terminal",
+      "aka": [
+        "BGAN",
+        "FleetBroadband",
+        "SwiftBroadband",
+        "Inmarsat terminal"
+      ],
+      "country_origin": "United Kingdom",
+      "role": "comms",
+      "bands_hz": [
+        [
+          1525000000,
+          1559000000
+        ],
+        [
+          1626500000,
+          1660500000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 200000,
+        "range": [
+          10000,
+          1000000
+        ]
+      },
+      "waveform": [
+        "tdma",
+        "psk"
+      ],
+      "targets": [
+        "satcom_lband"
+      ],
+      "mobility": "man_portable",
+      "antenna_type": "directional L-band patch/panel or stabilized maritime/aero antenna",
+      "antenna_height_class_m": {
+        "min": 0.5,
+        "typ": 2,
+        "max": 20
+      },
+      "erp_class": "low",
+      "signatures": {
+        "hop": {
+          "present": false,
+          "rate_hz": null,
+          "span_hz": null
+        },
+        "duty_cycle": "bursty data/voice sessions",
+        "modulation": [
+          "PSK",
+          "TDMA"
+        ],
+        "channel_raster_hz": 200000,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "Inmarsat downlink/uplink split around 1525-1559 and 1626.5-1660.5 MHz",
+        "directional terminal aimed skyward/geostationary",
+        "narrow channels compared with cellular and jammers"
+      ],
+      "confounders": [
+        "Iridium near 1616-1626.5 MHz",
+        "Thuraya and other MSS",
+        "R-330Zh jamming Inmarsat",
+        "GNSS/GLONASS adjacent observations"
+      ],
+      "recommended_action": "report",
+      "time_critical": false,
+      "confidence_prior": 0.8,
+      "sources": [
+        {
+          "url": "https://www.law.cornell.edu/cfr/text/47/25.202",
+          "type": "osint",
+          "quality": "A",
+          "date": "2026-05-01"
+        },
+        {
+          "url": "https://www.sigidwiki.com/wiki/Broadband_Global_Area_Network_%28BGAN%29",
+          "type": "osint",
+          "quality": "B",
+          "date": "2026-05-01"
+        },
+        {
+          "url": "https://www.ofcom.org.uk/siteassets/resources/documents/consultations/uncategorised/8048-cfi-mobile-bb/responses/inmarsat.pdf",
+          "type": "osint",
+          "quality": "A",
+          "date": "2013-01-01"
+        }
+      ]
+    },
+    {
+      "id": "iridium_lband_terminal",
+      "name": "Iridium L-band handset/Certus terminal",
+      "aka": [
+        "Iridium",
+        "Iridium Certus",
+        "satphone"
+      ],
+      "country_origin": "United States",
+      "role": "comms",
+      "bands_hz": [
+        [
+          1616000000,
+          1626500000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 41600,
+        "range": [
+          10000,
+          500000
+        ]
+      },
+      "waveform": [
+        "tdma",
+        "fdma",
+        "psk"
+      ],
+      "targets": [
+        "satcom_lband"
+      ],
+      "mobility": "man_portable",
+      "antenna_type": "small L-band helical/patch antenna or aero/maritime dome",
+      "antenna_height_class_m": {
+        "min": 0.5,
+        "typ": 2,
+        "max": 20
+      },
+      "erp_class": "low",
+      "signatures": {
+        "hop": {
+          "present": true,
+          "rate_hz": null,
+          "span_hz": 10500000
+        },
+        "duty_cycle": "short TDMA bursts",
+        "modulation": [
+          "TDMA",
+          "FDMA",
+          "DE-QPSK_like"
+        ],
+        "channel_raster_hz": 41600,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "narrow L-band bursts in 1616-1626.5 MHz",
+        "LEO satcom timing rather than geostationary pointing",
+        "distinct from Inmarsat 1626.5-1660.5 MHz uplink"
+      ],
+      "confounders": [
+        "Inmarsat upper-L-band edge",
+        "R-330Zh jamming Iridium",
+        "other MSS/IOT L-band devices"
+      ],
+      "recommended_action": "report",
+      "time_critical": false,
+      "confidence_prior": 0.82,
+      "sources": [
+        {
+          "url": "https://www.everythingrf.com/community/what-frequency-does-the-iridium-satellite-system-use",
+          "type": "osint",
+          "quality": "B",
+          "date": "2021-01-01"
+        },
+        {
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8587026/",
+          "type": "academic",
+          "quality": "A",
+          "date": "2021-10-01"
+        },
+        {
+          "url": "https://ir.mtronpti.com/news/news-details/2018/Iridium-Band-Filter-01-17-2018/default.aspx",
+          "type": "vendor",
+          "quality": "B",
+          "date": "2018-01-17"
+        }
+      ]
+    },
+    {
+      "id": "generic_gsm_lte_bts",
+      "name": "Generic cellular base station or handset",
+      "aka": [
+        "GSM BTS",
+        "LTE eNodeB",
+        "NR gNodeB",
+        "cell tower",
+        "mobile handset"
+      ],
+      "country_origin": "global",
+      "role": "comms",
+      "bands_hz": [
+        [
+          824000000,
+          960000000
+        ],
+        [
+          1710000000,
+          1990000000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 5000000,
+        "range": [
+          200000,
+          20000000
+        ]
+      },
+      "waveform": [
+        "gmsk",
+        "ofdm",
+        "tdma"
+      ],
+      "targets": [
+        "gsm_cellular"
+      ],
+      "mobility": "fixed",
+      "antenna_type": "sector panel antennas on tower/rooftop or small handset antenna",
+      "antenna_height_class_m": {
+        "min": 1,
+        "typ": 30,
+        "max": 80
+      },
+      "erp_class": "medium",
+      "signatures": {
+        "hop": {
+          "present": false,
+          "rate_hz": null,
+          "span_hz": null
+        },
+        "duty_cycle": "continuous downlink broadcast with bursty uplink",
+        "modulation": [
+          "GMSK",
+          "EDGE_8PSK",
+          "OFDM",
+          "SC-FDMA"
+        ],
+        "channel_raster_hz": 200000,
+        "burst_len_s": 0.0046
+      },
+      "discriminators": [
+        "paired uplink/downlink allocations",
+        "standard GSM/LTE/NR raster and synchronization signals",
+        "sectorized fixed antenna height for BTS",
+        "handset uplink lower height and burstier duty"
+      ],
+      "confounders": [
+        "cellular jammer",
+        "IMSI catcher",
+        "R-330Zh",
+        "private LTE/5G network"
+      ],
+      "recommended_action": "report",
+      "time_critical": false,
+      "confidence_prior": 0.9,
+      "sources": [
+        {
+          "url": "https://atisorg.s3.amazonaws.com/archive/3gpp-documents/Rel99-14/ATIS.3GPP.51.021.V9100-2014.pdf",
+          "type": "osint",
+          "quality": "A",
+          "date": "2014-01-01"
+        },
+        {
+          "url": "https://3gpp-explorer.com/spec/45005/",
+          "type": "osint",
+          "quality": "A",
+          "date": "2026-01-01"
+        }
+      ]
+    },
+    {
+      "id": "generic_cellular_jammer",
+      "name": "Generic GSM/LTE cellular jammer",
+      "aka": [
+        "cell jammer",
+        "GSM jammer",
+        "LTE jammer",
+        "mobile-phone jammer"
+      ],
+      "country_origin": "unknown",
+      "role": "jammer",
+      "bands_hz": [
+        [
+          824000000,
+          960000000
+        ],
+        [
+          1710000000,
+          1990000000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 75000000,
+        "range": [
+          5000000,
+          300000000
+        ]
+      },
+      "waveform": [
+        "barrage_noise",
+        "swept_cw",
+        "spot_cw"
+      ],
+      "targets": [
+        "gsm_cellular"
+      ],
+      "mobility": "man_portable",
+      "antenna_type": "multiple whips, panels, or vehicle-mounted broadband antennas",
+      "antenna_height_class_m": {
+        "min": 0.5,
+        "typ": 2,
+        "max": 10
+      },
+      "erp_class": "medium",
+      "signatures": {
+        "hop": {
+          "present": false,
+          "rate_hz": null,
+          "span_hz": null
+        },
+        "duty_cycle": "continuous while active",
+        "modulation": [
+          "noise",
+          "sweep",
+          "cw"
+        ],
+        "channel_raster_hz": null,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "noise blanket over cellular allocations without valid cellular sync/raster",
+        "may cover uplink and downlink simultaneously",
+        "low/vehicle antenna height unless infrastructure jammer"
+      ],
+      "confounders": [
+        "R-330Zh",
+        "Borisoglebsk-2",
+        "overloaded SDR front-end near real BTS",
+        "dense legitimate cellular traffic"
+      ],
+      "recommended_action": "re_route",
+      "time_critical": true,
+      "confidence_prior": 0.74,
+      "sources": [
+        {
+          "url": "https://atisorg.s3.amazonaws.com/archive/3gpp-documents/Rel99-14/ATIS.3GPP.51.021.V9100-2014.pdf",
+          "type": "osint",
+          "quality": "A",
+          "date": "2014-01-01"
+        },
+        {
+          "url": "https://roe.ru/pdfs/pdf_2066.pdf",
+          "type": "vendor",
+          "quality": "A",
+          "date": "2024-01-01"
+        },
+        {
+          "url": "https://insidegnss.com/interference-jamming/",
+          "type": "osint",
+          "quality": "B",
+          "date": "2012-01-01"
+        }
+      ]
+    },
+    {
+      "id": "unknown_candidate_by_band",
+      "name": "UNKNOWN emitter by band/feature class",
+      "aka": [
+        "unknown",
+        "unattributed emitter",
+        "generic band-mate"
+      ],
+      "country_origin": "unknown",
+      "role": "recon",
+      "bands_hz": [
+        [
+          30000000,
+          18000000000
+        ]
+      ],
+      "occupied_bw_hz": {
+        "typ": 0,
+        "range": [
+          0,
+          500000000
+        ]
+      },
+      "waveform": [
+        "barrage_noise",
+        "swept_cw",
+        "spot_cw",
+        "ofdm",
+        "lora_chirp",
+        "fhss",
+        "flrc"
+      ],
+      "targets": [
+        "gnss_gps",
+        "glonass",
+        "starlink_leo_satcom",
+        "gsm_cellular",
+        "wifi",
+        "fpv_2g4",
+        "fpv_5g8",
+        "rc_control_link",
+        "droneid",
+        "satcom_lband"
+      ],
+      "mobility": "fixed",
+      "antenna_type": "unknown; infer from DF geometry, height, duty cycle, and co-observed bands",
+      "antenna_height_class_m": {
+        "min": 0,
+        "typ": 3,
+        "max": 1000
+      },
+      "erp_class": "low",
+      "signatures": {
+        "hop": {
+          "present": false,
+          "rate_hz": null,
+          "span_hz": null
+        },
+        "duty_cycle": "unknown",
+        "modulation": [
+          "unknown"
+        ],
+        "channel_raster_hz": null,
+        "burst_len_s": null
+      },
+      "discriminators": [
+        "use when band and bandwidth fit several catalog entries",
+        "prevents forcing a named system without waveform, height, timing, or multisensor confirmation",
+        "promote to named ID only after discriminators exceed confounders"
+      ],
+      "confounders": [
+        "all band-mates",
+        "front-end overload",
+        "harmonics/images",
+        "friendly/civilian emitters",
+        "test equipment"
+      ],
+      "recommended_action": "report",
+      "time_critical": false,
+      "confidence_prior": 1.0,
+      "sources": [
+        {
+          "url": "https://www.law.cornell.edu/cfr/text/47/15.249",
+          "type": "osint",
+          "quality": "A",
+          "date": "2026-05-01"
+        },
+        {
+          "url": "https://docs.fcc.gov/public/attachments/FCC-22-91A1_Rcd.pdf",
+          "type": "osint",
+          "quality": "A",
+          "date": "2022-12-01"
+        },
+        {
+          "url": "https://www.mdpi.com/1424-8220/23/17/7650",
+          "type": "academic",
+          "quality": "A",
+          "date": "2023-09-01"
+        }
+      ]
+    }
+  ]
+}

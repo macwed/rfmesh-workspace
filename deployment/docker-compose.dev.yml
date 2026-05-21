@@ -15,6 +15,7 @@ services:
     volumes:
       - ./backend/src:/app/backend/src
       - ./backend/seed:/app/seed
+      - ./backend/data:/app/data
       - ./frontend:/app/frontend
     # wait for FTS to exist on the network so the first Send can resolve it
     depends_on:

@@ -31,7 +31,8 @@ from rfmesh_cot import CotError
 from .config import Settings
 from .cot_send import CotSender
 from .geojson import bearings_feature_collection, fixes_feature_collection
-from .seed import load_seed_bearings, load_seed_fixes, parse_fix
+from .posterior import PosteriorEngine, nodes_for_fix
+from .seed import load_seed_bearings, load_seed_fixes_with_freq, parse_fix_and_freq
 from .store import Store
 
 
@@ -42,14 +43,15 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
     sender = CotSender(settings.cot_endpoint_url, settings.cot_callsign, settings.send_fresh)
 
     if settings.seed_demo:
-        for fix in load_seed_fixes(settings.seed_file):
-            store.upsert_fix(fix, seeded=True)
+        for fix, freq in load_seed_fixes_with_freq(settings.seed_file):
+            store.upsert_fix(fix, seeded=True, center_freq_hz=freq)
         for bearing in load_seed_bearings(settings.seed_bearings_file):
             store.upsert_bearing(bearing)
 
     app.state.settings = settings
     app.state.store = store
     app.state.sender = sender
+    app.state.posterior = PosteriorEngine(settings.dem_file)
     try:
         yield
     finally:
@@ -93,7 +95,8 @@ async def ingest_fixes(payload: Any = Body(...)) -> dict[str, Any]:
     errors: list[str] = []
     for i, rec in enumerate(_as_list(payload)):
         try:
-            store.upsert_fix(parse_fix(rec))
+            fix, freq = parse_fix_and_freq(rec)
+            store.upsert_fix(fix, center_freq_hz=freq)
             accepted += 1
         except (ValidationError, ValueError, KeyError, TypeError) as exc:
             errors.append(f"[{i}] {exc}")
@@ -157,6 +160,29 @@ async def send_fix(fix_id: UUID) -> dict[str, Any]:
             status_code=502, detail=f"CoT send failed via {sender.endpoint_url}: {exc}"
         ) from exc
     return {"sent": True, "detail": f"encoded and queued to {sender.endpoint_url}"}
+
+
+@app.get("/fixes/{fix_id}/posterior")
+async def get_posterior(fix_id: UUID) -> JSONResponse:
+    settings = _settings(app)
+    store = _store(app)
+    fix = store.get_fix(fix_id)
+    if fix is None:
+        raise HTTPException(status_code=404, detail=f"no fix with id {fix_id}")
+    engine: PosteriorEngine = app.state.posterior
+    nodes = nodes_for_fix(fix, store.list_bearings())
+    fc = engine.posterior_geojson(
+        fix,
+        nodes,
+        store.freq_for(fix_id),
+        cell_m=settings.posterior_cell_m,
+        buffer_m=settings.posterior_buffer_m,
+        floor=settings.rf_shadow_floor,
+        scale_db=settings.diffraction_loss_scale_db,
+        emitter_h=settings.emitter_antenna_h_m,
+        node_h=settings.node_antenna_h_m,
+    )
+    return JSONResponse(fc)
 
 
 # Static frontend last so it does not shadow the API routes above.
