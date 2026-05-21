@@ -41,16 +41,77 @@ const POSTERIOR_STYLE = {
   0.95: { fillOpacity: 0.10, color: "#00e5ff", weight: 0.6 },
 };
 
-// Map legend (always visible) so the layers are readable at a glance.
+// Map legend: an accordion of expandable "how to read it" rows. Each symbol
+// row expands a plain-language block (Means / Read / Do / But) so a no-context
+// operator can decode it under stress. Native <details> = zero-JS, accessible,
+// keyboard-friendly, localStorage-persistable.
+const LEGEND_ROWS = [
+  {
+    k: "ellipse",
+    swatch: '<span class="lg-line" style="border-top:2px dashed #f1c40f"></span>',
+    label: "bearing 95% ellipse",
+    means: "Where the emitter likely is, from crossed sensor bearings alone.",
+    read: "Smaller = more certain; long & thin = sensors nearly in a line (weak geometry — check GDOP).",
+    act: "Treat as the search area.",
+    but: "95% — it can still be outside. Not a target box.",
+  },
+  {
+    k: "rf",
+    swatch: '<span class="lg-box lg-box-grad"></span>',
+    label: "RF-plausible (LIKELY-HERE)",
+    means: "The bearing area refined by terrain (a soft prior).",
+    read: "Brightest inner band = most likely ground; outer bands = still possible.",
+    act: "Start your search in the bright core.",
+    but: "A cue, NOT a hit — never act on the glow alone (radio bends around hills). Confirm via PID + 2nd sensor.",
+  },
+  {
+    k: "node",
+    swatch: '<span class="lg-dot"></span><span class="lg-line" style="border-top:2px dashed #4aa8ff"></span>',
+    label: "sensor node · bearing",
+    means: "A sensor (dot) and the direction it heard the signal (dashed line).",
+    read: "Lines cross at the fix. A red line = outlier — suspect that node.",
+    act: "2 lines = a guess, 3+ = a fix.",
+    but: "These are YOUR sensors, not the threat.",
+  },
+];
+
+function legendRowHtml(r) {
+  const open = localStorage.getItem("legend.row." + r.k) === "1" ? " open" : "";
+  return `<details class="lg-row" data-k="${r.k}"${open}>
+    <summary><span class="lg-swatch">${r.swatch}</span><span class="lg-label">${r.label}</span></summary>
+    <div class="lg-detail">
+      <div><b>Means</b> ${r.means}</div>
+      <div><b>Read</b> ${r.read}</div>
+      <div><b>Do</b> ${r.act}</div>
+      <div class="lg-but"><b>But</b> ${r.but}</div>
+    </div></details>`;
+}
+
 const legend = L.control({ position: "bottomright" });
 legend.onAdd = () => {
   const d = L.DomUtil.create("div", "map-legend");
-  d.innerHTML = `
-    <div class="lg-title">Selected emitter</div>
-    <div><span class="lg-line" style="border-top:2px dashed #f1c40f"></span> bearing 95% ellipse</div>
-    <div><span class="lg-box"></span> RF-plausible area (terrain) — inner = likeliest</div>
-    <div><span class="lg-dot"></span> sensor node · <span class="lg-line" style="border-top:2px dashed #4aa8ff"></span> bearing</div>
-    <div class="lg-note">soft cue · not a target point</div>`;
+  const shellOpen = localStorage.getItem("legend.open") !== "0" ? " open" : "";
+  const seen = localStorage.getItem("legend.seen") === "1";
+  d.innerHTML = `<details class="lg-shell"${shellOpen}>
+    <summary class="lg-chip">ⓘ Legend — how to read this${seen ? "" : '<span class="lg-new">new</span>'}</summary>
+    <div class="lg-body">
+      <div class="lg-title">Selected emitter</div>
+      ${LEGEND_ROWS.map(legendRowHtml).join("")}
+      <div class="lg-note">soft cue · not a target point</div>
+    </div></details>`;
+  // Don't let clicks/scroll inside the legend pan or zoom the map.
+  L.DomEvent.disableClickPropagation(d);
+  L.DomEvent.disableScrollPropagation(d);
+  // Persist open/closed state.
+  d.querySelector(".lg-shell").addEventListener("toggle", (e) => {
+    localStorage.setItem("legend.open", e.target.open ? "1" : "0");
+    localStorage.setItem("legend.seen", "1");
+    const n = d.querySelector(".lg-new"); if (n) n.remove();
+  });
+  for (const row of d.querySelectorAll(".lg-row")) {
+    row.addEventListener("toggle", (e) =>
+      localStorage.setItem("legend.row." + e.target.dataset.k, e.target.open ? "1" : "0"));
+  }
   return d;
 };
 legend.addTo(map);
@@ -66,6 +127,50 @@ function centerCallout(props) {
   }
   return `${props.confidence_level.toUpperCase()} · ${props.contributing_nodes.length} nodes`;
 }
+
+// ---- shared info popover (ⓘ glyphs explain off-map sidebar symbols) ----
+const GLOSSARY = {
+  gdop: "Geometry quality. Sensors bunched on one side → high GDOP → stretched, less trustworthy fix. Spread out → low → tight.",
+  confidence: "How sure the system is THIS gear is the emitter. Low → confirm before acting. Includes a reserved UNKNOWN.",
+  targets: "What the emitter attacks: GPS/GNSS, Starlink/SATCOM, GSM, wifi, FPV 2.4 & 5.8 GHz drone links.",
+  mobility: "How it's deployed: mobile (vehicle / man-portable) vs fixed; mast-high vs ground-level.",
+  action: "AVOID / RE-ROUTE = move. CUE ISR = point eyes at it. CUE FIRES = hand to shooters (needs confirm). EW COUNTER = jam/spoof back.",
+  engage: "You may NOT engage on this alone — needs PID + a 2nd sensor. This tool produces look/cue, not weapons release.",
+  nodbm: "Power is NOT measured (uncalibrated SDR). Don't infer range or strength — direction & geometry only.",
+  timecrit: "Fleeting — mobile or about to move. Decide now or lose it.",
+};
+function iTag(k) {
+  const t = (GLOSSARY[k] || "").replace(/"/g, "&quot;");
+  return `<span class="info-i" data-tip="${t}" tabindex="0" role="button" aria-label="explain">ⓘ</span>`;
+}
+const _tip = document.createElement("div");
+_tip.className = "tip-pop";
+_tip.hidden = true;
+document.body.appendChild(_tip);
+let _tipSticky = false;
+function _showTip(el) {
+  const t = el.getAttribute("data-tip");
+  if (!t) return;
+  _tip.textContent = t;
+  _tip.hidden = false;
+  const r = el.getBoundingClientRect();
+  _tip.style.left = Math.max(8, Math.min(window.innerWidth - 268, r.left)) + "px";
+  _tip.style.top = (r.bottom + 6) + "px";
+}
+function _hideTip() { _tip.hidden = true; _tipSticky = false; }
+document.addEventListener("mouseover", (e) => {
+  const el = e.target.closest(".info-i");
+  if (el && !_tipSticky) _showTip(el);
+});
+document.addEventListener("mouseout", (e) => {
+  if (e.target.closest(".info-i") && !_tipSticky) _hideTip();
+});
+document.addEventListener("click", (e) => {
+  const el = e.target.closest(".info-i");
+  if (el) { e.stopPropagation(); _tipSticky = true; _showTip(el); }
+  else if (_tipSticky) _hideTip();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") _hideTip(); });
 
 // ---- helpers ----
 const $ = (sel) => document.querySelector(sel);
@@ -172,7 +277,8 @@ function renderInvestigation() {
   }).join("");
   box.innerHTML = `
     <h2>Investigation</h2>
-    <div class="measured">measured: <b>${band}</b> · ${mhz} · <span class="muted">no dBm (uncalibrated)</span></div>
+    <div class="measured">measured: <b>${band}</b> · ${mhz} · <span class="muted">no dBm</span> ${iTag("nodbm")}</div>
+    <div class="inv-key">key: conf ${iTag("confidence")} · targets ${iTag("targets")} · deploy ${iTag("mobility")} · action ${iTag("action")} · engage ${iTag("engage")}</div>
     <div class="cands">${cards}</div>`;
   for (const el of box.querySelectorAll(".cand[data-h]")) {
     el.onclick = () => {
@@ -408,7 +514,7 @@ function renderDetail() {
     ["Semi-major", `${Math.round(p.semi_major_m)} m`],
     ["Semi-minor", `${Math.round(p.semi_minor_m)} m`],
     ["Orientation", `${p.orientation_deg.toFixed(1)}°`],
-    ["GDOP", p.gdop.toFixed(2)],
+    ["GDOP " + iTag("gdop"), p.gdop.toFixed(2)],
     ["Method", p.method + (p.method === "fallback_centroid" ? " ⚠ suspect" : "")],
     ["Emitter", p.emitter_class || "—"],
     ["Residuals", nodeRows || "—"],
