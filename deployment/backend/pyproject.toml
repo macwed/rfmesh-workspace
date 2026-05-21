@@ -1,0 +1,28 @@
+# both3-poc backend — PoC web ops layer for rfmesh.
+#
+# This is a PoC-LOCAL package living entirely under deployment/. It is NOT a
+# uv workspace member and must not be added to the workspace-root pyproject.
+# It reuses two governed packages (rfmesh-cot, rfmesh-contracts) read-only by
+# pip-installing them from the streamed Docker build context. See the Dockerfile
+# for the install order (contracts first, then cot).
+
+[project]
+name = "both3-poc"
+version = "0.1.0"
+description = "PoC interactive map + CoT/TAK send + ingest API for rfmesh FixEvents."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "mgrs>=1.5",
+    # rfmesh-cot + rfmesh-contracts are installed by the Dockerfile from the
+    # build context (path installs), not resolved from PyPI. Listed here only
+    # for documentation; do not rely on PyPI resolution for them.
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/both3_poc"]

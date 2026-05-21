@@ -1,0 +1,48 @@
+# Dev overlay: hot-reload. Bind-mounts ONLY deployment/ source (never the
+# governed packages — those are path-installed read-only into the image).
+# Local Docker daemon only (bind mounts don't work over a remote context).
+#
+#   docker compose -f deployment/docker-compose.yml -f deployment/docker-compose.dev.yml up --build
+
+services:
+  backend:
+    build:
+      target: dev
+    environment:
+      # Windows/Docker-Desktop bind mounts don't propagate inotify; force polling
+      # so uvicorn --reload actually fires.
+      WATCHFILES_FORCE_POLLING: "true"
+    volumes:
+      - ./backend/src:/app/backend/src
+      - ./backend/seed:/app/seed
+      - ./frontend:/app/frontend
+    # wait for FTS to exist on the network so the first Send can resolve it
+    depends_on:
+      - freetakserver
+    ports:
+      # host port overridable to avoid clashes; container port stays 8000
+      - "${BACKEND_HOST_PORT:-8000}:8000"
+
+  freetakserver:
+    # In DEV, run FreeTAKServer by default (clear the "ftss" profile) so a plain
+    # `up` gives a fully working demo — "Send to troops" lands without extra flags.
+    # Heavy/slow on first boot. Prod keeps FTS opt-in (point at a real TAK host).
+    profiles: !reset []
+    # DEV pins the proven FTS 1.9.9.6 build (deployment/fts199/) instead of the
+    # broken 2.x `:latest` digitalpy image. `:latest` accepts a marker over TCP
+    # but drops it ("IAMUsersController ... a bytes-like object is required, not
+    # 'NoneType'") and only ever persists the first event. 1.9.9.6 ingests +
+    # persists every marker with no presence handshake. The `build` here makes a
+    # plain `up --build` produce the image tagged by ${FTS_IMAGE} (= fts199:local
+    # in .env), so no separate `docker build` step is needed. See README + the
+    # Dockerfile/start-fts.sh comments for the netbase + first-run-wizard fixes.
+    build:
+      context: ./fts199
+      dockerfile: Dockerfile
+    image: ${FTS_IMAGE:-fts199:local}
+
+  freetakserver-ui:
+    # Default-on in dev too, and publish the UI so you can open the troop-view map.
+    profiles: !reset []
+    ports:
+      - "${FTSUI_HOST_PORT:-5000}:5000"

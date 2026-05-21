@@ -1,0 +1,90 @@
+:root {
+  --bg: #0e1116;
+  --panel: #161b22;
+  --panel-2: #1c2230;
+  --line: #2a313c;
+  --text: #d6dde6;
+  --muted: #8a94a3;
+  --high: #2ecc71;
+  --medium: #f1c40f;
+  --low: #e74c3c;
+  --accent: #4aa8ff;
+}
+
+* { box-sizing: border-box; }
+/* id selectors below (e.g. #detail) set `display`, which beats the UA
+   [hidden]{display:none}. Restore the platform contract the JS relies on. */
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body {
+  font: 14px/1.45 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg); color: var(--text);
+}
+
+#app { display: flex; height: 100vh; }
+#sidebar {
+  width: 320px; min-width: 320px; height: 100%;
+  background: var(--panel); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+#map { flex: 1; height: 100%; background: #0b0e12; }
+
+#brand { display: flex; gap: 10px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+#brand h1 { margin: 0; font-size: 18px; letter-spacing: 1px; }
+#brand .sub { margin: 0; color: var(--muted); font-size: 12px; }
+#brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--high); box-shadow: 0 0 8px var(--high); }
+
+.panel { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.panel h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+.panel.grow { flex: 1; overflow-y: auto; min-height: 80px; }
+.count { background: var(--panel-2); border-radius: 10px; padding: 1px 8px; font-size: 11px; color: var(--text); }
+
+.row { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+.row label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
+.row select, .row input[type=number] {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 6px; font-size: 13px; width: 110px;
+}
+.toggle { flex-direction: row !important; align-items: center; gap: 6px; }
+
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 3px 8px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; }
+.chip.high { color: var(--high); }
+.chip.medium { color: var(--medium); }
+.chip.low { color: var(--low); }
+
+#fix-list { list-style: none; margin: 0; padding: 0; }
+.fix-item { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+.fix-item:hover { background: var(--panel-2); }
+.fix-item.selected { background: var(--panel-2); border-color: var(--accent); }
+.fix-item .swatch { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.fix-item .meta { font-size: 12px; color: var(--muted); }
+.fix-item .meta b { color: var(--text); font-weight: 600; }
+.fix-item.stale { opacity: .5; }
+
+#detail { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12px; }
+#detail dt { color: var(--muted); }
+#detail dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+#detail dd.bad { color: var(--low); font-weight: 600; }
+#detail .res-out { color: var(--low); font-weight: 600; }
+
+button { font: inherit; cursor: pointer; border: none; border-radius: 6px; padding: 8px 12px; background: var(--accent); color: #04121f; font-weight: 600; }
+button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+#send-btn { width: 100%; margin-top: 10px; }
+#send-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* inline arm-then-send (replaces the old blocking modal) */
+#send-confirm { margin-top: 10px; }
+#send-confirm .confirm-note { font-size: 11px; color: var(--muted); margin: 0 0 8px; }
+#send-confirm .confirm-actions { display: flex; gap: 8px; }
+#send-confirm .confirm-actions button { flex: 1; }
+
+.muted { color: var(--muted); }
+.small { font-size: 11px; }
+
+#toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 1000; }
+.toast { padding: 10px 14px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); max-width: 320px; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.4); }
+.toast.ok { border-left: 3px solid var(--high); }
+.toast.err { border-left: 3px solid var(--low); }
+
+.node-label { background: rgba(0,0,0,.6); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; font-size: 10px; }

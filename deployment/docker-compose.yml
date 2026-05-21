@@ -1,0 +1,94 @@
+# Base stack. Build context is the workspace root (..) so the image can reach
+# packages/rfmesh-cot + packages/rfmesh-contracts. Run from the WORKSPACE ROOT:
+#   docker compose -f deployment/docker-compose.yml -f deployment/docker-compose.dev.yml up --build
+#
+# FreeTAKServer is opt-in behind the "ftss" profile (heavy/slow to boot):
+#   ... --profile ftss up
+
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+      target: runtime
+    image: both3-poc-backend
+    environment:
+      COT_ENDPOINT_URL: ${COT_ENDPOINT_URL:-tcp://freetakserver:8087}
+      COT_CALLSIGN: ${COT_CALLSIGN:-rfmesh}
+      STALE_WINDOW_S: ${STALE_WINDOW_S:-30}
+      SEED_DEMO: ${SEED_DEMO:-true}
+      SEED_AS_FRESH: ${SEED_AS_FRESH:-true}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-*}
+      LOB_LENGTH_M: ${LOB_LENGTH_M:-6000}
+    networks: [both3]
+
+  freetakserver:
+    # NOTE (codex P1): the Docker Hub `freetakteam/freetakserver` repo is flagged
+    # "OLD VERSION DO NOT USE" and redirects to GHCR. Pin a concrete tag once
+    # confirmed. Env block mirrors the official FreeTAKHub example-compose so the
+    # REST API + websocket feed the UI needs are actually enabled.
+    image: ${FTS_IMAGE:-ghcr.io/freetakteam/freetakserver:latest}
+    hostname: freetakserver
+    profiles: ["ftss"]
+    environment:
+      FTS_WEBSOCKET_KEY: "YourWebsocketKey"
+      FTS_SECRET_KEY: "vnkdjnfjknfl1232#"
+      FTS_CONNECTION_MESSAGE: "Welcome to rfmesh both3 ops"
+      FTS_COT_PORT: 8087
+      FTS_SSLCOT_PORT: 8089
+      FTS_API_PORT: 19023
+      FTS_DP_ADDRESS: freetakserver
+      FTS_USER_ADDRESS: freetakserver
+      FTS_API_ADDRESS: freetakserver
+      FTS_OPTIMIZE_API: "True"
+      FTS_COT_TO_DB: "True"
+      FTS_MAINLOOP_DELAY: 100
+      FTS_LOG_LEVEL: "info"
+    volumes:
+      - fts-core-db:/opt/fts/
+    ports:
+      - "8087:8087"     # CoT TCP — what the backend ships to
+      - "19023:19023"   # FTS API
+    networks: [both3]
+
+  freetakserver-ui:
+    # FreeTAKServer-UI: a browser map of the markers on the server — the closest
+    # "what the troops see" view without an ATAK device. Logs in at :5000.
+    image: ${FTS_UI_IMAGE:-ghcr.io/freetakteam/ui:latest}
+    hostname: freetakserver-ui
+    profiles: ["ftss"]
+    depends_on: [freetakserver]
+    environment:
+      FTS_IP: freetakserver           # talk to the server over the compose network
+      FTS_API_PORT: 19023
+      FTS_API_PROTO: "http"
+      FTS_UI_PORT: 5000
+      # Bind the UI HTTP server to all interfaces (NOT 127.0.0.1) — the image's
+      # run.py does eventlet.listen((APPIP, APPPort)); 127.0.0.1 binds container
+      # loopback and the published host port can never reach it. Must be 0.0.0.0.
+      FTS_UI_EXPOSED_IP: "0.0.0.0"
+      # Browser-side webmap iframe target (the optional Node-RED FreeTAKHub-WebMap
+      # at /tak-map). Point at the host so a browser can reach it. Host 8000 is
+      # TAKEN by another project, so the webmap (when run) is published on 8001.
+      FTS_MAP_EXPOSED_IP: "${FTS_MAP_BROWSER_IP:-localhost}"
+      FTS_MAP_PORT: "${FTSMAP_HOST_PORT:-8001}"
+      FTS_MAP_PROTO: "http"
+      FTS_UI_WSKEY: "YourWebsocketKey" # MUST match FTS_WEBSOCKET_KEY above
+      # APIKEY is sent verbatim as the Authorization header to the FTS REST API.
+      # The default FTS SystemUser 'admin' has token literally "token", so the
+      # header must be "Bearer token". Login (admin/password) is validated by FTS.
+      FTS_API_KEY: "Bearer token"
+      # DB path must live in an EXISTING dir on the persistent volume; the image
+      # has no /home/freetak/data dir, so SQLAlchemy create_all() would fail there.
+      FTS_UI_SQLALCHEMY_DATABASE_URI: "sqlite:////home/freetak/FTSServer-UI.db"
+    volumes:
+      - fts-ui-db:/home/freetak/
+    networks: [both3]
+
+networks:
+  both3:
+    driver: bridge
+
+volumes:
+  fts-core-db:
+  fts-ui-db:
