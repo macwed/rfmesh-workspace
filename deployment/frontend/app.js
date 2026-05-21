@@ -233,8 +233,9 @@ function activeFilters() {
 }
 
 async function fetchPosterior(id, emitterH) {
-  if (!$("#show-posterior").checked) { state.posterior = null; updateRfStatus(); return; }
+  if (!$("#show-posterior").checked) { state.posterior = null; renderPosterior(); updateRfStatus(); return; }
   state.posterior = { fixId: id, loading: true }; // show "computing…" immediately
+  renderPosterior();
   updateRfStatus();
   const q = emitterH != null ? `?emitter_h=${emitterH}` : "";
   try {
@@ -245,7 +246,8 @@ async function fetchPosterior(id, emitterH) {
   } catch (e) {
     state.posterior = { fixId: id, error: true };
   }
-  render();
+  renderPosterior(); // draw the heat once, in its own layer
+  render();          // update ellipse outline + status
 }
 
 // Live status badge over the map: computing / terrain-effect strength / no-data.
@@ -422,34 +424,40 @@ function outlierNodes(props) {
 }
 
 // ---- render ----
+// The posterior heat is heavy (filled bands) and changes only on (de)select or
+// toggle — NOT every poll. Draw it in its own layer here, called only when it
+// changes, so the periodic render() never clears/rebuilds it (no flicker).
+function renderPosterior() {
+  posteriorLayer.clearLayers();
+  const on = $("#show-posterior") && $("#show-posterior").checked;
+  const sp = state.posterior;
+  if (!on || !sp || sp.fixId !== state.selected || !sp.fc) return;
+  for (const feat of sp.fc.features) {
+    const st = POSTERIOR_STYLE[feat.properties.p_band] || POSTERIOR_STYLE[0.95];
+    const pct = Math.round(feat.properties.p_band * 100);
+    L.geoJSON(feat, { style: { ...st, fillColor: st.color } })
+      .bindTooltip(`RF-plausible area · ${pct}% of probability`, { sticky: true })
+      .addTo(posteriorLayer);
+  }
+  const ob = sp.props && sp.props.obstruction;
+  if (ob) {
+    L.marker([ob.lat, ob.lon], {
+      icon: L.divIcon({ className: "ob-marker", html: `▲ +${ob.clearance_m} m`, iconSize: [60, 18], iconAnchor: [30, 9] }),
+    })
+      .bindTooltip(`Blocking ridge · ground ${ob.terrain_m} m, standing +${ob.clearance_m} m above the line-of-sight to ${ob.node_id}. The signal must diffract over it, so the area beyond is down-weighted.`, { sticky: true })
+      .addTo(posteriorLayer);
+  }
+}
+
 function render() {
   const f = activeFilters();
-  posteriorLayer.clearLayers();
   ellipseLayer.clearLayers();
   centerLayer.clearLayers();
   bearingLayer.clearLayers();
 
-  // RF-plausibility posterior (under the ellipse), for the selected fix only.
-  const heatOn = f.showPosterior && state.posterior && state.posterior.fixId === state.selected && state.posterior.fc;
-  if (heatOn) {
-    for (const feat of state.posterior.fc.features) {
-      const st = POSTERIOR_STYLE[feat.properties.p_band] || POSTERIOR_STYLE[0.95];
-      const pct = Math.round(feat.properties.p_band * 100);
-      L.geoJSON(feat, { style: { ...st, fillColor: st.color } })
-        .bindTooltip(`RF-plausible area · ${pct}% of probability`, { sticky: true })
-        .addTo(posteriorLayer);
-    }
-    // Mark the dominant blocking ridge with its height above the sight-line, so
-    // the dimmed area has an obvious, labelled cause.
-    const ob = state.posterior.props && state.posterior.props.obstruction;
-    if (ob) {
-      L.marker([ob.lat, ob.lon], {
-        icon: L.divIcon({ className: "ob-marker", html: `▲ +${ob.clearance_m} m`, iconSize: [60, 18], iconAnchor: [30, 9] }),
-      })
-        .bindTooltip(`Blocking ridge · ground ${ob.terrain_m} m, standing +${ob.clearance_m} m above the line-of-sight to ${ob.node_id}. The signal must diffract over it, so the area beyond is down-weighted.`, { sticky: true })
-        .addTo(posteriorLayer);
-    }
-  }
+  // heat is drawn by renderPosterior() (its own layer); here we only need to know
+  // if it's on, to draw the selected ellipse as a dashed outline.
+  const heatOn = f.showPosterior && state.posterior && state.posterior.fixId === state.selected && !!state.posterior.fc;
 
   // ellipses + centers
   for (const [id, props] of state.fixes) {
@@ -641,7 +649,7 @@ for (const el of document.querySelectorAll(
 }
 $("#show-posterior").addEventListener("change", (e) => {
   if (e.target.checked && state.selected) fetchPosterior(state.selected);
-  else { state.posterior = null; render(); }
+  else { state.posterior = null; renderPosterior(); render(); }
 });
 
 async function tick() {
