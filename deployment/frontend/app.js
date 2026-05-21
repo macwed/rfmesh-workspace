@@ -24,14 +24,23 @@ const state = {
 
 // ---- map ----
 const map = L.map("map", { zoomControl: true }).setView(DEFAULT_VIEW, 13);
-// Topographic basemap (contour lines + hillshade) makes the terrain — and so the
-// RF-shadow heat's cause — visible. Default to it; keep plain OSM as an option.
-const baseTerrain = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
-  maxZoom: 17, attribution: "© OpenTopoMap (CC-BY-SA) · © OpenStreetMap contributors",
-});
+// Basemaps. Default to OSM (always loads). Esri World Topo (relief + contours) and
+// an Esri hillshade OVERLAY make terrain — and the RF-shadow's cause — visible, both
+// key-free and not rate-limited like OpenTopoMap (which left tiles pending → blank map).
 const baseStreet = L.tileLayer(TILE_URL, { maxZoom: 19, attribution: "© OpenStreetMap contributors" });
-baseTerrain.addTo(map);
-L.control.layers({ "Terrain (contours)": baseTerrain, "Street": baseStreet }, null, { position: "topleft" }).addTo(map);
+const baseTerrain = L.tileLayer(
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+  { maxZoom: 19, attribution: "Tiles © Esri — World Topo Map" });
+const hillshade = L.tileLayer(
+  "https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
+  { maxZoom: 19, opacity: 0.35, attribution: "Hillshade © Esri" });
+baseStreet.addTo(map);
+hillshade.addTo(map); // relief shading over the street map by default
+L.control.layers(
+  { "Street (OSM)": baseStreet, "Terrain (Esri)": baseTerrain },
+  { "Hillshade relief": hillshade },
+  { position: "topleft", collapsed: true },
+).addTo(map);
 
 // Live RF-status badge over the map (computing / terrain-effect strength / no-data).
 const rfStatusEl = document.createElement("div");
