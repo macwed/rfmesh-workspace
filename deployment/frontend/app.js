@@ -24,10 +24,20 @@ const state = {
 
 // ---- map ----
 const map = L.map("map", { zoomControl: true }).setView(DEFAULT_VIEW, 13);
-L.tileLayer(TILE_URL, {
-  maxZoom: 19,
-  attribution: "© OpenStreetMap contributors",
-}).addTo(map);
+// Topographic basemap (contour lines + hillshade) makes the terrain — and so the
+// RF-shadow heat's cause — visible. Default to it; keep plain OSM as an option.
+const baseTerrain = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
+  maxZoom: 17, attribution: "© OpenTopoMap (CC-BY-SA) · © OpenStreetMap contributors",
+});
+const baseStreet = L.tileLayer(TILE_URL, { maxZoom: 19, attribution: "© OpenStreetMap contributors" });
+baseTerrain.addTo(map);
+L.control.layers({ "Terrain (contours)": baseTerrain, "Street": baseStreet }, null, { position: "topleft" }).addTo(map);
+
+// Live RF-status badge over the map (computing / terrain-effect strength / no-data).
+const rfStatusEl = document.createElement("div");
+rfStatusEl.id = "rf-status";
+rfStatusEl.hidden = true;
+document.getElementById("map").appendChild(rfStatusEl);
 
 const posteriorLayer = L.layerGroup().addTo(map);  // under the ellipse (added first)
 const ellipseLayer = L.layerGroup().addTo(map);
@@ -72,6 +82,15 @@ const LEGEND_ROWS = [
     read: "Lines cross at the fix. A red line = outlier — suspect that node.",
     act: "2 lines = a guess, 3+ = a fix.",
     but: "These are YOUR sensors, not the threat.",
+  },
+  {
+    k: "ridge",
+    swatch: '<span class="lg-ob">▲</span>',
+    label: "blocking ridge (+m)",
+    means: "The terrain that shadows part of the area (shown on the topo basemap).",
+    read: "The “+N m” is how far the ridge rises ABOVE the straight sight-line to a sensor.",
+    act: "Expect the ground BEYOND it (away from the sensors) to be less likely.",
+    but: "Radio still diffracts over — beyond isn't impossible, just down-weighted.",
   },
 ];
 
@@ -205,16 +224,38 @@ function activeFilters() {
 }
 
 async function fetchPosterior(id, emitterH) {
-  if (!$("#show-posterior").checked) { state.posterior = null; return; }
+  if (!$("#show-posterior").checked) { state.posterior = null; updateRfStatus(); return; }
+  state.posterior = { fixId: id, loading: true }; // show "computing…" immediately
+  updateRfStatus();
   const q = emitterH != null ? `?emitter_h=${emitterH}` : "";
   try {
     const res = await fetch(`fixes/${id}/posterior${q}`);
     if (!res.ok) throw new Error("HTTP " + res.status);
-    state.posterior = { fixId: id, fc: await res.json() };
+    const fc = await res.json();
+    state.posterior = { fixId: id, fc, props: fc.properties || {} };
   } catch (e) {
-    state.posterior = null;
+    state.posterior = { fixId: id, error: true };
   }
   render();
+}
+
+// Live status badge over the map: computing / terrain-effect strength / no-data.
+function updateRfStatus() {
+  const el = document.getElementById("rf-status");
+  if (!el) return;
+  const sp = state.posterior;
+  const on = $("#show-posterior") && $("#show-posterior").checked;
+  if (!on || !state.selected || !sp || sp.fixId !== state.selected) { el.hidden = true; return; }
+  el.hidden = false;
+  el.className = "";
+  if (sp.loading) { el.innerHTML = '<span class="rf-bar"></span> Computing RF-plausibility…'; el.classList.add("rf-loading"); return; }
+  if (sp.error) { el.textContent = "RF-plausibility unavailable"; el.classList.add("rf-warn"); return; }
+  const p = sp.props || {};
+  if ((p.rf_model || "").startsWith("none")) { el.textContent = "RF-plausibility: no terrain data"; el.classList.add("rf-warn"); return; }
+  const lab = (p.rf_effect_label || "?").toUpperCase();
+  const ghz = p.band_hz ? (p.band_hz / 1e9).toFixed(2) + " GHz" : "";
+  el.textContent = `RF terrain effect: ${lab}${ghz ? " · " + ghz : ""}`;
+  el.classList.add("rf-eff-" + (p.rf_effect_label || "na"));
 }
 
 const TARGET_ICON = {
@@ -380,13 +421,23 @@ function render() {
   bearingLayer.clearLayers();
 
   // RF-plausibility posterior (under the ellipse), for the selected fix only.
-  const heatOn = f.showPosterior && state.posterior && state.posterior.fixId === state.selected;
+  const heatOn = f.showPosterior && state.posterior && state.posterior.fixId === state.selected && state.posterior.fc;
   if (heatOn) {
     for (const feat of state.posterior.fc.features) {
       const st = POSTERIOR_STYLE[feat.properties.p_band] || POSTERIOR_STYLE[0.95];
       const pct = Math.round(feat.properties.p_band * 100);
       L.geoJSON(feat, { style: { ...st, fillColor: st.color } })
         .bindTooltip(`RF-plausible area · ${pct}% of probability`, { sticky: true })
+        .addTo(posteriorLayer);
+    }
+    // Mark the dominant blocking ridge with its height above the sight-line, so
+    // the dimmed area has an obvious, labelled cause.
+    const ob = state.posterior.props && state.posterior.props.obstruction;
+    if (ob) {
+      L.marker([ob.lat, ob.lon], {
+        icon: L.divIcon({ className: "ob-marker", html: `▲ +${ob.clearance_m} m`, iconSize: [60, 18], iconAnchor: [30, 9] }),
+      })
+        .bindTooltip(`Blocking ridge · ground ${ob.terrain_m} m, standing +${ob.clearance_m} m above the line-of-sight to ${ob.node_id}. The signal must diffract over it, so the area beyond is down-weighted.`, { sticky: true })
         .addTo(posteriorLayer);
     }
   }
@@ -446,6 +497,7 @@ function render() {
   renderList(f);
   renderDetail();
   renderInvestigation();
+  updateRfStatus();
 
   if (!state.firstFit && state.centers.size > 0) {
     const pts = [...state.centers.values()];

@@ -30,5 +30,21 @@
     "azimuth_deg": 91.1,
     "azimuth_sigma_deg": 6.0,
     "method": "l1_rssi"
+  },
+  {
+    "node_id": "node-ridge-s1",
+    "t_unix_ns": 1779058164370000000,
+    "node_position": {"lat_deg": 50.3337, "lon_deg": 4.9286},
+    "azimuth_deg": 17.4,
+    "azimuth_sigma_deg": 6.0,
+    "method": "l1_rssi"
+  },
+  {
+    "node_id": "node-ridge-s2",
+    "t_unix_ns": 1779058164370000000,
+    "node_position": {"lat_deg": 50.3337, "lon_deg": 4.9343},
+    "azimuth_deg": 343.2,
+    "azimuth_sigma_deg": 6.0,
+    "method": "l1_rssi"
   }
 ]

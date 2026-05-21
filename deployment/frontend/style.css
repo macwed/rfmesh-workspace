@@ -130,6 +130,23 @@ button.ghost { background: transparent; color: var(--text); border: 1px solid va
 
 @media (max-width: 640px) { .lg-body { max-height: 38vh; } }
 
+/* RF-status badge over the map */
+#rf-status { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 1000;
+  background: rgba(14,17,22,.92); border: 1px solid var(--line); border-radius: 14px; padding: 5px 12px;
+  font-size: 12px; font-weight: 600; color: var(--text); box-shadow: 0 4px 14px rgba(0,0,0,.4);
+  display: flex; align-items: center; gap: 8px; pointer-events: none; }
+#rf-status.rf-loading { color: var(--muted); }
+#rf-status .rf-bar { width: 40px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--line) 30%, var(--accent) 50%, var(--line) 70%); background-size: 200% 100%; animation: rfbar 1s linear infinite; }
+@keyframes rfbar { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+#rf-status.rf-warn { color: var(--medium); border-color: var(--medium); }
+#rf-status.rf-eff-strong { border-color: var(--high); color: var(--high); }
+#rf-status.rf-eff-moderate { border-color: var(--medium); color: var(--medium); }
+#rf-status.rf-eff-weak, #rf-status.rf-eff-negligible { color: var(--muted); }
+
+/* blocking-ridge marker + its legend swatch */
+.ob-marker { background: rgba(231,76,60,.92); color: #fff; border: 1px solid #fff; border-radius: 10px; font-size: 10px; font-weight: 700; text-align: center; line-height: 16px; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.5); }
+.lg-ob { color: var(--low); font-size: 13px; }
+
 /* investigation panel */
 #investigation h2 { margin: 10px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
 #investigation .measured { font-size: 11px; color: var(--text); margin-bottom: 6px; }

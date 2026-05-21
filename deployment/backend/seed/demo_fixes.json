@@ -49,5 +49,22 @@
     "method": "stansfield+mle",
     "contributing_nodes": ["node-l1-north", "node-l1-east"],
     "residuals_deg": [-0.5, 0.6]
+  },
+  {
+    "fix_id": "dddddddd-0000-4000-8000-000000000004",
+    "center_freq_hz": 5800000000,
+    "t_unix_ns": 1779058164370000000,
+    "lat_deg": 50.3396,
+    "lon_deg": 4.9315,
+    "hae_m": 0.0,
+    "sigma_m": 300.0,
+    "semi_major_m": 1200.0,
+    "semi_minor_m": 280.0,
+    "orientation_deg": 90.0,
+    "gdop": 4.6,
+    "confidence_level": "low",
+    "method": "stansfield+mle",
+    "contributing_nodes": ["node-ridge-s1", "node-ridge-s2"],
+    "residuals_deg": [0.6, -0.5]
   }
 ]

@@ -83,6 +83,7 @@ class _Node:
     lon: float
     azimuth_deg: float
     azimuth_sigma_deg: float
+    node_id: str = ""
 
 
 class PosteriorEngine:
@@ -146,6 +147,48 @@ class PosteriorEngine:
         h_rx = terrain[-1] + node_h
         loss = _knife_edge_loss_db(terrain, h_tx, h_rx, dist, wavelength_m)
         return max(floor, 1.0 - loss / scale_db)
+
+    def _dominant_obstruction(
+        self,
+        clat: float,
+        clon: float,
+        nodes: list[_Node],
+        emitter_h: float,
+        node_h: float,
+        n: int = 48,
+    ) -> dict[str, Any] | None:
+        """The single worst terrain blocker on the emitter-center → sensor paths.
+
+        Returns the point of greatest clearance-above-line-of-sight (the ridge that
+        casts the RF shadow) so the UI can mark it with its height. None if nothing
+        meaningfully obstructs.
+        """
+        if not self._ok or not nodes:
+            return None
+        best: tuple[float, float, float, float, str] | None = None
+        for nd in nodes:
+            fr = np.linspace(0.0, 1.0, n)
+            lats = clat + (nd.lat - clat) * fr
+            lons = clon + (nd.lon - clon) * fr
+            terr = self._terrain(lats, lons)
+            if terr.shape[0] < 3:
+                continue
+            los = np.linspace(terr[0] + emitter_h, terr[-1] + node_h, n)
+            clr = terr - los
+            k = int(np.argmax(clr[1:-1])) + 1
+            c = float(clr[k])
+            if best is None or c > best[0]:
+                best = (c, float(lats[k]), float(lons[k]), float(terr[k]), nd.node_id)
+        if best is None or best[0] <= 3.0:  # <3 m above sight-line = not really blocking
+            return None
+        c, lat, lon, terr_m, node_id = best
+        return {
+            "lat": lat,
+            "lon": lon,
+            "clearance_m": round(c),
+            "terrain_m": round(terr_m),
+            "node_id": node_id,
+        }
 
     def posterior_geojson(
         self,
@@ -215,10 +258,30 @@ class PosteriorEngine:
 
         post = aoa * rf
         if post.max() <= 0:
-            post = aoa
-        post = post / post.max()
+            post = aoa.copy()
 
+        # How much did terrain reshape the bearing-only estimate? Total-variation
+        # distance between the AoA-only and AoA*RF normalized distributions (0..1).
+        a_sum = float(aoa.sum())
+        p_sum = float(post.sum())
+        if self._ok and a_sum > 0 and p_sum > 0:
+            effect = float(0.5 * np.abs(post / p_sum - aoa / a_sum).sum())
+        else:
+            effect = 0.0
+        if not self._ok:
+            label = "no-terrain"
+        elif effect < 0.05:
+            label = "negligible"
+        elif effect < 0.15:
+            label = "weak"
+        elif effect < 0.30:
+            label = "moderate"
+        else:
+            label = "strong"
+
+        post = post / post.max()
         features = self._bands(post, north, west, dlat, dlon, freq)
+        obstruction = self._dominant_obstruction(lat0, lon0, nodes, emitter_h, node_h)
         return {
             "type": "FeatureCollection",
             "features": features,
@@ -227,6 +290,9 @@ class PosteriorEngine:
                 "band_hz": freq,
                 "rf_model": "knife-edge ITU-R P.526" if self._ok else "none (no DEM)",
                 "rf_prior_strength": "terrain-aware" if self._ok else "geometry-only",
+                "rf_effect": round(effect, 3),
+                "rf_effect_label": label,
+                "obstruction": obstruction,
                 "cell_m": cell_m,
                 "note": "soft RF-plausibility cue; diffraction-based, not a target point",
             },
@@ -288,6 +354,7 @@ def nodes_for_fix(fix: Any, bearings: list[Any]) -> list[_Node]:
                     lon=b.node_position.lon_deg,
                     azimuth_deg=b.azimuth_deg,
                     azimuth_sigma_deg=b.azimuth_sigma_deg,
+                    node_id=node_id,
                 )
             )
     return out
