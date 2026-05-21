@@ -90,6 +90,16 @@ button.ghost { background: transparent; color: var(--text); border: 1px solid va
 .legend { font-size: 11px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
 .swatch-cyan { width: 12px; height: 12px; border-radius: 3px; background: #00e5ff; opacity: .5; display: inline-block; }
 
+/* map legend + selected-fix callout */
+.map-legend { background: rgba(14,17,22,.88); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 11px; color: var(--text); line-height: 1.7; }
+.map-legend .lg-title { font-weight: 700; margin-bottom: 3px; color: var(--text); }
+.map-legend .lg-note { color: var(--muted); margin-top: 3px; font-style: italic; }
+.map-legend .lg-box { display: inline-block; width: 14px; height: 10px; background: #00e5ff; opacity: .4; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+.map-legend .lg-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #4aa8ff; vertical-align: middle; margin-right: 2px; }
+.map-legend .lg-line { display: inline-block; width: 16px; vertical-align: middle; margin: 0 2px; }
+.leaflet-tooltip.fix-callout { background: #161b22; color: var(--text); border: 1px solid var(--accent); font-size: 11px; font-weight: 600; padding: 2px 6px; }
+.leaflet-tooltip.fix-callout::before { border-top-color: var(--accent); }
+
 /* investigation panel */
 #investigation h2 { margin: 10px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
 #investigation .measured { font-size: 11px; color: var(--text); margin-bottom: 6px; }

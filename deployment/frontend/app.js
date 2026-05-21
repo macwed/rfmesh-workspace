@@ -36,10 +36,36 @@ const bearingLayer = L.layerGroup().addTo(map);
 
 // RF-plausibility heat: inner (higher mass) = more opaque cyan.
 const POSTERIOR_STYLE = {
-  0.5: { fillOpacity: 0.40, color: "#00e5ff", weight: 1 },
-  0.8: { fillOpacity: 0.22, color: "#00e5ff", weight: 0.8 },
+  0.5: { fillOpacity: 0.45, color: "#00e5ff", weight: 1 },
+  0.8: { fillOpacity: 0.24, color: "#00e5ff", weight: 0.8 },
   0.95: { fillOpacity: 0.10, color: "#00e5ff", weight: 0.6 },
 };
+
+// Map legend (always visible) so the layers are readable at a glance.
+const legend = L.control({ position: "bottomright" });
+legend.onAdd = () => {
+  const d = L.DomUtil.create("div", "map-legend");
+  d.innerHTML = `
+    <div class="lg-title">Selected emitter</div>
+    <div><span class="lg-line" style="border-top:2px dashed #f1c40f"></span> bearing 95% ellipse</div>
+    <div><span class="lg-box"></span> RF-plausible area (terrain) — inner = likeliest</div>
+    <div><span class="lg-dot"></span> sensor node · <span class="lg-line" style="border-top:2px dashed #4aa8ff"></span> bearing</div>
+    <div class="lg-note">soft cue · not a target point</div>`;
+  return d;
+};
+legend.addTo(map);
+
+function centerCallout(props) {
+  const inv = state.investigation && state.investigation.fixId === props.fix_id ? state.investigation.data : null;
+  if (inv && inv.candidates) {
+    const top = inv.candidates.find((c) => !c.is_unknown);
+    if (top) {
+      const act = (top.recommended_action || "").toUpperCase().replace(/_/g, " ");
+      return `${top.name} · ${Math.round(top.confidence * 100)}%${act ? " · " + act : ""}`;
+    }
+  }
+  return `${props.confidence_level.toUpperCase()} · ${props.contributing_nodes.length} nodes`;
+}
 
 // ---- helpers ----
 const $ = (sel) => document.querySelector(sel);
@@ -248,10 +274,14 @@ function render() {
   bearingLayer.clearLayers();
 
   // RF-plausibility posterior (under the ellipse), for the selected fix only.
-  if (f.showPosterior && state.posterior && state.posterior.fixId === state.selected) {
+  const heatOn = f.showPosterior && state.posterior && state.posterior.fixId === state.selected;
+  if (heatOn) {
     for (const feat of state.posterior.fc.features) {
       const st = POSTERIOR_STYLE[feat.properties.p_band] || POSTERIOR_STYLE[0.95];
-      L.geoJSON(feat, { style: { ...st, fillColor: st.color } }).addTo(posteriorLayer);
+      const pct = Math.round(feat.properties.p_band * 100);
+      L.geoJSON(feat, { style: { ...st, fillColor: st.color } })
+        .bindTooltip(`RF-plausible area · ${pct}% of probability`, { sticky: true })
+        .addTo(posteriorLayer);
     }
   }
 
@@ -262,18 +292,26 @@ function render() {
     const color = confColor(props);
     const ring = state.ellipses.get(id);
     if (ring) {
+      // When the heat is shown under a selected fix, draw the ellipse as a
+      // DASHED OUTLINE only so the cyan posterior is the readable fill and the
+      // two layers don't blend into one blob.
+      const outline = sel && heatOn;
       L.polygon(ring, {
         color, weight: sel ? 3 : 1.5, opacity: sel ? 1 : 0.85,
-        fillColor: color, fillOpacity: props.stale ? 0.05 : (sel ? 0.3 : 0.18),
-        dashArray: props.stale ? "4 4" : null,
-      }).on("click", () => selectFix(id)).addTo(ellipseLayer);
+        fillColor: color,
+        fillOpacity: props.stale ? 0.04 : (outline ? 0.0 : (sel ? 0.25 : 0.18)),
+        dashArray: outline ? "7 5" : (props.stale ? "4 4" : null),
+      })
+        .bindTooltip(`Bearing 95% ellipse · ${props.confidence_level.toUpperCase()}`, { sticky: true })
+        .on("click", () => selectFix(id)).addTo(ellipseLayer);
     }
     const c = state.centers.get(id);
     if (c) {
-      L.circleMarker(c, {
+      const m = L.circleMarker(c, {
         radius: sel ? 7 : 5, color: "#0b0e12", weight: 1,
         fillColor: color, fillOpacity: 1,
       }).on("click", () => selectFix(id)).addTo(centerLayer);
+      if (sel) m.bindTooltip(centerCallout(props), { permanent: true, direction: "top", className: "fix-callout", offset: [0, -8] });
     }
   }
 
