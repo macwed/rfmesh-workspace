@@ -201,6 +201,7 @@ class EnhanceManager:
         self._jobs: dict[str, dict[str, Any]] = {}
         self._cancellers: dict[str, _Canceller] = {}
         self._mem_cache: dict[str, dict[str, Any]] = {}
+        self._window_cache: dict[str, Raster] = {}  # reuse the LiDAR window for hover probes
         try:
             cache_dir.mkdir(parents=True, exist_ok=True)
         except Exception:  # noqa: BLE001
@@ -213,6 +214,32 @@ class EnhanceManager:
     def default_surface(self) -> str | None:
         avail = self.available_surfaces()
         return avail[0] if avail else None
+
+    async def probe_window(
+        self, fix: Any, res: int, emitter_h: float, surface: str, *, buffer_m: float
+    ) -> Raster | None:
+        """The LiDAR window raster matching a displayed enhanced layer, for the
+        hover probe. Reuses the window cached by the last enhance run; reads it
+        once (off-thread) on a miss. Returns None -> caller uses Copernicus."""
+        src = self.sources.get(surface)
+        if res not in RES_GRID or src is None or not src.available:
+            return None
+        key = self._key(str(fix.fix_id), res, emitter_h, surface)
+        rast = self._window_cache.get(key)
+        if rast is None:
+            ell = fix.confidence_ellipse_95
+            reach_m = ell.semi_major_m + buffer_m
+            loop = asyncio.get_running_loop()
+            rast = await loop.run_in_executor(
+                None, src.window,
+                fix.position.lat_deg, fix.position.lon_deg, reach_m, float(res),
+                self.engine.base,
+            )
+            if rast is not None:
+                if len(self._window_cache) > 16:
+                    self._window_cache.clear()
+                self._window_cache[key] = rast
+        return rast
 
     # ---- cache helpers ----
 
@@ -364,6 +391,10 @@ class EnhanceManager:
                     )
                 degraded = raster is None
                 reason = ""
+                if not degraded and raster is not None:
+                    if len(self._window_cache) > 16:
+                        self._window_cache.clear()
+                    self._window_cache[job["key"]] = raster  # for hover probes
                 if degraded:
                     raster = self.engine.base
                     if src is None:

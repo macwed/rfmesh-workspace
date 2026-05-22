@@ -198,7 +198,8 @@ button.ghost { background: transparent; color: var(--text); border: 1px solid va
 #rf-inspector { position: absolute; left: 10px; bottom: 18px; z-index: 1000;
   background: rgba(14,17,22,.92); border: 1px solid var(--line); border-radius: 8px;
   padding: 8px 10px; font-size: 11px; color: var(--text); line-height: 1.55;
-  box-shadow: 0 6px 20px rgba(0,0,0,.45); max-width: 250px; pointer-events: none; }
+  box-shadow: 0 6px 20px rgba(0,0,0,.45); max-width: 320px; max-height: 60vh; overflow-y: auto;
+  pointer-events: none; }
 #rf-inspector .ins-band { font-weight: 700; margin-bottom: 4px; color: #00e5ff; letter-spacing: .3px; }
 #rf-inspector .ins-band-05 { color: #00e5ff; }
 #rf-inspector .ins-band-08 { color: #5beeff; }
@@ -210,6 +211,19 @@ button.ghost { background: transparent; color: var(--text); border: 1px solid va
 #rf-inspector .ins-loss-low { color: var(--high); }
 #rf-inspector .ins-loss-moderate { color: var(--medium); }
 #rf-inspector .ins-loss-high { color: var(--low); }
+/* "show the math" breakdown */
+#rf-inspector .ins-math { margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--line); }
+#rf-inspector .ins-math-wait { color: var(--muted); font-style: italic; }
+#rf-inspector .ins-math-h { color: var(--muted); text-transform: uppercase; font-size: 9px;
+  letter-spacing: .5px; margin-bottom: 3px; }
+#rf-inspector .ins-node { margin-bottom: 4px; }
+#rf-inspector .ins-node-id { color: var(--accent); font-weight: 700; }
+#rf-inspector .ins-aoa, #rf-inspector .ins-rf { font-size: 10px; color: var(--text);
+  font-variant-numeric: tabular-nums; padding-left: 6px; }
+#rf-inspector .ins-rf { color: var(--muted); }
+#rf-inspector .ins-prod { margin-top: 3px; font-variant-numeric: tabular-nums; color: var(--text); }
+#rf-inspector .ins-plaus { margin-top: 2px; color: var(--accent); font-variant-numeric: tabular-nums; }
+#rf-inspector .ins-plaus b { font-size: 13px; }
 #rf-inspector .ins-foot { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--line);
   color: var(--muted); font-style: italic; }
 

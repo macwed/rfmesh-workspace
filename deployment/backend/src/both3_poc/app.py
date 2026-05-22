@@ -15,8 +15,10 @@ the PyTAKCotPublisher lifecycle constraints. See cot_send.py.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from contextlib import asynccontextmanager
+from functools import partial
 from typing import Any
 from uuid import UUID
 
@@ -206,6 +208,49 @@ async def get_posterior(fix_id: UUID, emitter_h: float | None = None) -> JSONRes
         node_h=settings.node_antenna_h_m,
     )
     return JSONResponse(fc)
+
+
+@app.get("/fixes/{fix_id}/posterior/probe")
+async def posterior_probe(
+    fix_id: UUID,
+    lat: float,
+    lon: float,
+    res: int | None = None,
+    surface: str | None = None,
+    emitter_h: float | None = None,
+) -> JSONResponse:
+    """The raw math behind the plausibility at one point (for the hover inspector):
+    per-node AoA residual/σ/likelihood + per-node RF distance/clearance/Fresnel-v/
+    loss/weight, the two products, and the normalized plausibility + band. Matches
+    whatever layer is displayed — pass res+surface for an enhanced view, else the
+    Copernicus default is used."""
+    settings = _settings(app)
+    store = _store(app)
+    fix = store.get_fix(fix_id)
+    if fix is None:
+        raise HTTPException(status_code=404, detail=f"no fix with id {fix_id}")
+    engine: PosteriorEngine = app.state.posterior
+    mgr: EnhanceManager = app.state.enhance
+    nodes = nodes_for_fix(fix, store.list_bearings())
+    eh = emitter_h if emitter_h is not None else settings.emitter_antenna_h_m
+    raster = None
+    cell_m = settings.posterior_cell_m
+    n = 24
+    if res is not None and res in RES_GRID and surface in {"dtm", "dsm"}:
+        w = await mgr.probe_window(fix, res, eh, surface, buffer_m=settings.posterior_buffer_m)
+        if w is not None:
+            raster = w
+            cell_m = float(RES_GRID[res]["cell_m"])
+            n = int(RES_GRID[res]["samples"])
+    loop = asyncio.get_running_loop()
+    fn = partial(
+        engine.probe, fix, nodes, store.freq_for(fix_id), lat, lon,
+        cell_m=cell_m, buffer_m=settings.posterior_buffer_m, floor=settings.rf_shadow_floor,
+        scale_db=settings.diffraction_loss_scale_db, emitter_h=eh,
+        node_h=settings.node_antenna_h_m, raster=raster, n_path_samples=n,
+    )
+    result = await loop.run_in_executor(None, fn)
+    return JSONResponse(result)
 
 
 @app.post("/fixes/{fix_id}/enhance")

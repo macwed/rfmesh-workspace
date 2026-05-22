@@ -603,6 +603,64 @@ function demShort(props) {
   return src.split(" ")[0] || "terrain";
 }
 
+// Probe query params that make the breakdown match the *displayed* layer.
+function inspectorParams(fcp) {
+  let q = "";
+  if (fcp && fcp.enhanced && fcp.scan_density_m && fcp.surface) {
+    q += `&res=${fcp.scan_density_m}&surface=${fcp.surface}`;
+  }
+  if (state.emitterH != null) q += `&emitter_h=${state.emitterH}`;
+  return q;
+}
+
+// The "show the math" block: per-node AoA + RF terms, the products, and the
+// normalized plausibility. This is the trust-builder — every number that feeds
+// the plausibility is on screen.
+function probeMathHtml(p) {
+  if (!p) return `<div class="ins-math ins-math-wait">computing…</div>`;
+  const nodeRows = (p.nodes || []).map((n) => {
+    const clr = n.clearance_m != null ? `${n.clearance_m >= 0 ? "+" : ""}${n.clearance_m} m` : "—";
+    const rf = n.loss_db != null
+      ? `d ${n.distance_m} m · clr ${clr} vs LOS · v ${n.fresnel_v} · loss ${n.loss_db} dB → w ${n.weight}`
+      : "(no terrain)";
+    return `<div class="ins-node">
+      <div class="ins-node-id">${n.node_id}</div>
+      <div class="ins-aoa">AoA: meas ${n.azimuth_meas_deg}° · pred ${n.bearing_pred_deg}° · Δ${n.residual_deg}° · σ${n.sigma_deg}° → L ${n.aoa_likelihood}</div>
+      <div class="ins-rf">RF: ${rf}</div>
+    </div>`;
+  }).join("");
+  const rfp = p.rf_product != null ? ` × RF ${p.rf_product}` : "";
+  return `<div class="ins-math">
+    <div class="ins-math-h">why this value</div>
+    ${nodeRows}
+    <div class="ins-prod">Π AoA ${p.aoa_product}${rfp} = ${p.raw}</div>
+    <div class="ins-plaus">plausibility <b>${p.plausibility}</b> of local peak</div>
+  </div>`;
+}
+
+let _probeTimer = null;
+let _probeToken = 0;
+let _lastProbe = null;
+
+function fetchProbe(latlng) {
+  const id = state.selected;
+  if (!id) return;
+  const token = ++_probeToken;
+  clearTimeout(_probeTimer);
+  _probeTimer = setTimeout(async () => {
+    try {
+      const q = inspectorParams(renderedFcProps);
+      const r = await fetch(`fixes/${id}/posterior/probe?lat=${latlng.lat}&lon=${latlng.lng}${q}`);
+      if (!r.ok) return;
+      const p = await r.json();
+      if (token !== _probeToken || state.selected !== id) return; // stale move / fix switch
+      _lastProbe = p;
+      const slot = inspectorEl.querySelector(".ins-math-slot");
+      if (slot && !inspectorEl.hidden) slot.innerHTML = probeMathHtml(p);
+    } catch (e) { /* ignore transient probe errors */ }
+  }, 140);
+}
+
 function updateInspector(latlng) {
   const el = inspectorEl;
   // Only when heat is actually drawn for the selected fix.
@@ -615,7 +673,7 @@ function updateInspector(latlng) {
     const band = renderedBands.find((b) => b.p_band === pb);
     if (band && pointInGeometry(lon, lat, band.geometry)) { hit = band; break; }
   }
-  if (!hit) { el.hidden = true; return; }
+  if (!hit) { el.hidden = true; clearTimeout(_probeTimer); return; }
   const bp = hit.props;
   const fcp = renderedFcProps || {};
   const bandLabel = BAND_LABEL[hit.p_band] || `${Math.round(hit.p_band * 100)}%`;
@@ -631,11 +689,13 @@ function updateInspector(latlng) {
     <div class="ins-row"><span class="ins-k">Model</span><span class="ins-v">${model}</span></div>
     <div class="ins-row"><span class="ins-k">Terrain height</span><span class="ins-v">${terr}</span></div>
     <div class="ins-row"><span class="ins-k">Diffraction loss</span><span class="ins-v ins-loss-${bp.loss_label || "na"}">${lossLabel}${lossModel}</span></div>
+    <div class="ins-math-slot">${probeMathHtml(_lastProbe)}</div>
     <div class="ins-foot">cue, not a hit · power not measured</div>`;
+  fetchProbe(latlng); // debounced; fills the math slot with live per-node numbers
 }
 
 map.on("mousemove", (e) => updateInspector(e.latlng));
-map.on("mouseout", () => { inspectorEl.hidden = true; });
+map.on("mouseout", () => { inspectorEl.hidden = true; clearTimeout(_probeTimer); });
 
 const TARGET_ICON = {
   gnss_gps: "🛰GPS", glonass: "🛰GLO", starlink_leo_satcom: "📡SAT", gsm_cellular: "📶GSM",
