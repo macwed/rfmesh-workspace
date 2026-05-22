@@ -1,7 +1,7 @@
-.env
-.env.prod
-__pycache__/
-*.py[cod]
+# Build context = deployment/. Keep big/runtime-only artifacts out of the image.
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
 
 # Enhance runtime cache + any staged LiDAR (the real COG lives on F:, bind-mounted)
 backend/data/cache/
@@ -9,3 +9,7 @@ backend/data/_staging/
 backend/data/lidar_aoi.tif
 backend/data/*.zip
 backend/data/*.laz
+
+# editor / OS noise
+.DS_Store
+*.swp

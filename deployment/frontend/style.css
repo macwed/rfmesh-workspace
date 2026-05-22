@@ -132,16 +132,77 @@ button.ghost { background: transparent; color: var(--text); border: 1px solid va
 
 /* RF-status badge over the map */
 #rf-status { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 1000;
-  background: rgba(14,17,22,.92); border: 1px solid var(--line); border-radius: 14px; padding: 5px 12px;
+  background: rgba(14,17,22,.92); border: 1px solid var(--line); border-radius: 14px; padding: 6px 12px;
   font-size: 12px; font-weight: 600; color: var(--text); box-shadow: 0 4px 14px rgba(0,0,0,.4);
-  display: flex; align-items: center; gap: 8px; pointer-events: none; }
-#rf-status.rf-loading { color: var(--muted); }
+  display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none;
+  max-width: min(92vw, 460px); }
+/* the badge text is non-interactive, but its controls/glyphs opt back in */
+#rf-status .rf-enhance, #rf-status .rf-run, #rf-status .rf-cancel, #rf-status .rf-revert,
+#rf-status .enh-slider, #rf-status .info-i { pointer-events: auto; }
+#rf-status.rf-loading { color: var(--muted); flex-direction: row; }
 #rf-status .rf-bar { width: 40px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--line) 30%, var(--accent) 50%, var(--line) 70%); background-size: 200% 100%; animation: rfbar 1s linear infinite; }
 @keyframes rfbar { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 #rf-status.rf-warn { color: var(--medium); border-color: var(--medium); }
-#rf-status.rf-eff-strong { border-color: var(--high); color: var(--high); }
-#rf-status.rf-eff-moderate { border-color: var(--medium); color: var(--medium); }
-#rf-status.rf-eff-weak, #rf-status.rf-eff-negligible { color: var(--muted); }
+#rf-status.rf-eff-strong { border-color: var(--high); }
+#rf-status.rf-eff-strong .rf-line1 { color: var(--high); }
+#rf-status.rf-eff-moderate { border-color: var(--medium); }
+#rf-status.rf-eff-moderate .rf-line1 { color: var(--medium); }
+#rf-status.rf-eff-weak .rf-line1, #rf-status.rf-eff-negligible .rf-line1 { color: var(--muted); }
+
+/* rf-status two-line layout */
+#rf-status .rf-line1 { font-weight: 600; }
+#rf-status .rf-line2 { display: flex; align-items: center; gap: 8px; font-weight: 500; font-size: 11px; color: var(--muted); }
+#rf-status .rf-line2.rf-src-sharp { color: var(--accent); }
+#rf-status .rf-line2.rf-src-degraded { color: var(--medium); }
+#rf-status .rf-line2 .info-i.rf-reason { width: 13px; height: 13px; font-size: 8px; }
+
+/* enhance / revert / cancel mini-buttons inside the badge */
+#rf-status .rf-enhance, #rf-status .rf-revert, #rf-status .rf-run, #rf-status .rf-cancel {
+  font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 10px; line-height: 1; }
+#rf-status .rf-enhance { background: var(--accent); color: #04121f; }
+#rf-status .rf-run { background: var(--accent); color: #04121f; width: 100%; margin-top: 6px; padding: 6px; }
+#rf-status .rf-revert, #rf-status .rf-cancel { background: transparent; color: var(--text); border: 1px solid var(--line); }
+#rf-status .rf-cancel { color: var(--low); border-color: var(--low); }
+
+/* scan-density panel */
+#rf-status .enh-panel { display: flex; flex-direction: column; gap: 4px; width: 100%; margin-top: 6px;
+  padding-top: 6px; border-top: 1px solid var(--line); pointer-events: auto; }
+#rf-status .enh-row { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
+#rf-status .enh-ext-r { text-align: right; }
+#rf-status .enh-readout { font-weight: 600; color: var(--text); }
+#rf-status .enh-readout .enh-eta { color: var(--accent); font-variant-numeric: tabular-nums; }
+#rf-status .enh-readout b { color: var(--text); }
+#rf-status .enh-slider { width: 100%; accent-color: var(--accent); margin: 0; cursor: pointer; }
+#rf-status .enh-note { font-size: 10px; color: var(--medium); font-style: italic; line-height: 1.35; }
+
+/* phased progress bar */
+#rf-status .enh-progress { width: 100%; }
+#rf-status .enh-phase { min-width: 78px; color: var(--accent); font-weight: 600; }
+#rf-status .enh-pbar { flex: 1; height: 5px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+#rf-status .enh-pfill { display: block; height: 100%; background: var(--accent); transition: width .25s ease; }
+#rf-status .enh-pct { min-width: 30px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+
+/* dim the existing heat underneath while an enhance compute is in flight */
+.posterior-dim { opacity: .35; transition: opacity .2s; }
+
+/* hover inspector — pinned bottom-left, opposite the bottom-right legend */
+#rf-inspector { position: absolute; left: 10px; bottom: 18px; z-index: 1000;
+  background: rgba(14,17,22,.92); border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 10px; font-size: 11px; color: var(--text); line-height: 1.55;
+  box-shadow: 0 6px 20px rgba(0,0,0,.45); max-width: 250px; pointer-events: none; }
+#rf-inspector .ins-band { font-weight: 700; margin-bottom: 4px; color: #00e5ff; letter-spacing: .3px; }
+#rf-inspector .ins-band-05 { color: #00e5ff; }
+#rf-inspector .ins-band-08 { color: #5beeff; }
+#rf-inspector .ins-band-095 { color: #9af4ff; }
+#rf-inspector .ins-row { display: flex; justify-content: space-between; gap: 12px; }
+#rf-inspector .ins-k { color: var(--muted); }
+#rf-inspector .ins-v { text-align: right; font-variant-numeric: tabular-nums; }
+#rf-inspector .ins-model { color: var(--muted); font-weight: 400; }
+#rf-inspector .ins-loss-low { color: var(--high); }
+#rf-inspector .ins-loss-moderate { color: var(--medium); }
+#rf-inspector .ins-loss-high { color: var(--low); }
+#rf-inspector .ins-foot { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--line);
+  color: var(--muted); font-style: italic; }
 
 /* blocking-ridge marker + its legend swatch */
 .ob-marker { background: rgba(231,76,60,.92); color: #fff; border: 1px solid #fff; border-radius: 10px; font-size: 10px; font-weight: 700; text-align: center; line-height: 16px; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.5); }

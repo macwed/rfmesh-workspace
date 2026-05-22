@@ -30,6 +30,7 @@ from rfmesh_cot import CotError
 
 from .config import Settings
 from .cot_send import CotSender
+from .enhance import RES_GRID, EnhanceManager, LidarSource
 from .geojson import bearings_feature_collection, fixes_feature_collection
 from .inference import investigate, load_catalog
 from .posterior import PosteriorEngine, nodes_for_fix
@@ -52,7 +53,15 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
     app.state.settings = settings
     app.state.store = store
     app.state.sender = sender
-    app.state.posterior = PosteriorEngine(settings.dem_file)
+    engine = PosteriorEngine(settings.dem_file)
+    app.state.posterior = engine
+    app.state.enhance = EnhanceManager(
+        engine,
+        LidarSource(settings.lidar_file),
+        cache_dir=settings.enhance_cache_dir,
+        max_concurrent=settings.enhance_max_concurrent,
+        timeout_s=settings.enhance_timeout_s,
+    )
     try:
         yield
     finally:
@@ -186,6 +195,60 @@ async def get_posterior(fix_id: UUID, emitter_h: float | None = None) -> JSONRes
         node_h=settings.node_antenna_h_m,
     )
     return JSONResponse(fc)
+
+
+@app.post("/fixes/{fix_id}/enhance")
+async def enhance_fix(fix_id: UUID, res: int = 2, emitter_h: float | None = None) -> JSONResponse:
+    """Kick an on-demand high-res (Wallonia 1 m LiDAR) recompute of this fix's
+    chunk at scan density ``res`` m (1-4). Returns a job; poll the job endpoint.
+    Falls back to Copernicus (honestly labelled) when LiDAR is unavailable."""
+    if res not in RES_GRID:
+        raise HTTPException(status_code=422, detail=f"res must be one of {sorted(RES_GRID)}")
+    settings = _settings(app)
+    store = _store(app)
+    fix = store.get_fix(fix_id)
+    if fix is None:
+        raise HTTPException(status_code=404, detail=f"no fix with id {fix_id}")
+    mgr: EnhanceManager = app.state.enhance
+    nodes = nodes_for_fix(fix, store.list_bearings())
+    eh = emitter_h if emitter_h is not None else settings.emitter_antenna_h_m
+    job = mgr.submit(
+        fix, nodes, store.freq_for(fix_id), res, eh,
+        buffer_m=settings.posterior_buffer_m,
+        floor=settings.rf_shadow_floor,
+        scale_db=settings.diffraction_loss_scale_db,
+        node_h=settings.node_antenna_h_m,
+    )
+    return JSONResponse(job, status_code=202)
+
+
+@app.get("/enhance/jobs/{job_id}")
+async def enhance_job(job_id: str) -> JSONResponse:
+    job = app.state.enhance.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"no enhance job {job_id}")
+    return JSONResponse(job)
+
+
+@app.post("/enhance/jobs/{job_id}/cancel")
+async def enhance_cancel(job_id: str) -> dict[str, Any]:
+    ok = app.state.enhance.cancel(job_id)
+    if not ok:
+        raise HTTPException(status_code=409, detail="job not cancellable (missing or finished)")
+    return {"cancelled": True}
+
+
+@app.get("/enhance/options")
+async def enhance_options() -> dict[str, Any]:
+    """Scan-density choices + whether real LiDAR is staged (for the UI badge)."""
+    mgr: EnhanceManager = app.state.enhance
+    return {
+        "lidar_available": mgr.lidar.available,
+        "lidar_detail": mgr.lidar.error if not mgr.lidar.available else "Wallonia MNT 1 m",
+        "options": [
+            {"res_m": r, "eta_s": RES_GRID[r]["eta_s"]} for r in sorted(RES_GRID)
+        ],
+    }
 
 
 @app.get("/fixes/{fix_id}/investigate")

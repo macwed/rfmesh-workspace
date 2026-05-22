@@ -40,6 +40,11 @@ class Settings:
     diffraction_loss_scale_db: float
     emitter_antenna_h_m: float
     node_antenna_h_m: float
+    # ---- on-demand LiDAR Enhance ----
+    lidar_file: Path
+    enhance_cache_dir: Path
+    enhance_max_concurrent: int
+    enhance_timeout_s: float
     # ---- Phase 2: emitter investigation ----
     equipment_catalog_file: Path
 
@@ -67,6 +72,10 @@ class Settings:
             diffraction_loss_scale_db=float(os.environ.get("DIFFRACTION_LOSS_SCALE_DB", "25")),
             emitter_antenna_h_m=float(os.environ.get("EMITTER_ANTENNA_H_M", "2.0")),
             node_antenna_h_m=float(os.environ.get("NODE_ANTENNA_H_M", "3.0")),
+            lidar_file=Path(os.environ.get("LIDAR_FILE", "/app/data/lidar_aoi.tif")),
+            enhance_cache_dir=Path(os.environ.get("ENHANCE_CACHE_DIR", "/app/data/cache")),
+            enhance_max_concurrent=int(os.environ.get("ENHANCE_MAX_CONCURRENT", "2")),
+            enhance_timeout_s=float(os.environ.get("ENHANCE_TIMEOUT_S", "30")),
             equipment_catalog_file=Path(
                 os.environ.get("EQUIPMENT_CATALOG_FILE", "/app/data/equipment_catalog.json")
             ),
