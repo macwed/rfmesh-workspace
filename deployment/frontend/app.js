@@ -59,6 +59,67 @@ inspectorEl.id = "rf-inspector";
 inspectorEl.hidden = true;
 document.getElementById("map").appendChild(inspectorEl);
 
+// Persistent "ⓘ how to read these numbers" chip + a plain-language explainer card,
+// so the operator/client can decode the hover inspector's terms. The hover panel
+// itself is a pass-through overlay (can't host a clickable icon), so this lives
+// next to it and stays put.
+const rfHelpChip = document.createElement("button");
+rfHelpChip.id = "rf-help-chip";
+rfHelpChip.type = "button";
+rfHelpChip.hidden = true;
+rfHelpChip.innerHTML = "ⓘ how to read these numbers";
+document.getElementById("map").appendChild(rfHelpChip);
+
+const rfHelpCard = document.createElement("div");
+rfHelpCard.id = "rf-help-card";
+rfHelpCard.hidden = true;
+rfHelpCard.innerHTML = `
+  <div class="hc-head"><span>Reading the RF-plausibility numbers</span>
+    <button class="hc-x" type="button" aria-label="close">×</button></div>
+  <div class="hc-body">
+    <p><b>Plausibility</b> = how strongly <i>this spot</i> fits <b>both</b> the sensor
+    bearings <b>and</b> the terrain, compared to the most-likely spot on the map
+    (which scores <b>1.0</b>). A relative cue — not a probability of a hit.</p>
+    <p>It multiplies two things, for every contributing sensor:</p>
+    <p class="hc-h">1 · AoA — bearing geometry</p>
+    <ul>
+      <li><b>meas</b> — the direction the sensor actually measured to the emitter (°).</li>
+      <li><b>pred</b> — the direction <i>from that sensor to this spot</i> (°).</li>
+      <li><b>Δ</b> (residual) — how far <b>pred</b> is from <b>meas</b>.</li>
+      <li><b>σ</b> — that sensor's own stated 1-σ bearing uncertainty.</li>
+      <li><b>L</b> (likelihood) — how well this spot agrees with the sensor: 1.0 = bang
+        on, falling off as Δ grows past σ.</li>
+    </ul>
+    <p class="hc-h">2 · RF — terrain path (knife-edge diffraction, ITU-R P.526)</p>
+    <ul>
+      <li><b>d</b> — distance from this spot to the sensor.</li>
+      <li><b>clr</b> (clearance) — how far terrain rises <b>above (+)</b> or below (−) the
+        straight line-of-sight. A “+” means a hill/ridge is in the way.</li>
+      <li><b>v</b> — Fresnel diffraction parameter (larger = more blocked).</li>
+      <li><b>loss</b> — modelled signal attenuation from that obstruction, in dB.
+        <i>A model number, not measured power.</i></li>
+      <li><b>w</b> — soft weight: 1.0 = clear path, dropping toward a floor when blocked —
+        <b>never 0</b>, because radio waves bend around edges.</li>
+    </ul>
+    <p class="hc-h">Putting it together</p>
+    <ul>
+      <li><b>Π AoA × RF</b> — multiply every sensor's L and w together = the raw score.</li>
+      <li><b>plausibility</b> = raw ÷ the peak score on the map.</li>
+    </ul>
+    <p class="hc-foot">Terrain never fully blocks a signal, so shadowed spots are
+    down-weighted, not erased. It's a <b>cue, not a target</b> — confirm with a second
+    sensor / PID before acting. Power is not measured (no dBm).</p>
+  </div>`;
+document.getElementById("map").appendChild(rfHelpCard);
+rfHelpChip.onclick = () => { rfHelpCard.hidden = !rfHelpCard.hidden; };
+rfHelpCard.querySelector(".hc-x").onclick = () => { rfHelpCard.hidden = true; };
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") rfHelpCard.hidden = true; });
+document.addEventListener("click", (e) => {
+  if (!rfHelpCard.hidden && !rfHelpCard.contains(e.target) && e.target !== rfHelpChip) {
+    rfHelpCard.hidden = true;
+  }
+});
+
 const posteriorLayer = L.layerGroup().addTo(map);  // under the ellipse (added first)
 const ellipseLayer = L.layerGroup().addTo(map);
 const centerLayer = L.layerGroup().addTo(map);
@@ -296,14 +357,18 @@ function updateRfStatus() {
   if (!el) return;
   const sp = state.posterior;
   const on = $("#show-posterior") && $("#show-posterior").checked;
-  if (!on || !state.selected || !sp || sp.fixId !== state.selected) { el.hidden = true; return; }
+  if (!on || !state.selected || !sp || sp.fixId !== state.selected) {
+    el.hidden = true; rfHelpChip.hidden = true; rfHelpCard.hidden = true; return;
+  }
   el.hidden = false;
   el.className = "";
+  rfHelpChip.hidden = true;  // shown only once a real posterior is present (below)
 
   if (sp.loading) { el.innerHTML = '<span class="rf-bar"></span> Computing RF-plausibility…'; el.classList.add("rf-loading"); return; }
   if (sp.error) { el.textContent = "RF-plausibility unavailable"; el.classList.add("rf-warn"); return; }
   const p = sp.props || {};
   if ((p.rf_model || "").startsWith("none")) { el.textContent = "RF-plausibility: no terrain data"; el.classList.add("rf-warn"); return; }
+  rfHelpChip.hidden = false;  // real terrain-aware posterior -> the help chip applies
 
   // Which FC properties are live right now (enhanced override wins for the label).
   const liveProps = (state.enhanced && state.enhanced.fixId === state.selected) ? state.enhanced.props : p;

@@ -195,7 +195,7 @@ button.ghost { background: transparent; color: var(--text); border: 1px solid va
 .posterior-dim { opacity: .35; transition: opacity .2s; }
 
 /* hover inspector — pinned bottom-left, opposite the bottom-right legend */
-#rf-inspector { position: absolute; left: 10px; bottom: 18px; z-index: 1000;
+#rf-inspector { position: absolute; left: 10px; bottom: 48px; z-index: 1000;
   background: rgba(14,17,22,.92); border: 1px solid var(--line); border-radius: 8px;
   padding: 8px 10px; font-size: 11px; color: var(--text); line-height: 1.55;
   box-shadow: 0 6px 20px rgba(0,0,0,.45); max-width: 320px; max-height: 60vh; overflow-y: auto;
@@ -225,6 +225,31 @@ button.ghost { background: transparent; color: var(--text); border: 1px solid va
 #rf-inspector .ins-plaus { margin-top: 2px; color: var(--accent); font-variant-numeric: tabular-nums; }
 #rf-inspector .ins-plaus b { font-size: 13px; }
 #rf-inspector .ins-foot { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--line);
+  color: var(--muted); font-style: italic; }
+
+/* persistent "how to read these numbers" chip + explainer card */
+#rf-help-chip { position: absolute; left: 10px; bottom: 18px; z-index: 1001;
+  background: rgba(14,17,22,.92); border: 1px solid var(--accent); color: var(--accent);
+  border-radius: 14px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+#rf-help-chip:hover { background: var(--accent); color: #04121f; }
+#rf-help-card { position: absolute; left: 10px; bottom: 50px; z-index: 1002; width: 340px;
+  max-width: calc(100vw - 24px); max-height: 72vh; overflow-y: auto;
+  background: rgba(12,15,20,.97); border: 1px solid var(--accent); border-radius: 10px;
+  box-shadow: 0 10px 34px rgba(0,0,0,.6); font-size: 12px; line-height: 1.5; color: var(--text); }
+#rf-help-card .hc-head { display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 12px; border-bottom: 1px solid var(--line); font-weight: 700; color: var(--accent);
+  position: sticky; top: 0; background: rgba(12,15,20,.99); }
+#rf-help-card .hc-x { background: transparent; border: none; color: var(--muted); font-size: 18px;
+  line-height: 1; cursor: pointer; padding: 0 2px; }
+#rf-help-card .hc-x:hover { color: var(--text); }
+#rf-help-card .hc-body { padding: 6px 12px 12px; }
+#rf-help-card .hc-body p { margin: 7px 0; }
+#rf-help-card .hc-h { font-weight: 700; color: var(--accent); margin-top: 11px; }
+#rf-help-card .hc-body ul { margin: 4px 0 4px; padding-left: 16px; }
+#rf-help-card .hc-body li { margin: 3px 0; }
+#rf-help-card .hc-body b { color: #cfe9ff; }
+#rf-help-card .hc-foot { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line);
   color: var(--muted); font-style: italic; }
 
 /* blocking-ridge marker + its legend swatch */
