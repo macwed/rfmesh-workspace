@@ -41,7 +41,8 @@ class Settings:
     emitter_antenna_h_m: float
     node_antenna_h_m: float
     # ---- on-demand LiDAR Enhance ----
-    lidar_file: Path
+    lidar_file: Path  # DTM (bare earth) — Wallonia MNT 1 m
+    lidar_dsm_file: Path  # DSM (surface, incl. buildings) — Wallonia MNS 1 m
     enhance_cache_dir: Path
     enhance_max_concurrent: int
     enhance_timeout_s: float
@@ -73,6 +74,7 @@ class Settings:
             emitter_antenna_h_m=float(os.environ.get("EMITTER_ANTENNA_H_M", "2.0")),
             node_antenna_h_m=float(os.environ.get("NODE_ANTENNA_H_M", "3.0")),
             lidar_file=Path(os.environ.get("LIDAR_FILE", "/app/data/lidar_aoi.tif")),
+            lidar_dsm_file=Path(os.environ.get("LIDAR_DSM_FILE", "/app/data/lidar_dsm_aoi.tif")),
             enhance_cache_dir=Path(os.environ.get("ENHANCE_CACHE_DIR", "/app/data/cache")),
             enhance_max_concurrent=int(os.environ.get("ENHANCE_MAX_CONCURRENT", "2")),
             enhance_timeout_s=float(os.environ.get("ENHANCE_TIMEOUT_S", "30")),

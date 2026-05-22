@@ -57,7 +57,18 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
     app.state.posterior = engine
     app.state.enhance = EnhanceManager(
         engine,
-        LidarSource(settings.lidar_file),
+        {
+            "dtm": LidarSource(
+                settings.lidar_file,
+                source_id="wallonia-lidar-mnt-1m",
+                label="Wallonia LiDAR MNT 1 m (bare earth)",
+            ),
+            "dsm": LidarSource(
+                settings.lidar_dsm_file,
+                source_id="wallonia-lidar-mns-1m",
+                label="Wallonia LiDAR MNS 1 m (surface, incl. buildings)",
+            ),
+        },
         cache_dir=settings.enhance_cache_dir,
         max_concurrent=settings.enhance_max_concurrent,
         timeout_s=settings.enhance_timeout_s,
@@ -198,10 +209,14 @@ async def get_posterior(fix_id: UUID, emitter_h: float | None = None) -> JSONRes
 
 
 @app.post("/fixes/{fix_id}/enhance")
-async def enhance_fix(fix_id: UUID, res: int = 2, emitter_h: float | None = None) -> JSONResponse:
+async def enhance_fix(
+    fix_id: UUID, res: int = 2, emitter_h: float | None = None, surface: str | None = None
+) -> JSONResponse:
     """Kick an on-demand high-res (Wallonia 1 m LiDAR) recompute of this fix's
-    chunk at scan density ``res`` m (1-4). Returns a job; poll the job endpoint.
-    Falls back to Copernicus (honestly labelled) when LiDAR is unavailable."""
+    chunk at scan density ``res`` m (1-4). ``surface`` picks bare-earth ``dtm``
+    (MNT) or surface-with-buildings ``dsm`` (MNS); defaults to DSM when staged.
+    Returns a job; poll the job endpoint. Falls back to Copernicus (honestly
+    labelled) when the chosen LiDAR surface is unavailable."""
     if res not in RES_GRID:
         raise HTTPException(status_code=422, detail=f"res must be one of {sorted(RES_GRID)}")
     settings = _settings(app)
@@ -210,10 +225,14 @@ async def enhance_fix(fix_id: UUID, res: int = 2, emitter_h: float | None = None
     if fix is None:
         raise HTTPException(status_code=404, detail=f"no fix with id {fix_id}")
     mgr: EnhanceManager = app.state.enhance
+    surf = surface or mgr.default_surface() or "dsm"
+    if surf not in {"dtm", "dsm"}:
+        raise HTTPException(status_code=422, detail="surface must be 'dtm' or 'dsm'")
     nodes = nodes_for_fix(fix, store.list_bearings())
     eh = emitter_h if emitter_h is not None else settings.emitter_antenna_h_m
     job = mgr.submit(
         fix, nodes, store.freq_for(fix_id), res, eh,
+        surface=surf,
         buffer_m=settings.posterior_buffer_m,
         floor=settings.rf_shadow_floor,
         scale_db=settings.diffraction_loss_scale_db,
@@ -240,11 +259,24 @@ async def enhance_cancel(job_id: str) -> dict[str, Any]:
 
 @app.get("/enhance/options")
 async def enhance_options() -> dict[str, Any]:
-    """Scan-density choices + whether real LiDAR is staged (for the UI badge)."""
+    """Scan-density choices + which LiDAR surfaces are staged (for the UI badge)."""
     mgr: EnhanceManager = app.state.enhance
+    surfaces = []
+    for key in ("dsm", "dtm"):
+        src = mgr.sources.get(key)
+        if src is None:
+            continue
+        surfaces.append({
+            "surface": key,
+            "label": src.label,
+            "available": src.available,
+            "detail": src.label if src.available else (src.error or "not staged"),
+        })
+    avail = mgr.available_surfaces()
     return {
-        "lidar_available": mgr.lidar.available,
-        "lidar_detail": mgr.lidar.error if not mgr.lidar.available else "Wallonia MNT 1 m",
+        "lidar_available": bool(avail),
+        "default_surface": mgr.default_surface(),
+        "surfaces": surfaces,
         "options": [
             {"res_m": r, "eta_s": RES_GRID[r]["eta_s"]} for r in sorted(RES_GRID)
         ],

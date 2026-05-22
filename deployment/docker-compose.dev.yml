@@ -12,10 +12,12 @@ services:
       # Windows/Docker-Desktop bind mounts don't propagate inotify; force polling
       # so uvicorn --reload actually fires.
       WATCHFILES_FORCE_POLLING: "true"
-      # The staged Wallonia 1 m LiDAR COG lives on F: (the C: system drive is
-      # full and the AOI raster is hundreds of MB). LidarSource reads it here;
-      # if the file is absent, Enhance falls back to Copernicus (labelled).
+      # The staged Wallonia 1 m LiDAR COGs live on F: (the C: system drive is
+      # full and the AOI rasters are hundreds of MB). LidarSource reads them here;
+      # if a file is absent, Enhance falls back to Copernicus (labelled).
+      #   MNT = bare earth (DTM); MNS = surface incl. buildings (DSM).
       LIDAR_FILE: /lidar/lidar_aoi.tif
+      LIDAR_DSM_FILE: /lidar/lidar_dsm_aoi.tif
     volumes:
       - ./backend/src:/app/backend/src
       - ./backend/seed:/app/seed

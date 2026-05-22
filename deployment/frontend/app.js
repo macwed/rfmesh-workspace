@@ -269,8 +269,10 @@ function terrainLabel(props) {
   const res = props && props.dem_res_m != null ? Math.round(props.dem_res_m) : null;
   const lid = props && props.scan_density_m != null ? Math.round(props.scan_density_m) : null;
   if (props && props.enhanced) {
-    // LiDAR-enhanced (sharp). Use the scan density actually computed.
-    return { text: `Wallonia LiDAR · ${lid != null ? lid : res} m`, kind: "sharp", reason: src };
+    // LiDAR-enhanced (sharp). Use the scan density actually computed + the surface.
+    const scan = lid != null ? lid : res;
+    const surf = props.surface === "dtm" ? "MNT · bare earth" : "MNS · buildings";
+    return { text: `Wallonia LiDAR ${surf} · ${scan} m`, kind: "sharp", reason: src };
   }
   if (src.startsWith("copernicus")) {
     // Default coarse, or a degraded enhance fallback (carries "(lidar unavailable: …)").
@@ -341,14 +343,15 @@ function updateRfStatus() {
 // ---- enhance panel (scan-density slider) ----
 function enhancePanelHtml() {
   const opt = state.enhanceOptions;
-  const options = (opt && opt.options) || [];
   // default to 2 m; clamp into the available res set.
   const cur = state.enhanceRes || 2;
   const eta = etaFor(cur);
+  const surf = currentSurface();
   const lidarNote = opt && opt.lidar_available === false
     ? `<div class="enh-note">1 m LiDAR not staged yet — Enhance will fall back to Copernicus (labelled honestly)</div>`
     : "";
   return `<div class="enh-panel">
+    ${surfaceTogglesHtml(surf)}
     <div class="enh-row">
       <span class="enh-ext">1 m — sharpest · slowest</span>
       <span class="enh-ext enh-ext-r">4 m — fastest · coarser</span>
@@ -361,6 +364,37 @@ function enhancePanelHtml() {
     ${lidarNote}
     <button class="rf-run" type="button">Run enhance</button>
   </div>`;
+}
+
+// Which terrain surface the operator picked (DSM=buildings preferred when staged).
+// Falls back to an available surface if the picked one isn't staged.
+function currentSurface() {
+  const opt = state.enhanceOptions;
+  const avail = ((opt && opt.surfaces) || []).filter((s) => s.available).map((s) => s.surface);
+  if (state.enhanceSurface && avail.includes(state.enhanceSurface)) return state.enhanceSurface;
+  return (opt && opt.default_surface) || avail[0] || "dsm";
+}
+
+// DTM (bare earth) vs DSM (surface, incl. buildings) chooser. Unstaged surfaces
+// render disabled with a hint; the model honestly reflects what's available.
+function surfaceTogglesHtml(surf) {
+  const opt = state.enhanceOptions;
+  const surfaces = (opt && opt.surfaces) || [];
+  if (!surfaces.length) return "";
+  const meta = {
+    dsm: { name: "surface · buildings", tip: "MNS — ground + buildings + canopy (best for built-up areas)" },
+    dtm: { name: "bare earth", tip: "MNT — ground only, no buildings/canopy" },
+  };
+  const btns = ["dsm", "dtm"].map((k) => {
+    const s = surfaces.find((x) => x.surface === k);
+    if (!s) return "";
+    const on = surf === k ? " on" : "";
+    const dis = s.available ? "" : " disabled";
+    const note = s.available ? "" : " · not staged";
+    const m = meta[k];
+    return `<button class="enh-surf-btn${on}${dis ? " enh-surf-off" : ""}" data-surf="${k}"${dis} data-tip="${m.tip.replace(/"/g, "&quot;")}">${m.name}${note}</button>`;
+  }).join("");
+  return `<div class="enh-row enh-surf"><span class="enh-surf-lbl">terrain</span>${btns}</div>`;
 }
 
 function etaFor(res) {
@@ -400,6 +434,10 @@ function wireRfStatus(el) {
       const et = el.querySelector(".enh-eta"); if (et) et.textContent = "~" + etaFor(state.enhanceRes) + "s";
     };
   }
+  el.querySelectorAll(".enh-surf-btn").forEach((b) => {
+    if (b.disabled) return;
+    b.onclick = (e) => { e.stopPropagation(); state.enhanceSurface = b.dataset.surf; updateRfStatus(); };
+  });
 }
 
 // ---- enhance options (fetched once, cached) ----
@@ -416,13 +454,14 @@ async function runEnhance() {
   const id = state.selected;
   if (!id) return;
   const res = state.enhanceRes || 2;
+  const surface = currentSurface();
   state.panelOpen = false;
-  state.enhance = { fixId: id, jobId: null, state: "queued", phase: "queued", progress: 0, res, abort: false };
+  state.enhance = { fixId: id, jobId: null, state: "queued", phase: "queued", progress: 0, res, surface, abort: false };
   renderPosterior();   // dim the existing heat underneath
   updateRfStatus();
   const hq = state.emitterH != null ? `&emitter_h=${state.emitterH}` : "";
   try {
-    const r = await fetch(`fixes/${id}/enhance?res=${res}${hq}`, { method: "POST" });
+    const r = await fetch(`fixes/${id}/enhance?res=${res}&surface=${surface}${hq}`, { method: "POST" });
     if (!r.ok) throw new Error("HTTP " + r.status);
     const job = await r.json();
     // a stale fix-switch may have happened while awaiting; bail honestly.

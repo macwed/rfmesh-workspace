@@ -72,11 +72,23 @@ class _Canceller:
 
 
 class LidarSource:
-    """Lazily-opened, pre-staged 1 m LiDAR raster (EPSG:4326 COG)."""
+    """Lazily-opened, pre-staged 1 m LiDAR raster (EPSG:4326 COG).
 
-    def __init__(self, path: Path, native_res_m: float = 1.0) -> None:
+    ``source_id`` is stamped onto the result so the UI labels honestly which
+    surface produced the heat (bare-earth MNT vs surface-with-buildings MNS).
+    """
+
+    def __init__(
+        self,
+        path: Path,
+        native_res_m: float = 1.0,
+        source_id: str = "wallonia-lidar-1m",
+        label: str = "Wallonia LiDAR 1 m",
+    ) -> None:
         self.path = path
         self.native_res_m = native_res_m
+        self.source_id = source_id
+        self.label = label
         self._checked = False
         self._ok = False
         self._err = ""
@@ -152,7 +164,7 @@ class LidarSource:
             py = -(north - south) / out_n
             rast = Raster(
                 z=data, ox=west, oy=north, px=px, py=py,
-                source="wallonia-lidar-1m", res_m=res_m,
+                source=self.source_id, res_m=res_m,
             )
             if not valid.all():
                 # fill nodata holes from Copernicus (or median) so paths stay continuous
@@ -175,14 +187,14 @@ class EnhanceManager:
     def __init__(
         self,
         engine: PosteriorEngine,
-        lidar: LidarSource,
+        sources: dict[str, LidarSource],
         *,
         cache_dir: Path,
         max_concurrent: int = 2,
         timeout_s: float = 30.0,
     ) -> None:
         self.engine = engine
-        self.lidar = lidar
+        self.sources = sources  # {"dtm": LidarSource, "dsm": LidarSource}
         self.cache_dir = cache_dir
         self.timeout_s = timeout_s
         self._sem = asyncio.Semaphore(max_concurrent)
@@ -194,11 +206,19 @@ class EnhanceManager:
         except Exception:  # noqa: BLE001
             pass
 
+    def available_surfaces(self) -> list[str]:
+        """Surface keys whose COG is actually staged, in preference order."""
+        return [k for k in ("dsm", "dtm") if k in self.sources and self.sources[k].available]
+
+    def default_surface(self) -> str | None:
+        avail = self.available_surfaces()
+        return avail[0] if avail else None
+
     # ---- cache helpers ----
 
     @staticmethod
-    def _key(fix_id: str, res: int, emitter_h: float) -> str:
-        return f"{fix_id}:{res}:{emitter_h:.1f}"
+    def _key(fix_id: str, res: int, emitter_h: float, surface: str) -> str:
+        return f"{fix_id}:{res}:{emitter_h:.1f}:{surface}"
 
     def _cache_path(self, key: str) -> Path:
         return self.cache_dir / (key.replace(":", "_") + ".json")
@@ -262,13 +282,14 @@ class EnhanceManager:
         res: int,
         emitter_h: float,
         *,
+        surface: str,
         buffer_m: float,
         floor: float,
         scale_db: float,
         node_h: float,
     ) -> dict[str, Any]:
         self._prune()
-        key = self._key(str(fix.fix_id), res, emitter_h)
+        key = self._key(str(fix.fix_id), res, emitter_h, surface)
 
         cached = self._load_cache(key)
         if cached is not None:
@@ -276,7 +297,7 @@ class EnhanceManager:
             job = {
                 "job_id": jid, "key": key, "state": "done", "phase": "done",
                 "progress": 100, "degraded": cached.get("properties", {}).get("degraded", False),
-                "detail": "cached", "res_m": res, "cached": True,
+                "detail": "cached", "res_m": res, "surface": surface, "cached": True,
                 "created_at": time.time(), "finished_at": time.time(), "_fc": cached,
             }
             self._jobs[jid] = job
@@ -291,11 +312,12 @@ class EnhanceManager:
         job: dict[str, Any] = {
             "job_id": jid, "key": key, "state": "queued", "phase": "queued",
             "progress": 0, "degraded": False, "detail": None, "res_m": res,
-            "cached": False, "created_at": time.time(), "finished_at": None, "_fc": None,
+            "surface": surface, "cached": False,
+            "created_at": time.time(), "finished_at": None, "_fc": None,
         }
         self._jobs[jid] = job
         asyncio.create_task(
-            self._run(job, fix, nodes, freq, res, emitter_h,
+            self._run(job, fix, nodes, freq, res, emitter_h, surface,
                       buffer_m=buffer_m, floor=floor, scale_db=scale_db, node_h=node_h)
         )
         return self.public(job)
@@ -308,6 +330,7 @@ class EnhanceManager:
         freq: float | None,
         res: int,
         emitter_h: float,
+        surface: str,
         *,
         buffer_m: float,
         floor: float,
@@ -325,25 +348,30 @@ class EnhanceManager:
             cell_m = float(grid["cell_m"])
             samples = int(grid["samples"])
 
+            src = self.sources.get(surface)
             try:
                 # ---- phase: fetch (windowed LiDAR read) ----
                 job.update(state="running", phase="fetch", progress=4)
                 ell = fix.confidence_ellipse_95
                 reach_m = ell.semi_major_m + buffer_m
-                raster: Raster | None = await loop.run_in_executor(
-                    None,
-                    self.lidar.window,
-                    fix.position.lat_deg, fix.position.lon_deg, reach_m, float(res),
-                    self.engine.base,
-                )
+                raster: Raster | None = None
+                if src is not None and src.available:
+                    raster = await loop.run_in_executor(
+                        None,
+                        src.window,
+                        fix.position.lat_deg, fix.position.lon_deg, reach_m, float(res),
+                        self.engine.base,
+                    )
                 degraded = raster is None
                 reason = ""
                 if degraded:
                     raster = self.engine.base
-                    reason = self.lidar.error or (
-                        "no LiDAR coverage for this chunk" if self.lidar.available
-                        else "LiDAR raster not staged"
-                    )
+                    if src is None:
+                        reason = f"surface '{surface}' not configured"
+                    elif not src.available:
+                        reason = f"{surface.upper()} raster not staged"
+                    else:
+                        reason = src.error or "no LiDAR coverage for this chunk"
                 job.update(phase="resample", progress=14, degraded=degraded)
 
                 # ---- phase: compute ----
@@ -367,9 +395,12 @@ class EnhanceManager:
                     fc["properties"]["dem_source"] = f"copernicus-30m (lidar unavailable: {reason})"
                     fc["properties"]["degraded"] = True
                     fc["properties"]["dem_res_m"] = 30.0
+                    fc["properties"]["surface_label"] = "Copernicus GLO-30"
                 else:
                     fc["properties"]["degraded"] = False
+                    fc["properties"]["surface_label"] = src.label if src else ""
                 fc["properties"]["enhanced"] = not degraded
+                fc["properties"]["surface"] = surface
                 fc["properties"]["scan_density_m"] = res
 
                 if not degraded:
