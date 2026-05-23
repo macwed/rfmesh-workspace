@@ -24,7 +24,12 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8", "numpy>=1.26"]
+dev = [
+    "pytest>=8",
+    "numpy>=1.26",
+    "httpx>=0.28.1",
+    "anyio>=4.13.0",
+]
 
 [build-system]
 requires = ["hatchling"]

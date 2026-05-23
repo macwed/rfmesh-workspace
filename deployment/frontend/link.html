@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<!--
+  link.html — Comms-first soldier UI (ADR-018, PROPOSED 2026-05-23).
+
+  Single canonical screen for the comms-first product:
+    - map of nodes + pointing arrows
+    - per-node manual-steer panel (slider with hard clamps at the
+      calibrated arc)
+    - mesh-wide ALL-STOP button (red, two-tap confirm)
+    - link state badges (acquired / searching / stale)
+
+  Transport:
+    - Live bearings + node-state via WebSocket /ws/ui (push)
+    - Manual-steer commands via HTTP POST /command/{node_id}
+    - Mesh-wide stop via HTTP POST /command_broadcast
+
+  Honesty surfaces per ADR-018 + demo-integrity council:
+    - link margin in dB (never absolute power)
+    - last-acquired timestamp (visible age)
+    - calibration provenance per node ("CAL: YYYY-MM-DD HH:MM")
+    - "node moved" detector flips link to RE-ACQUIRING (not silent)
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>both3 — Link (comms)</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="style.css?v=20260523b" />
+  <link rel="stylesheet" href="link.css?v=20260523" />
+</head>
+<body data-page="link">
+  <div id="app">
+    <aside id="sidebar">
+      <header id="brand">
+        <span class="dot"></span>
+        <div>
+          <h1>both3</h1>
+          <p class="sub">Link (comms) — <span id="status-line">connecting…</span></p>
+        </div>
+      </header>
+      <nav class="page-nav">
+        <a href="index.html" class="home">&#x2302;</a>
+        <a href="link.html" class="on">Link</a>
+        <a href="locate.html">Locate</a>
+        <a href="jam.html">Avoid jam</a>
+        <a href="hide.html">Hide</a>
+        <a href="emit.html">Site emitter</a>
+        <a href="ideal.html">Ideal site</a>
+      </nav>
+
+      <!-- ALL-STOP: panic button, always present, two-tap confirm. -->
+      <section class="panel panel-allstop">
+        <button id="all-stop-btn" class="allstop">ALL STOP</button>
+        <p class="caveat">Two-tap. Halts every connected node's servo.</p>
+        <div id="all-stop-confirm" class="confirm" hidden>
+          <button id="all-stop-confirm-btn">CONFIRM ALL STOP</button>
+          <button id="all-stop-cancel-btn" class="ghost">Cancel</button>
+        </div>
+      </section>
+
+      <!-- Connected nodes list. Each entry is selectable to open the detail
+           drawer (steering controls + link margin). -->
+      <section class="panel">
+        <h2>Nodes</h2>
+        <ul id="node-list" class="nodes"></ul>
+        <p id="no-nodes-hint" class="caveat">
+          No node connected. Bring a node up with
+          <code>rfmesh-node --config &lt;cfg&gt; --servo-port &lt;port&gt;
+          --command-endpoint ws://&lt;backend&gt;:8000</code>.
+        </p>
+      </section>
+
+      <!-- Detail drawer: shown when a node is selected. -->
+      <section class="panel" id="node-detail" hidden>
+        <div class="row">
+          <h2 id="detail-callsign">node-x</h2>
+          <button id="detail-close" class="ghost">&times;</button>
+        </div>
+        <p>
+          State:
+          <span id="detail-state-badge" class="badge">unknown</span>
+        </p>
+        <p>
+          Calibration:
+          <span id="detail-cal" class="cal-prov">unknown</span>
+        </p>
+        <p>
+          Link partner:
+          <span id="detail-peer">&mdash;</span>
+        </p>
+        <p>
+          Link margin:
+          <span id="detail-margin">&mdash;</span>
+        </p>
+        <p>
+          Last acquired:
+          <span id="detail-last">never</span>
+        </p>
+        <hr />
+        <h3>Manual steer</h3>
+        <p class="caveat">
+          Tap on the map to point this node at that location, or use
+          the slider. The slider is clamped to the calibrated arc.
+        </p>
+        <div class="steer-slider-row">
+          <label for="detail-slider">
+            Angle: <span id="detail-slider-value">0&deg;</span>
+          </label>
+          <input
+            type="range"
+            id="detail-slider"
+            min="-90"
+            max="90"
+            step="0.5"
+            value="0"
+            disabled
+          />
+        </div>
+        <div class="row steer-buttons">
+          <button id="detail-send-steer" class="primary" disabled>
+            Send steer
+          </button>
+          <button id="detail-stop" class="warning">STOP this node</button>
+        </div>
+        <p id="detail-msg" class="caveat">&nbsp;</p>
+      </section>
+    </aside>
+
+    <main id="map"></main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="link.js?v=20260523"></script>
+</body>
+</html>

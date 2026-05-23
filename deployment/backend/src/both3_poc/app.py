@@ -44,6 +44,8 @@ from .inference import investigate, load_catalog
 from .posterior import LENS_CONFIG, PosteriorEngine, _Red, nodes_for_fix
 from .seed import load_seed_bearings, load_seed_fixes_with_freq, parse_fix_and_freq
 from .store import Store
+from .ws import init_registries, push_to_ui_subscribers
+from .ws import router as ws_router
 
 
 @asynccontextmanager
@@ -81,6 +83,11 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
         max_concurrent=settings.enhance_max_concurrent,
         timeout_s=settings.enhance_timeout_s,
     )
+    # ADR-018: WebSocket control plane + UI push fan-out.
+    # `init_registries` attaches NodeWsRegistry + UiWsRegistry to
+    # app.state; the `ws_router` mounted below exposes /ws/node/{id},
+    # /ws/ui, /command/{id}, /command_broadcast.
+    init_registries(app)
     try:
         yield
     finally:
@@ -88,6 +95,7 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
 
 
 app = FastAPI(title="both3-poc", version="0.1.0", lifespan=lifespan)
+app.include_router(ws_router)
 
 
 def _settings(app: FastAPI) -> Settings:
@@ -139,12 +147,21 @@ async def ingest_bearings(payload: Any = Body(...)) -> dict[str, Any]:
     store = _store(app)
     accepted = 0
     errors: list[str] = []
+    pushed: list[dict[str, Any]] = []
     for i, rec in enumerate(_as_list(payload)):
         try:
-            store.upsert_bearing(BearingReport.model_validate(rec))
+            report = BearingReport.model_validate(rec)
+            store.upsert_bearing(report)
             accepted += 1
+            pushed.append(report.model_dump(mode="json"))
         except (ValidationError, ValueError, KeyError, TypeError) as exc:
             errors.append(f"[{i}] {exc}")
+    # ADR-018: fan accepted bearings out to live UI subscribers. Wrapped
+    # in a per-record envelope so the UI knows the message kind. Failure
+    # to push (slow UI client) does NOT fail the ingest — the store
+    # state is the source of truth, push is best-effort live overlay.
+    for record in pushed:
+        await push_to_ui_subscribers(app, {"kind": "bearing", "data": record})
     if accepted == 0 and errors:
         raise HTTPException(status_code=422, detail=errors)
     return {"accepted": accepted, "errors": errors}
