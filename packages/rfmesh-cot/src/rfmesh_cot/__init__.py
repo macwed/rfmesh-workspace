@@ -39,16 +39,32 @@ from .markers import (
     fix_event_to_cot_xml,
     node_status_to_cot_xml,
 )
+from .operator import (
+    TEMPLATES,
+    MessageTemplate,
+    OperatorMarker,
+    operator_delete_to_cot_xml,
+    operator_marker_to_cot_xml,
+    template,
+)
 from .publisher import PyTAKCotPublisher
+from .store import OperatorMarkerStore
 
 __all__ = [
     "STALE_AFTER_S",
+    "TEMPLATES",
     "CotEncodingError",
     "CotError",
     "CotTransportError",
+    "MessageTemplate",
+    "OperatorMarker",
+    "OperatorMarkerStore",
     "PyTAKCotPublisher",
     "ellipse_to_polygon_vertices",
     "emitter_class_to_cot_type",
     "fix_event_to_cot_xml",
     "node_status_to_cot_xml",
+    "operator_delete_to_cot_xml",
+    "operator_marker_to_cot_xml",
+    "template",
 ]
