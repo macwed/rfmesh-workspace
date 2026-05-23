@@ -1,0 +1,87 @@
+/* link.html — comms-first soldier UI.
+   Sits next to style.css; only adds what link.html needs beyond the
+   shared shell (panel + sidebar + map are inherited from style.css). */
+
+.panel-allstop {
+  background: #1f1213;
+  border: 1px solid #5a1f23;
+}
+
+.allstop {
+  width: 100%;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  padding: 14px 12px;
+  background: var(--low);
+  color: #fff;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.allstop:hover { background: #c0392b; }
+
+.confirm {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
+.confirm button { flex: 1; padding: 10px; border-radius: 4px; cursor: pointer; }
+#all-stop-confirm-btn { background: var(--low); color: #fff; border: 0; }
+.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+
+.nodes { list-style: none; padding: 0; margin: 0; }
+.nodes li {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.nodes li:hover { background: var(--panel-2); }
+.nodes li.selected { background: var(--panel-2); border-color: var(--accent); }
+.nodes .callsign { font-weight: 600; }
+.nodes .badge { font-size: 11px; padding: 2px 6px; border-radius: 3px; }
+
+/* State-coloured badges. Defaults to muted; per-state class overrides. */
+.badge { background: var(--panel-2); color: var(--muted); }
+.badge.acquired { background: var(--high); color: #062; }
+.badge.searching { background: var(--medium); color: #5a4500; }
+.badge.stale { background: var(--low); color: #fff; }
+.badge.parked { background: var(--accent); color: #053a6e; }
+.badge.fault { background: #444; color: #fff; }
+
+.cal-prov { color: var(--muted); font-size: 12px; }
+
+.steer-slider-row { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.steer-slider-row input[type="range"] { width: 100%; }
+.steer-slider-row input[type="range"]:disabled { opacity: 0.5; }
+
+.steer-buttons { gap: 8px; }
+.steer-buttons button {
+  flex: 1;
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.primary { background: var(--accent); color: #053a6e; border: 0; }
+.primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.warning { background: var(--medium); color: #5a4500; border: 0; }
+
+.row { display: flex; justify-content: space-between; align-items: center; }
+
+/* Map node markers — small disc, callsign label, pointing arrow */
+.node-marker {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.4);
+}
+.node-marker.acquired { background: var(--high); }
+.node-marker.searching { background: var(--medium); }
+.node-marker.stale { background: var(--low); }
+.node-marker.parked { background: var(--accent); }
+.node-marker.fault { background: #444; }

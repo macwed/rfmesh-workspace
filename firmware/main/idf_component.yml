@@ -1,11 +1,10 @@
 ## Managed-component dependencies for the firmware/main component.
 ##
-## esp_tinyusb provides the TinyUSB stack + the CDC ACM helper used by
-## main.c and the stdio-routing helper used by shell.c. Pinned to the
-## 1.4.x line which targets ESP-IDF v5.1+ (matches the prior C3 build's
-## v5.4.3 baseline per README.md).
+## ESP32-C6 build needs no extra managed components: USB-Serial-JTAG is
+## provided by the IDF-native `esp_driver_usb_serial_jtag` (listed in the
+## component's REQUIRES). The C6 target was added in IDF v5.1; pin to that
+## floor to match the prior C3 build baseline.
 
 dependencies:
-  espressif/esp_tinyusb: "~1.4.0"
   idf:
     version: ">=5.1"

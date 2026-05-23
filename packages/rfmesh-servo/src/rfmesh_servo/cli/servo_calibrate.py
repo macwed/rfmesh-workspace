@@ -74,17 +74,25 @@ def _ask_float(
             print_fn(f"not a number: {raw!r}")
 
 
-def _ask_yes_no(input_fn: Callable[[str], str], prompt: str) -> bool:
+def _ask_yes_no(
+    input_fn: Callable[[str], str],
+    prompt: str,
+    *,
+    default_yes: bool = False,
+) -> bool:
     answer = input_fn(prompt).strip().lower()
+    if not answer:
+        return default_yes
     return answer in {"y", "yes"}
 
 
-def run_calibration(
+def run_calibration(  # noqa: PLR0915
     driver: ServoDriver,
     axis: int,
     *,
     pulse_min_us: int = Calibration.DEFAULT_PULSE_MIN_US,
     pulse_max_us: int = Calibration.DEFAULT_PULSE_MAX_US,
+    inverted: bool = False,
     input_fn: Callable[[str], str] = input,
     print_fn: Callable[[str], None] = print,
 ) -> Calibration:
@@ -104,6 +112,16 @@ def run_calibration(
         pulse_min_us: Pulse width to use for the lower endpoint
             (default 500 µs from §3.7).
         pulse_max_us: Pulse width for the upper endpoint (default 2500 µs).
+        inverted: Set when the servo is mounted such that increasing pulse
+            rotates the mast counter-clockwise (opposite to the CW-positive
+            convention in INTERFACES.md §0). The operator's two observed
+            angles are negated before the Calibration is built, so the
+            stored mapping still satisfies the firmware-side
+            ``angle_min_deg < angle_max_deg`` validator. The host-side
+            consumer (e.g. ``scripts/bench_single_node.py
+            --invert-direction``) must apply the matching inversion at
+            every ``MOVE``; the pair keeps the geographic-frame angle
+            stable end-to-end.
         input_fn: Callable used to prompt the operator. Defaults to
             built-in :func:`input`.
         print_fn: Callable used for user-facing output. Defaults to
@@ -129,6 +147,10 @@ def run_calibration(
         raise ValueError(f"pulse_min_us ({pulse_min_us}) must be < pulse_max_us ({pulse_max_us})")
 
     print_fn(f"servo_calibrate v1 — axis {axis}")
+    if inverted:
+        print_fn("Inverted-direction mode: enter the angle you OBSERVE; this tool will")
+        print_fn("negate it before storing, so a host-side --invert-direction at runtime")
+        print_fn("produces correct geographic bearing. Pair both flags or neither.")
     print_fn("")
     print_fn("This procedure determines the relationship between PWM pulse width and")
     print_fn("mechanical angle for your servo. You will be asked to manually align the")
@@ -162,9 +184,44 @@ def run_calibration(
     driver.move(axis, Calibration.DEFAULT_ANGLE_MAX_DEG)
 
     angle_at_max = _ask_float(input_fn, print_fn, "Mechanical angle? > ")
+
+    # Auto-detect inversion ONLY on a clear signature: the two readings
+    # straddle zero in the opposite order to the firmware default. A typo
+    # like (-90, -95) also has angle_at_min > angle_at_max but is same-
+    # signed; auto-applying inversion there would silently bake the typo
+    # into a passing-validator calibration. Restricting to opposite-sign
+    # pairs catches the real inverted-mount case (e.g. +85, -88) and
+    # leaves same-sign typos to the existing reprompt path.
+    if not inverted and angle_at_min > 0.0 > angle_at_max:
+        print_fn("")
+        print_fn(
+            "Observations have opposite signs and decrease with increasing pulse "
+            "— looks like the servo is mounted CCW-positive (inverted vs the CW "
+            "convention)."
+        )
+        if _ask_yes_no(
+            input_fn,
+            "Switch to inverted-direction mode now? [Y/n] ",
+            default_yes=True,
+        ):
+            inverted = True
+            print_fn("Inverted-direction mode ON for this calibration.")
+            print_fn(
+                "Remember to pass --invert-direction to consumers "
+                "(e.g. scripts/bench_single_node.py)."
+            )
+
     while True:
+        # In inverted-direction mode, negate the operator's observed angles
+        # before building the Calibration so the firmware-side validator
+        # (angle_min_deg < angle_max_deg) still accepts a CCW-mounted servo.
+        # The host-side --invert-direction flag undoes this at MOVE time.
+        stored_at_min = -angle_at_min if inverted else angle_at_min
+        stored_at_max = -angle_at_max if inverted else angle_at_max
         try:
-            cal = compute_calibration(axis, pulse_min_us, pulse_max_us, angle_at_min, angle_at_max)
+            cal = compute_calibration(
+                axis, pulse_min_us, pulse_max_us, stored_at_min, stored_at_max
+            )
         except ValueError as exc:
             # Either endpoint can be the typo (the second prompt is under more
             # time pressure), so re-ask both — clearer than guessing which
@@ -188,6 +245,9 @@ def run_calibration(
     print_fn("Calibration computed:")
     print_fn(f"  pulse_min_us={cal.pulse_min_us}, pulse_max_us={cal.pulse_max_us}")
     print_fn(f"  angle_min_deg={cal.angle_min_deg}, angle_max_deg={cal.angle_max_deg}")
+    if inverted:
+        print_fn("  (inverted-direction mode: stored angles negated from operator input;")
+        print_fn("   run consumers with --invert-direction to match.)")
     print_fn("")
 
     driver.set_calibration(cal)
@@ -238,6 +298,19 @@ def _build_parser() -> argparse.ArgumentParser:
         default=Calibration.DEFAULT_PULSE_MAX_US,
         help="Upper-endpoint pulse width in µs (default 2500)",
     )
+    parser.add_argument(
+        "--inverted",
+        action="store_true",
+        help=(
+            "Set when the servo is mounted such that an increasing pulse "
+            "rotates the mast counter-clockwise (opposite to the "
+            "CW-positive convention). The operator's observed angles are "
+            "negated before being stored, so the firmware-side validator "
+            "still accepts the table. Pair every downstream consumer "
+            "(e.g. bench_single_node.py) with its matching "
+            "--invert-direction flag."
+        ),
+    )
     return parser
 
 
@@ -278,6 +351,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.axis,
                 pulse_min_us=args.pulse_min,
                 pulse_max_us=args.pulse_max,
+                inverted=args.inverted,
             )
         except (KeyboardInterrupt, EOFError):
             print()
