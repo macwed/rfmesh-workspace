@@ -144,6 +144,8 @@ TEMPLATES: dict[str, MessageTemplate] = {
     "search_area": MessageTemplate(
         "search_area", "Search area", "u-d-f", "polygon", 86400.0, _BLUE, _BLUE_FILL
     ),
+    # --- custom: operator supplies the CoT type via cot_type_override --
+    "custom": MessageTemplate("custom", "Custom marker", "a-u-G", "point", 86400.0),
 }
 
 
@@ -211,6 +213,11 @@ class OperatorMarker:
     hae_m: float = 0.0
     stale_after_s: float | None = None
     t_unix_ns: int | None = None
+    #: Override the template's CoT type with an operator-supplied one
+    #: (the ``custom`` template's whole point). ``None`` uses the
+    #: template's ``cot_type``. Lets the operator drop, e.g., an air
+    #: track (``a-h-A``) or any 2525 designator without a new template.
+    cot_type_override: str | None = None
     # Internal: extra <detail> children are out of scope for v1; field
     # kept so future templates (chat recipients, links) extend without a
     # signature change.
@@ -264,6 +271,7 @@ def operator_marker_to_cot_xml(marker: OperatorMarker) -> bytes:
     stale_s = marker.stale_after_s if marker.stale_after_s is not None else tmpl.default_stale_s
     callsign = marker.callsign or tmpl.label
     lat, lon = _resolve_point(marker, tmpl)
+    cot_type = marker.cot_type_override or tmpl.cot_type
 
     time_str = _format_cot_time(t_ns)
     stale_str = _format_stale_time(t_ns, stale_s)
@@ -272,7 +280,7 @@ def operator_marker_to_cot_xml(marker: OperatorMarker) -> bytes:
         "event",
         attrib={
             "version": "2.0",
-            "type": tmpl.cot_type,
+            "type": cot_type,
             "uid": marker.uid,
             "time": time_str,
             "start": time_str,

@@ -117,6 +117,9 @@ async def post_marker(request: web.Request) -> web.Response:
         raw_verts = body.get("vertices") or []
         vertices = tuple((float(v[0]), float(v[1])) for v in raw_verts)
 
+    cot_type = body.get("cot_type")
+    cot_type_override = str(cot_type).strip() if cot_type else None
+
     marker = OperatorMarker(
         template_key=tmpl.key,
         uid=uid,
@@ -126,6 +129,7 @@ async def post_marker(request: web.Request) -> web.Response:
         remarks=remarks,
         vertices=vertices,
         stale_after_s=86400.0,  # operator markers persist a day
+        cot_type_override=cot_type_override,
     )
     pub = request.app[_PUB]
     try:

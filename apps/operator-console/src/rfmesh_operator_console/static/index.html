@@ -6,37 +6,45 @@
   <title>rfmesh operator console</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    :root { --bg:#11151c; --panel:#1a2029; --ink:#e6edf3; --muted:#8b97a7; --line:#2b333f; --accent:#3aa0ff; }
+    :root { --bg:#11151c; --panel:#1a2029; --ink:#e6edf3; --muted:#8b97a7; --line:#2b333f; --accent:#3aa0ff; --ok:#37c871; --bad:#ff6b6b; }
     * { box-sizing: border-box; }
     html, body { height:100%; margin:0; font:14px/1.45 system-ui, sans-serif; color:var(--ink); background:var(--bg); }
     #app { display:flex; height:100vh; }
-    #side { width:330px; flex:0 0 330px; background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; overflow:hidden; }
+    #side { width:340px; flex:0 0 340px; background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; overflow:hidden; }
     #map { flex:1; }
     header { padding:12px 14px; border-bottom:1px solid var(--line); }
     header h1 { font-size:15px; margin:0; }
     header p { margin:4px 0 0; color:var(--muted); font-size:12px; }
+    .scroll { overflow:auto; flex:1; }
     .sect { padding:12px 14px; border-bottom:1px solid var(--line); }
     .sect h2 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:0 0 8px; }
-    label { display:block; font-size:12px; color:var(--muted); margin:0 0 4px; }
+    label { display:block; font-size:12px; color:var(--muted); margin:8px 0 4px; }
+    label:first-child { margin-top:0; }
     input, textarea { width:100%; background:#0d1117; color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:7px 8px; font:inherit; }
-    textarea { resize:vertical; min-height:46px; }
+    textarea { resize:vertical; min-height:42px; }
     .tabs { display:flex; flex-wrap:wrap; gap:6px; }
     .tab { cursor:pointer; border:1px solid var(--line); background:#0d1117; color:var(--ink); border-radius:999px; padding:5px 10px; font-size:12px; display:flex; align-items:center; gap:6px; }
     .tab .dot { width:9px; height:9px; border-radius:50%; }
     .tab.active { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
     .hint { margin-top:10px; font-size:12px; color:var(--muted); min-height:18px; }
-    .row { display:flex; gap:8px; margin-top:8px; }
-    button.act { cursor:pointer; flex:1; border:1px solid var(--line); background:#222b38; color:var(--ink); border-radius:6px; padding:7px; font:inherit; }
-    button.act:hover { border-color:var(--accent); }
+    .grid2 { display:flex; gap:8px; }
+    .grid2 > div { flex:1; }
+    .row { display:flex; gap:8px; margin-top:10px; }
+    button.act { cursor:pointer; flex:1; border:1px solid var(--line); background:#222b38; color:var(--ink); border-radius:6px; padding:8px; font:inherit; }
+    button.send { background:var(--accent); border-color:var(--accent); color:#04101d; font-weight:600; }
+    button.act:hover { filter:brightness(1.1); }
     button.act[disabled] { opacity:.4; cursor:default; }
-    #list { flex:1; overflow:auto; padding:8px 14px; }
+    #list { padding:8px 14px; }
     .item { border:1px solid var(--line); border-radius:6px; padding:8px; margin-bottom:8px; }
     .item .top { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
     .item .cs { font-weight:600; }
     .item .meta { color:var(--muted); font-size:11px; word-break:break-all; }
-    .item .rm { cursor:pointer; color:#ff6b6b; background:none; border:none; font-size:12px; }
-    #toast { position:fixed; bottom:16px; left:346px; background:#222b38; border:1px solid var(--accent); color:var(--ink); padding:8px 12px; border-radius:6px; opacity:0; transition:opacity .2s; pointer-events:none; }
+    .item .rm { cursor:pointer; color:var(--bad); background:none; border:none; font-size:12px; }
+    #toast { position:fixed; bottom:16px; left:356px; background:#222b38; border:1px solid var(--accent); color:var(--ink); padding:8px 12px; border-radius:6px; opacity:0; transition:opacity .2s; pointer-events:none; max-width:50vw; }
     #toast.show { opacity:1; }
+    #toast.ok { border-color:var(--ok); }
+    #toast.bad { border-color:var(--bad); }
+    .leaflet-container { background:#0d1117; }
   </style>
 </head>
 <body>
@@ -47,27 +55,46 @@
       <p id="endpoint">connecting…</p>
     </header>
 
-    <div class="sect">
-      <label for="callsign">Callsign (label on map)</label>
-      <input id="callsign" placeholder="e.g. Jammer A" />
-      <label for="remarks" style="margin-top:10px">Note (optional)</label>
-      <textarea id="remarks" placeholder="operator note shown when the marker is tapped"></textarea>
-    </div>
-
-    <div class="sect">
-      <h2>Point markers</h2>
-      <div class="tabs" id="tabs-point"></div>
-      <h2 style="margin-top:12px">Areas</h2>
-      <div class="tabs" id="tabs-area"></div>
-      <div class="hint" id="hint">Pick a template, then click the map.</div>
-      <div class="row" id="area-controls" style="display:none">
-        <button class="act" id="finish" disabled>Finish area</button>
-        <button class="act" id="cancel">Cancel</button>
+    <div class="scroll">
+      <div class="sect">
+        <h2>1 · pick a marker type</h2>
+        <div class="tabs" id="tabs-point"></div>
+        <h2 style="margin-top:12px">areas</h2>
+        <div class="tabs" id="tabs-area"></div>
+        <div id="custom-wrap" style="display:none">
+          <label for="cottype">Custom CoT type (e.g. a-h-A air hostile, a-f-G-U-C, b-m-p-w)</label>
+          <input id="cottype" placeholder="a-u-G" />
+        </div>
+        <div class="hint" id="hint"></div>
       </div>
-    </div>
 
-    <div class="sect" style="border-bottom:none; padding-bottom:6px"><h2 style="margin:0">Placed markers</h2></div>
-    <div id="list"></div>
+      <div class="sect">
+        <h2>2 · details</h2>
+        <label for="callsign">Callsign (label on map)</label>
+        <input id="callsign" placeholder="e.g. Jammer A" />
+        <label for="remarks">Note (optional)</label>
+        <textarea id="remarks" placeholder="shown when the marker is tapped"></textarea>
+      </div>
+
+      <div class="sect">
+        <h2>3 · place &amp; send</h2>
+        <p class="hint" style="margin:0 0 6px">Click the map to fill coordinates, or type them. Then <b>Send</b>. Areas: click vertices on the map, then Finish area.</p>
+        <div class="grid2">
+          <div><label for="lat">Latitude</label><input id="lat" inputmode="decimal" placeholder="50.8503" /></div>
+          <div><label for="lon">Longitude</label><input id="lon" inputmode="decimal" placeholder="4.3517" /></div>
+        </div>
+        <div class="row" id="point-controls">
+          <button class="act send" id="send">Send marker</button>
+        </div>
+        <div class="row" id="area-controls" style="display:none">
+          <button class="act send" id="finish" disabled>Finish area &amp; send</button>
+          <button class="act" id="cancel">Cancel</button>
+        </div>
+      </div>
+
+      <div class="sect" style="border-bottom:none"><h2 style="margin:0">placed markers</h2></div>
+      <div id="list"></div>
+    </div>
   </div>
   <div id="map"></div>
 </div>
@@ -78,7 +105,7 @@
 <script>
 const COLORS = {
   hostile:"#e64545", friendly:"#3aa0ff", neutral:"#37c871", unknown:"#e8c34a",
-  waypoint:"#9aa7b5", spi:"#c07cff", casevac:"#ff8a3a",
+  waypoint:"#9aa7b5", spi:"#c07cff", casevac:"#ff8a3a", custom:"#d0d6de",
   no_go:"#e64545", area_of_interest:"#e8c34a", search_area:"#3aa0ff",
 };
 const colorFor = k => COLORS[k] || "#9aa7b5";
@@ -87,31 +114,28 @@ const map = L.map("map").setView([50.5, 4.8], 7);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
   { maxZoom:19, attribution:"© OpenStreetMap" }).addTo(map);
 
-let templates = [];
-let current = null;          // selected template object
-let drawing = [];            // polygon vertices being collected
-let drawLayer = null;        // temp leaflet layer while drawing
-const layers = {};           // uid -> leaflet layer (placed)
+let templates = [], current = null, drawing = [], drawLayer = null;
+const layers = {};
 
 const $ = s => document.querySelector(s);
-function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),1800); }
-
-async function api(path, opts){ const r = await fetch(path, opts); if(!r.ok){ throw new Error((await r.text())||r.status); } return r.json(); }
+function toast(msg, kind){ const t=$("#toast"); t.textContent=msg; t.className="show "+(kind||""); setTimeout(()=>t.className="",2200); }
+async function api(path, opts){ const r = await fetch(path, opts); if(!r.ok){ throw new Error((await r.text())||("HTTP "+r.status)); } return r.json(); }
 
 function setHint(){
-  if(!current){ $("#hint").textContent="Pick a template, then click the map."; return; }
-  if(current.geometry==="polygon"){
-    $("#hint").textContent = `Drawing "${current.label}": click vertices on the map, then Finish area.`;
-  } else {
-    $("#hint").textContent = `Click the map to drop "${current.label}".`;
-  }
+  if(!current){ $("#hint").textContent=""; return; }
+  $("#hint").textContent = current.geometry==="polygon"
+    ? `Area "${current.label}": click ≥3 points on the map, then Finish area & send.`
+    : `Point "${current.label}": click the map (or type lat/lon) then Send.`;
 }
 
 function selectTemplate(t){
   current = t;
   document.querySelectorAll(".tab").forEach(el=>el.classList.toggle("active", el.dataset.key===t.key));
   cancelDraw();
-  $("#area-controls").style.display = t.geometry==="polygon" ? "flex" : "none";
+  const area = t.geometry==="polygon";
+  $("#area-controls").style.display = area ? "flex" : "none";
+  $("#point-controls").style.display = area ? "none" : "flex";
+  $("#custom-wrap").style.display = t.key==="custom" ? "block" : "none";
   setHint();
 }
 
@@ -131,57 +155,64 @@ function cancelDraw(){
   $("#finish").disabled = true;
 }
 
-map.on("click", async (e)=>{
-  if(!current){ toast("pick a template first"); return; }
+map.on("click", (e)=>{
+  if(!current){ toast("pick a marker type first","bad"); return; }
   const {lat, lng} = e.latlng;
   if(current.geometry==="polygon"){
     drawing.push([lat, lng]);
     if(drawLayer) map.removeLayer(drawLayer);
     drawLayer = L.polygon(drawing, {color:colorFor(current.key), weight:2, dashArray:"4"}).addTo(map);
     $("#finish").disabled = drawing.length < 3;
-    return;
+    setHint();
+    $("#hint").textContent += `  (${drawing.length} pts)`;
+  } else {
+    $("#lat").value = lat.toFixed(6);
+    $("#lon").value = lng.toFixed(6);
+    toast("coords set — press Send (or it sends on map click)", "ok");
+    sendPoint();   // click-to-send convenience
   }
-  await place({ template:current.key, lat, lon:lng });
 });
 
-$("#finish").onclick = async ()=>{
-  if(drawing.length<3) return;
-  await place({ template:current.key, vertices:drawing.slice() });
-  cancelDraw();
-};
+$("#send").onclick = sendPoint;
+$("#finish").onclick = async ()=>{ if(drawing.length>=3){ await place({template:current.key, vertices:drawing.slice()}); cancelDraw(); } };
 $("#cancel").onclick = cancelDraw;
+
+async function sendPoint(){
+  if(!current){ toast("pick a marker type first","bad"); return; }
+  if(current.geometry==="polygon"){ toast("areas: click the map then Finish area","bad"); return; }
+  const lat = parseFloat($("#lat").value), lon = parseFloat($("#lon").value);
+  if(Number.isNaN(lat) || Number.isNaN(lon)){ toast("enter lat & lon (or click the map)","bad"); return; }
+  await place({template:current.key, lat, lon});
+}
 
 async function place(geo){
   const body = Object.assign({
     callsign: $("#callsign").value.trim(),
     remarks: $("#remarks").value.trim(),
   }, geo);
+  if(current && current.key==="custom"){ const ct=$("#cottype").value.trim(); if(ct) body.cot_type = ct; }
   try{
     const { uid } = await api("/api/marker", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
-    toast("sent ✓ " + uid);
+    toast("sent ✓ "+uid, "ok");
     await refresh();
-  }catch(err){ toast("error: "+err.message); }
+  }catch(err){ toast("send failed: "+err.message, "bad"); }
 }
 
 async function del(uid){
   try{ await api("/api/delete", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({uid})});
-    toast("deleted"); await refresh();
-  }catch(err){ toast("error: "+err.message); }
+    toast("deleted", "ok"); await refresh();
+  }catch(err){ toast("error: "+err.message, "bad"); }
 }
 
 function drawPlaced(markers){
   for(const id in layers){ map.removeLayer(layers[id]); delete layers[id]; }
   for(const m of markers){
     const c = colorFor(m.template);
-    let layer;
-    if(m.is_area && m.vertices){
-      layer = L.polygon(m.vertices, {color:c, weight:2, fillOpacity:0.15});
-    } else {
-      layer = L.circleMarker([m.lat, m.lon], {radius:7, color:c, fillColor:c, fillOpacity:0.9, weight:2});
-    }
+    const layer = (m.is_area && m.vertices)
+      ? L.polygon(m.vertices, {color:c, weight:2, fillOpacity:0.15})
+      : L.circleMarker([m.lat, m.lon], {radius:7, color:c, fillColor:c, fillOpacity:0.9, weight:2});
     layer.bindPopup(`<b>${m.callsign||m.template}</b><br>${m.template}<br>${m.remarks||""}`);
-    layer.addTo(map);
-    layers[m.uid]=layer;
+    layer.addTo(map); layers[m.uid]=layer;
   }
 }
 
@@ -190,7 +221,7 @@ function renderList(markers){
   if(!markers.length){ box.innerHTML='<div class="meta" style="padding:6px">No markers yet.</div>'; return; }
   for(const m of markers){
     const div=document.createElement("div"); div.className="item";
-    div.innerHTML = `<div class="top"><span class="cs"><span class="dot" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${colorFor(m.template)}"></span> ${m.callsign||m.template}</span>
+    div.innerHTML = `<div class="top"><span class="cs"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${colorFor(m.template)}"></span> ${m.callsign||m.template}</span>
       <button class="rm">delete</button></div>
       <div class="meta">${m.template}${m.is_area?" (area)":""} · ${m.lat.toFixed(5)}, ${m.lon.toFixed(5)}</div>
       ${m.remarks?`<div class="meta">“${m.remarks}”</div>`:""}`;
@@ -199,10 +230,7 @@ function renderList(markers){
   }
 }
 
-async function refresh(){
-  const markers = await api("/api/markers");
-  drawPlaced(markers); renderList(markers);
-}
+async function refresh(){ const m = await api("/api/markers"); drawPlaced(m); renderList(m); }
 
 (async function init(){
   try{

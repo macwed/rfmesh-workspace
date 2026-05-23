@@ -17,15 +17,26 @@ rfmesh-operator-console --port 9000 --cot-url tcp://35.206.145.140:8087
 
 Then open the printed URL.
 
-## How to use
+## How to use (3 steps in the sidebar)
 
-1. (Optional) type a **Callsign** (the on-map label) and a **Note**.
-2. Pick a template tab:
-   - **Point markers:** hostile, friendly, neutral, unknown, waypoint, spi,
-     casevac → **click the map** to drop one.
-   - **Areas:** no_go, area_of_interest, search_area → **click vertices** on the
-     map, then **Finish area** (needs ≥ 3 points; Cancel to restart).
-3. Placed markers appear in the side panel; **delete** un-sends them.
+1. **Pick a marker type** (a tab):
+   - Points: hostile, friendly, neutral, unknown, waypoint, spi, casevac.
+   - Areas: no_go, area_of_interest, search_area.
+   - **Custom:** reveals a *CoT type* field — type any 2525 designator
+     (`a-h-A` air hostile, `a-f-G-U-C`, `b-m-p-w`, …) to drop a marker the
+     fixed templates don't cover.
+2. **Details:** optional Callsign (on-map label) + Note.
+3. **Place & send:**
+   - **Point:** click the map (auto-fills lat/lon and sends), **or** type
+     lat/lon and press **Send marker**.
+   - **Area:** click ≥ 3 vertices on the map, then **Finish area & send**
+     (Cancel to restart).
+
+Every send shows a toast (green ✓ / red on failure). Placed markers list in the
+sidebar; **delete** un-sends them on all clients.
+
+> You are not forced to click the map — the explicit **Send marker** button +
+> lat/lon fields give a deterministic path.
 
 ## Why the backend holds one TAK connection open
 

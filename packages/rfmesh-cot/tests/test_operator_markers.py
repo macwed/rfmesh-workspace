@@ -120,6 +120,25 @@ def test_delete_event_targets_uid() -> None:
     assert ev.find("./detail/__forcedelete") is not None
 
 
+def test_custom_cot_type_override() -> None:
+    m = OperatorMarker(
+        template_key="custom",
+        uid="u-custom",
+        lat_deg=50.0,
+        lon_deg=4.0,
+        callsign="Air track",
+        cot_type_override="a-h-A",
+    )
+    ev = _parse(operator_marker_to_cot_xml(m))
+    assert ev.attrib["type"] == "a-h-A"  # operator-supplied, not the template default
+
+
+def test_custom_template_defaults_without_override() -> None:
+    m = OperatorMarker(template_key="custom", uid="u-c2", lat_deg=1.0, lon_deg=2.0)
+    ev = _parse(operator_marker_to_cot_xml(m))
+    assert ev.attrib["type"] == "a-u-G"  # template default when no override
+
+
 def test_self_sa_is_friendly_with_group() -> None:
     ev = _parse(build_self_sa_xml("console.self.x", "13-cj-console", team="Cyan"))
     assert ev.attrib["type"] == "a-f-G-U-C"
