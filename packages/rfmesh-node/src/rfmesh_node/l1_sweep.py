@@ -97,10 +97,13 @@ class L1SweepConfig:
 class L1SweepLoop:
     """Drives repeated L1 bearing sweeps until stopped.
 
-    Owns its servo lifecycle (``connect`` on first run, ``close`` on
-    teardown) and its estimator. The receiver and bearer are shared with
-    the owning ``Node`` -- the receiver is opened by ``Node.run`` before
-    this loop's task starts.
+    Owns its estimator. The receiver, bearer, and servo are shared with
+    the owning ``Node``: the receiver is opened and the servo is
+    ``connect``-ed by ``Node.run`` before this loop's task starts, and
+    ``Node`` closes both on teardown. The loop only issues
+    ``move`` / ``position`` on the already-connected servo -- it does not
+    own the servo lifecycle, so it can be swapped with the rendezvous loop
+    on the same servo without re-enumerating the USB-CDC link (ADR-019).
     """
 
     def __init__(
@@ -137,23 +140,32 @@ class L1SweepLoop:
         )
 
     async def run(self, stopping: asyncio.Event) -> None:
-        """Sweep repeatedly until ``stopping`` is set. Owns servo lifecycle."""
-        await asyncio.to_thread(self._servo.connect)
+        """Sweep repeatedly until ``stopping`` is set.
+
+        Assumes ``Node`` has already ``connect``-ed the servo (the lifecycle
+        is hoisted to ``Node`` so the sweep and rendezvous loops can share
+        one connected servo -- ADR-019). Does not connect or close it.
+        """
         _LOG.info(
-            "L1 sweep: servo connected; arc [%.0f, %.0f] deg step %.1f, boresight %.1f deg",
+            "L1 sweep: arc [%.0f, %.0f] deg step %.1f, boresight %.1f deg",
             self._cfg.min_deg,
             self._cfg.max_deg,
             self._cfg.step_deg,
             self._boresight_heading_deg,
         )
-        try:
-            while not stopping.is_set():
-                await self._one_sweep(stopping)
-                with contextlib.suppress(TimeoutError):
-                    await asyncio.wait_for(stopping.wait(), timeout=self._cfg.inter_sweep_s)
-        finally:
-            with contextlib.suppress(Exception):
-                await asyncio.to_thread(self._servo.close)
+        while not stopping.is_set():
+            await self._one_sweep(stopping)
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(stopping.wait(), timeout=self._cfg.inter_sweep_s)
+
+    async def run_once(self, stopping: asyncio.Event) -> None:
+        """Run a single sweep pass.
+
+        Used by the rendezvous supervisor to time-share the servo: hold the
+        link, then break for one jammer-DF sweep, then re-acquire (ADR-019).
+        Assumes the servo is already connected (owned by ``Node``).
+        """
+        await self._one_sweep(stopping)
 
     async def _one_sweep(self, stopping: asyncio.Event) -> None:
         """Run a single low->high sweep and emit a bearing if one is found."""
