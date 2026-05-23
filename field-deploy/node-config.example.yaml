@@ -11,7 +11,7 @@
 # -- contracts-frozen NodeConfig (verbatim from rfmesh_contracts.config) --
 node:
   # schema_version is pinned by the contracts package; do not edit.
-  schema_version: "1.1.0"
+  schema_version: "1.2.0"
   node_id: "node-rtl-01"
   position:
     lat_deg: 50.33000

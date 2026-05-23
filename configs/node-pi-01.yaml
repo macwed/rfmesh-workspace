@@ -10,7 +10,7 @@
 # Validated against rfmesh_contracts.NodeConfig (extra="forbid" -- a typo'd
 # key is a loud error at load, not a silent ignore).
 
-schema_version: "1.1.0"
+schema_version: "1.2.0"
 node_id: "node-pi-01"
 
 # Surveyed position (WGS-84). Smartphone GPS (+/-5-10 m) is fine -- bearing

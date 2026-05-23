@@ -5,7 +5,7 @@ Edits only by lead architect, lockstep with contracts package.
 **Audience:** every workstream agent and reviewer. Dictionary you
 consult when need to know *what field means*, not just type.
 **Date:** 2026-05-14.
-**Mirrors contracts at:** `SCHEMA_VERSION = "1.1.0"`.
+**Mirrors contracts at:** `SCHEMA_VERSION = "1.2.0"`.
 
 Doc does not duplicate Pydantic schemas — those authoritative, read directly for field names, types, validators. Doc carries what schemas cannot: **meaning of each field, who produces, who consumes, units, validity in wider system, boundaries.** Schema vs doc disagree: schema wins, doc is bug. Two readers disagree on field meaning: doc is tiebreaker.
 
@@ -114,10 +114,26 @@ never silent downgrade.
   Implementation: `rfmesh_dsp.l2_null_steering` (WS-B-007). Same R, same array.
 - `L3_CLASSIFY` (`"l3_classify"`) — emitter classification by edge ML. Needs
   compute node (Raspberry Pi class), SDR-agnostic.
+- `L1_REFUSED_PROMINENCE` (`"l1_refused_prominence"`) — **capability state,
+  not bearing method.** Added in SCHEMA_VERSION 1.2.0 (ADR-013, G4). A
+  `BearingReport` carrying `method = L1_REFUSED_PROMINENCE` is the
+  wire-level surface for an L1 amplitude-sweep refusal: estimator
+  inspected sweep, declined to emit a bearing (prominence-gate
+  failure, saddle, vertex out of window, singular covariance,
+  non-finite variance, under-populated sweep). Free-form cause on
+  `BearingReport.refusal_reason`. Direction sentinels:
+  `azimuth_deg = 0.0`, `azimuth_sigma_deg = 180.0` (infinite-uncertainty
+  equivalent — contract requires both fields present, but consumers
+  MUST branch on `method` first). Fuser skips these reports; ops
+  dashboard renders refusal symbol + reason instead of sigma wedge.
 
-**Producer:** operator (via `NodeConfig`). **Consumer:** node
+**Producer:** operator (via `NodeConfig`) for declared capabilities;
+the L1 estimator path produces `L1_REFUSED_PROMINENCE` on
+`BearingReport.method` at refusal events. **Consumer:** node
 runtime (intersects with hardware), dashboard (filters/labels),
-`BearingReport.method` field (reports which capability produced bearing).
+fusion (skips `L1_REFUSED_PROMINENCE`, weights everything else),
+`BearingReport.method` field (reports which capability produced bearing
+or refusal).
 
 ### `EmitterClass`
 
@@ -327,6 +343,17 @@ emitter, at one instant.
   expects). Present only on Wi-Fi bearer (LoRa drops for bandwidth).
   Consumed by ops dashboard to render live pseudospectrum tile;
   fusion ignores.
+- `refusal_reason` (optional) — free-form diagnostic string when
+  `method = Capability.L1_REFUSED_PROMINENCE`. Wire-level surface
+  of L1 estimator's `last_refusal_reason` (E1). Examples:
+  `"prominence-gate failure (1.96 dB front-back < 6 dB)"`,
+  `"saddle"`, `"vertex out of sweep window"`,
+  `"singular covariance"`, `"non-finite variance"`,
+  `"sweep underpopulated"`. `None` on every healthy bearing.
+  Consumers (ops dashboard `BearingsPanel` / `BearingScanPanel`)
+  render alongside refusal symbol; fusion ignores
+  (already skipped by `method` filter). Added in
+  SCHEMA_VERSION 1.2.0 (ADR-013 G4).
 
 **Acceptance rules for `BearingReport` to be useful to fusion:**
 
@@ -414,6 +441,15 @@ ellipse polygon in ATAK), ops dashboard.
   node classified; `EmitterClass.UNKNOWN` means nodes classified but did
   not agree or individually unsure. **Geolocation never depends on
   this** — classification is metadata overlay, not gate on fix.
+- `gdop_uncomputable_reason` (optional) — free-form reason `gdop`
+  is sentinel placeholder rather than measured dilution. `None` on
+  healthy fix; populated by fusion solver when `compute_gdop()` raises
+  `DegenerateGeometryError` (collinear nodes through emitter, parallel
+  bearing lines). Ops dashboard renders `"GDOP: uncomputable (<reason>)"`
+  instead of `gdop:.2f`. `gdop` field still carries a strictly-positive
+  sentinel (`> gdop_warn_threshold * 10`) only to satisfy contract
+  validator; `confidence_level` forced LOW on this path per ADR-005 D4.
+  Added in SCHEMA_VERSION 1.2.0 (ADR-013 G3).
 
 ### `NodeStatus`
 
@@ -659,6 +695,16 @@ means "cannot responsibly solve" (below `min_bearings_for_fix`, or
 geometry so degenerate that even `fallback_centroid` is undefensible).
 Returned `FixEvent` always carries its honesty payload; weak-but-real
 fixes *labelled* weak (`confidence_level = LOW`), not withheld.
+
+**ADR-013 G4 — `L1_REFUSED_PROMINENCE` filter.** Input
+`BearingReport`s with `method = Capability.L1_REFUSED_PROMINENCE`
+are SKIPPED at `fuse()` entry, not weighted as
+`1/azimuth_sigma_deg²`. The sentinel `azimuth_sigma_deg = 180.0`
+on a refusal report would otherwise contribute trivially-low
+weight but still occupy a slot in the `contributing_nodes` tuple
+and shift the centroid — both incorrect. The filter runs before
+the time-window + min-count check, so a batch of all-refusals
+returns `None`.
 
 ### `CotPublisher`
 

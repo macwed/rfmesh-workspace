@@ -11,7 +11,7 @@
 
 [project]
 name = "rfmesh-contracts"
-version = "1.1.0"  # tracks SCHEMA_VERSION in src/rfmesh_contracts/version.py
+version = "1.2.0"  # tracks SCHEMA_VERSION in src/rfmesh_contracts/version.py
 description = "Frozen interface layer (data + behavioural contracts) for the rfmesh emitter-geolocation mesh."
 readme = "README.md"
 requires-python = ">=3.12"

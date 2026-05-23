@@ -236,7 +236,7 @@ class NodeRuntimeConfig(BaseModel):
 
     ```yaml
     node:                  # NodeConfig (frozen contract, do not extend here)
-      schema_version: "1.1.0"
+      schema_version: "1.2.0"
       node_id: node-rtl-01
       position: {lat_deg: ..., lon_deg: ...}
       heading_deg: 142.0

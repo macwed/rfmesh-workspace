@@ -101,7 +101,10 @@ from typing import Final
 
 import numpy as np
 from rfmesh_contracts.config import FusionConfig  # type: ignore[import-untyped, unused-ignore]
-from rfmesh_contracts.enums import EmitterClass  # type: ignore[import-untyped, unused-ignore]
+from rfmesh_contracts.enums import (  # type: ignore[import-untyped, unused-ignore]
+    Capability,
+    EmitterClass,
+)
 from rfmesh_contracts.geospatial import EllipseENU  # type: ignore[import-untyped, unused-ignore]
 from rfmesh_contracts.messages import (  # type: ignore[import-untyped, unused-ignore]
     BearingReport,
@@ -197,7 +200,14 @@ class StansfieldMLEFuser:
         """
         active_config = config if config is not None else self._default_config
 
-        bearings_tuple = tuple(bearings)
+        # Drop L1 refusal events (ADR-013 G4): they are wire-level
+        # surfaces of "the estimator declined to emit a bearing" and
+        # must never contribute weight to a fix. They reach the fuser
+        # only so a remote dashboard can render the refusal; here they
+        # are stripped before the time-window + min-count check.
+        bearings_tuple = tuple(
+            b for b in bearings if b.method is not Capability.L1_REFUSED_PROMINENCE
+        )
         windowed = _filter_to_time_window(bearings_tuple, active_config.batch_window_ms)
         if len(windowed) < active_config.min_bearings_for_fix:
             return None
@@ -231,16 +241,22 @@ class StansfieldMLEFuser:
                 ellipse = maybe_ellipse
 
         residuals_result = compute_residuals(emitter_xy, windowed, node_positions_enu)
+        gdop_uncomputable_reason: str | None = None
         try:
             gdop_value = compute_gdop(emitter_xy, node_positions_enu)
-        except DegenerateGeometryError:
+        except DegenerateGeometryError as exc:
             # If GDOP cannot be computed (collinear nodes through the
             # emitter), label the fix LOW and synthesise a generous
             # GDOP placeholder. The contract requires ``gdop > 0``
             # strictly; we use a large finite value to mark "geometry
             # is weak" -- the confidence_level will be LOW anyway via
-            # the gdop_warn_threshold gate.
+            # the gdop_warn_threshold gate. The reason string is
+            # surfaced on FixEvent.gdop_uncomputable_reason so the
+            # dashboard renders "GDOP: uncomputable (<reason>)"
+            # instead of treating the sentinel as a real measurement
+            # (ADR-013 G3).
             gdop_value = max(active_config.gdop_warn_threshold * 10.0, 1.0)
+            gdop_uncomputable_reason = str(exc) or "degenerate geometry"
 
         range_m = math.hypot(emitter_xy[0], emitter_xy[1])
         is_outlier_any = any(residuals_result.is_outlier)
@@ -279,6 +295,7 @@ class StansfieldMLEFuser:
             gdop=gdop_value,
             method=method,
             emitter_class=emitter_class,
+            gdop_uncomputable_reason=gdop_uncomputable_reason,
         )
 
 

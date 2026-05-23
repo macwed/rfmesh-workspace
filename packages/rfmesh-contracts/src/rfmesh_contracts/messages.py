@@ -176,6 +176,22 @@ class BearingReport(BaseModel):
             "ignores it. None on all L1 reports and on LoRa-borne reports."
         ),
     )
+    refusal_reason: str | None = Field(
+        default=None,
+        description=(
+            "Free-form diagnostic string when method is "
+            "Capability.L1_REFUSED_PROMINENCE (or other L<n>-refused "
+            "values added in future). The wire-level surface of the "
+            "L1 estimator's last_refusal_reason (E1) so a remote "
+            "dashboard can render the refusal cause alongside the "
+            "refusal symbol. Examples: 'prominence-gate failure "
+            "(1.96 dB front-back < 6 dB)', 'saddle', "
+            "'vertex out of sweep window', 'singular covariance', "
+            "'non-finite variance', 'sweep underpopulated'. None on "
+            "every healthy bearing. Added in SCHEMA_VERSION 1.2.0 "
+            "(ADR-013, G4)."
+        ),
+    )
 
 
 class FixEvent(BaseModel):
@@ -294,6 +310,25 @@ class FixEvent(BaseModel):
             "BearingReports, if any classified it. None means no node "
             "classified; UNKNOWN means nodes classified but did not agree or "
             "were individually unsure. Geolocation never depends on this."
+        ),
+    )
+    gdop_uncomputable_reason: str | None = Field(
+        default=None,
+        description=(
+            "Free-form reason the GDOP value is not a measured "
+            "geometric dilution but a sentinel placeholder. None on "
+            "every healthy fix. Set by the fusion solver when "
+            "compute_gdop() raises DegenerateGeometryError "
+            "(e.g. 'bearing lines parallel within 1e-12 rad -- "
+            "geometry near-collinear'). The dashboard renders "
+            "'GDOP: uncomputable (<reason>)' instead of the literal "
+            "`gdop` field, which in that case carries a sentinel "
+            "float (> gdop_warn_threshold * 10) only to satisfy the "
+            "existing FixEvent.gdop validator. Confidence band is "
+            "forced LOW per ADR-005 D4 in this branch. None on a "
+            "healthy fix; populated only on the fallback-centroid / "
+            "degenerate-geometry path. Added in SCHEMA_VERSION 1.2.0 "
+            "(ADR-013, G3)."
         ),
     )
 

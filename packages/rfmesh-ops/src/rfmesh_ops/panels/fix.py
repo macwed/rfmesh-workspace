@@ -220,10 +220,19 @@ class FixPanel(Panel):
             percent_text = f"{pct:.{_PERCENTAGE_DECIMALS}f}%"
         # Band text -- verbatim, no hedging (ADR-009).
         band_text = fix.confidence_level.value.upper()
+        # GDOP line: honest about the sentinel case (ADR-013 G3). When
+        # gdop_uncomputable_reason is set the float `fix.gdop` is a
+        # placeholder that satisfies the contract validator but is not
+        # a measured dilution -- render that instead of the number so
+        # the operator does not read it as real geometry.
+        if fix.gdop_uncomputable_reason is not None:
+            gdop_line = f"GDOP: uncomputable ({fix.gdop_uncomputable_reason})"
+        else:
+            gdop_line = f"GDOP: {fix.gdop:.2f}"
         overlay_lines = [
             f"Band: {band_text}",
             f"%-of-range: {percent_text}",
-            f"GDOP: {fix.gdop:.2f}",
+            gdop_line,
             f"semi-major: {semi_major_m:.1f} m",
             f"method: {fix.method}",
         ]

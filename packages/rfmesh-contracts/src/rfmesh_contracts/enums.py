@@ -58,6 +58,24 @@ class Capability(StrEnum):
     * ``L3_CLASSIFY`` -- edge ML emitter classification (STFT spectrogram into
       a CNN/ResNet). Labels the emitter (ELRS, Crossfire, GSM jammer, ...).
       Needs a compute node (Raspberry Pi class) but is SDR-agnostic.
+    * ``L1_REFUSED_PROMINENCE`` -- a *capability state*, not a bearing method.
+      Added in SCHEMA_VERSION 1.2.0 (ADR-013). A ``BearingReport`` carrying
+      ``method = L1_REFUSED_PROMINENCE`` is the wire-level surface for an L1
+      refusal: the L1 amplitude-sweep estimator inspected a sweep and
+      declined to emit a bearing (prominence-gate failure, saddle, vertex
+      out of window, singular covariance, non-finite variance,
+      under-populated sweep). The free-form cause travels on
+      ``BearingReport.refusal_reason``. The fuser SKIPS these reports
+      (they do not contribute to a fix); they exist so a remote dashboard
+      can render the refusal as a structured event instead of seeing
+      nothing arrive from that node for one batch window
+      (Mast A in ``docs/phase-c-report/findings.md`` is the canonical
+      example). Producers populate the bearing-direction fields with
+      sentinels: ``azimuth_deg=0.0`` and
+      ``azimuth_sigma_deg=180.0`` (infinite-uncertainty equivalent),
+      because the contract requires both to be present. Consumers MUST
+      branch on ``method`` first and not interpret those sentinels as a
+      real bearing.
     """
 
     L1_RSSI = "l1_rssi"
@@ -65,6 +83,7 @@ class Capability(StrEnum):
     L2_CAPON = "l2_capon"
     L2_MVDR_NULL = "l2_mvdr_null"
     L3_CLASSIFY = "l3_classify"
+    L1_REFUSED_PROMINENCE = "l1_refused_prominence"
 
 
 class EmitterClass(StrEnum):

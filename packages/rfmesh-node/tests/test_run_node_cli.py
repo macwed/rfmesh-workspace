@@ -63,7 +63,7 @@ def test_cli_rejects_schema_invalid(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     """A YAML that loads but fails Pydantic validation returns exit code 2."""
     monkeypatch.delenv("RFMESH_NODE_ALLOW_LEGACY_FLAGS", raising=False)
     cfg = tmp_path / "bad-schema.yaml"
-    cfg.write_text("node: {schema_version: '1.1.0'}\n", encoding="utf-8")
+    cfg.write_text("node: {schema_version: '1.2.0'}\n", encoding="utf-8")
     rc = run_node_main(["--config", str(cfg)])
     assert rc == 2
 
