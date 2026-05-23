@@ -66,9 +66,10 @@
         <h2>Nodes</h2>
         <ul id="node-list" class="nodes"></ul>
         <p id="no-nodes-hint" class="caveat">
-          No node connected. Bring a node up with
-          <code>rfmesh-node --config &lt;cfg&gt; --servo-port &lt;port&gt;
-          --command-endpoint ws://&lt;backend&gt;:8000</code>.
+          No node connected. On the field Pi (systemd), check
+          <code>journalctl -u rfmesh-node -f</code>. For a bench run, see
+          <code>field-deploy/node-config.example.yaml</code> + invoke
+          <code>rfmesh-node --config &lt;path.yaml&gt;</code>.
         </p>
       </section>
 

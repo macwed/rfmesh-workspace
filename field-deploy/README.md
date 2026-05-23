@@ -110,7 +110,19 @@ Available overrides:
 | Variable | Default | Notes |
 |---|---|---|
 | `CONFIG` | `configs/node-<serial>.yaml` | Force a specific YAML. |
-| `SERVO_PORT` | auto-detect `/dev/ttyACM*` | Pin a port when two CDC devices are present. |
+| `SERVO_PORT` | (from YAML `servo_port:`) | Pre-flight warning only; the YAML is authoritative since ADR-022. |
+
+---
+
+## YAML shape (ADR-022)
+
+Each `configs/node-<serial>.yaml` is a single `NodeRuntimeConfig`
+composing the frozen `NodeConfig` (under the `node:` key) with the
+node-runtime helpers: `servo_port`, `sweep:`, `rendezvous:`,
+`command_endpoint:`, `motion:`. See
+[`node-config.example.yaml`](node-config.example.yaml) for the full
+schema. Soldier-facing operation sets `command_endpoint.enabled: true`
+so `link.html` can see this node.
 
 ---
 

@@ -1,25 +1,38 @@
 """``rfmesh-node`` CLI entry point.
 
-Loads a ``NodeConfig`` from YAML, constructs the appropriate receiver,
-wires up a bearer, and runs ``Node.run()`` until SIGINT.
+ADR-022 (PROPOSED 2026-05-23): the CLI shrinks to ``--config`` (path to a
+single ``NodeRuntimeConfig`` YAML) and ``--log-level``. Every prior
+per-knob flag (``--servo-port``, ``--sweep-*``, ``--peer-*``,
+``--rendezvous-*``) has moved into the YAML so the runtime config is one
+file. Soldier-facing operation does not use this CLI at all -- the field
+node boots into systemd and phones home over the comms-mode command
+channel; ``link.html`` is the canonical operator surface (ADR-021).
 
-Receiver factory (``--config`` ``sdr.driver``):
+CLI scope: bench / admin / debug.
+
+Receiver factory (``sdr.driver`` in YAML):
   * ``"rtlsdr"`` -- real RTL-SDR V4 via the salvaged ``RTLSDRDevice``
     (single-channel; the L1 servo-sweep path). This is the field node.
-  * ``"sim"`` -- still raises: the bare ``SyntheticReceiver`` needs a
-    ``SimulationScenario``; use ``rfmesh-demo-replay`` for sim runs.
-  * any other driver -- raises ``NotImplementedError`` with a loud,
-    specific message (no silent down-fall, Invariant B3).
+  * ``"sim"`` -- raises: bare ``SyntheticReceiver`` needs a scenario;
+    use ``rfmesh-demo-replay`` for sim runs.
+  * any other driver -- raises ``NotImplementedError`` with a specific
+    message (no silent down-fall, B3).
 
-Bearer is chosen by the ``fusion_endpoint`` URL scheme, *not* by a
-contract change: ``http(s)://`` -> ``HttpBearer`` (POSTs JSON straight to
-the both3 backend ``/bearings``), ``udp://`` -> the salvaged ``WifiBearer``
-(/ ``LoraBearer`` / ``BothBearer`` per ``bearer.kind``).
+Bearer is chosen by ``node.fusion_endpoint`` URL scheme: ``http(s)://``
+-> ``HttpBearer`` (the soldier-facing default), ``udp://`` -> WifiBearer
+/ LoraBearer / BothBearer per ``node.bearer.kind``.
 
-When a ``--servo-port`` is given and ``L1_RSSI`` is an active capability,
-an ``L1SweepLoop`` is wired in -- servo + RTL-SDR + L1 estimator + bearer
--- so the node actually produces and ships bearings (the v1.0 ``Node``
-container otherwise only runs the heartbeat).
+When ``servo_port`` is set in YAML and ``L1_RSSI`` is an active
+capability, an ``L1SweepLoop`` is wired in. A ``rendezvous:`` block
+additionally enables ADR-019 directional rendezvous. A
+``command_endpoint:`` block with ``enabled=true`` wires in the
+``CommandChannel`` so the node phones the backend and the operator can
+see / steer it from ``link.html``.
+
+Legacy flags (--servo-port, --sweep-*, --peer-*, --rendezvous-*) are
+refused with an actionable message naming the YAML key each one maps
+to. Set ``RFMESH_NODE_ALLOW_LEGACY_FLAGS=1`` to demote the refusal to a
+DeprecationWarning for one release (per ADR-022 backwards-compat window).
 """
 
 from __future__ import annotations
@@ -28,20 +41,23 @@ import argparse
 import asyncio
 import contextlib
 import logging
+import os
 import signal
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 import yaml
 from pydantic import ValidationError
-from rfmesh_contracts import BearerKind, Capability, GeodeticPosition, NodeConfig
+from rfmesh_contracts import BearerKind, Capability
 
 from ..bearer import BothBearer, HttpBearer, LoraBearer, WifiBearer
-from ..l1_sweep import L1SweepConfig, L1SweepLoop
+from ..l1_sweep import L1SweepLoop
 from ..node import Node
-from ..rendezvous import RendezvousConfig, RendezvousLoop
+from ..rendezvous import RendezvousLoop
 from ..runtime import CapabilityMismatchError
+from ..runtime_config import NodeRuntimeConfig
 
 if TYPE_CHECKING:
     from rfmesh_contracts import Bearer, Receiver
@@ -50,21 +66,40 @@ if TYPE_CHECKING:
 
 _LOG = logging.getLogger(__name__)
 
+# Legacy flag names -> YAML key path. Pre-ADR-022 the CLI accepted 16
+# flags; the deprecation window (ADR-022 §"Backwards-compat") keeps the
+# parser aware of them so we can emit an actionable error / warning.
+_LEGACY_FLAGS: dict[str, str] = {
+    "--servo-port": "servo_port",
+    "--sweep-min-deg": "sweep.min_deg",
+    "--sweep-max-deg": "sweep.max_deg",
+    "--sweep-step-deg": "sweep.step_deg",
+    "--settle-ms": "sweep.settle_s",
+    "--dwell-samples": "sweep.dwell_samples",
+    "--inter-sweep-s": "sweep.inter_sweep_s",
+    "--peer-id": "rendezvous.peer_node_id",
+    "--peer-lat": "rendezvous.peer.lat_deg",
+    "--peer-lon": "rendezvous.peer.lon_deg",
+    "--peer-hae-m": "rendezvous.peer.hae_m",
+    "--peer-sigma-m": "rendezvous.peer.sigma_m",
+    "--rendezvous-refine-half-arc-deg": "rendezvous.refine_half_arc_deg",
+    "--rendezvous-link-hold-s": "rendezvous.link_hold_s",
+}
 
-def _build_receiver(config: NodeConfig) -> Receiver:
-    """Build a receiver for the given config.
+
+def _build_receiver(runtime: NodeRuntimeConfig) -> Receiver:
+    """Build a receiver from the YAML ``node.sdr`` block.
 
     ``rtlsdr`` -> real RTL-SDR (the field L1 path). ``sim`` and other
-    drivers raise a loud, specific error (Invariant B3: no silent
-    fallback to the wrong receiver).
+    drivers raise loudly (B3).
     """
-    driver = config.sdr.driver
+    driver = runtime.node.sdr.driver
     if driver == "rtlsdr":
-        # Imported lazily so a sim/bench host without rfmesh-sdr's runtime
+        # Lazy import: a sim/bench host without rfmesh-sdr's runtime
         # deps can still import this module; the field node has it.
         from rfmesh_sdr.devices.rtlsdr import RTLSDRDevice  # noqa: PLC0415
 
-        return RTLSDRDevice(serial=config.sdr.serial)
+        return RTLSDRDevice(serial=runtime.node.sdr.serial)
     if driver == "sim":
         msg = (
             "run_node: scenario-less simulator receivers are not constructible "
@@ -81,23 +116,19 @@ def _build_receiver(config: NodeConfig) -> Receiver:
     raise NotImplementedError(msg)
 
 
-def _build_bearer(config: NodeConfig) -> Bearer:
-    """Build a bearer chosen by the ``fusion_endpoint`` URL scheme.
+def _build_bearer(runtime: NodeRuntimeConfig) -> Bearer:
+    """Build a bearer chosen by ``node.fusion_endpoint``'s URL scheme.
 
     ``http(s)://`` -> ``HttpBearer`` (POSTs JSON to the both3 backend).
     ``udp://`` -> ``WifiBearer`` / ``LoraBearer`` / ``BothBearer`` per
-    ``bearer.kind`` (the salvaged UDP path).
-
-    ``BearerConfig._lora_needs_port`` guarantees ``lora_serial_port`` is
-    set for LoRa/Both; the ``None`` guard is a mypy narrower + defence
-    against a future refactor dropping that validator.
+    ``node.bearer.kind``.
     """
-    endpoint = str(config.fusion_endpoint)
+    endpoint = str(runtime.node.fusion_endpoint)
     scheme = urlparse(endpoint).scheme
     if scheme in ("http", "https"):
         return HttpBearer(endpoint)
 
-    bearer_cfg = config.bearer
+    bearer_cfg = runtime.node.bearer
     if bearer_cfg.kind is BearerKind.WIFI:
         return WifiBearer(endpoint)
     port = bearer_cfg.lora_serial_port
@@ -109,145 +140,99 @@ def _build_bearer(config: NodeConfig) -> Bearer:
         raise ValueError(msg)
     if bearer_cfg.kind is BearerKind.LORA:
         return LoraBearer(port)
-    # BOTH -- both halves.
     return BothBearer(WifiBearer(endpoint), LoraBearer(port))
 
 
-def _build_servo(config: NodeConfig, args: argparse.Namespace) -> ServoDriver | None:
+def _build_servo(runtime: NodeRuntimeConfig) -> ServoDriver | None:
     """Build the (unconnected) servo driver, or ``None`` if not applicable.
 
-    Returns ``None`` unless ``--servo-port`` is set AND ``L1_RSSI`` is
-    declared -- there is no servo-driving loop otherwise. Built once here
-    and shared by the sweep and rendezvous loops; ``Node`` owns its
-    connect/close lifecycle (ADR-019).
+    Returns ``None`` unless ``servo_port`` is set AND ``L1_RSSI`` is
+    declared. ``Node`` owns the connect/close lifecycle (ADR-019).
     """
-    if args.servo_port is None:
+    if runtime.servo_port is None:
         return None
-    if Capability.L1_RSSI not in config.capabilities:
+    if Capability.L1_RSSI not in runtime.node.capabilities:
         return None
 
     from rfmesh_servo.driver import ServoDriver  # noqa: PLC0415
     from rfmesh_servo.transport import SerialTransport  # noqa: PLC0415
 
-    return ServoDriver(SerialTransport(args.servo_port), own_transport=True)
+    return ServoDriver(SerialTransport(runtime.servo_port), own_transport=True)
 
 
 def _build_sweep_loop(
-    config: NodeConfig,
+    runtime: NodeRuntimeConfig,
     receiver: Receiver,
     bearer: Bearer,
     servo: ServoDriver | None,
-    args: argparse.Namespace,
 ) -> L1SweepLoop | None:
-    """Build the L1 sweep loop, or ``None`` if not applicable.
-
-    Returns ``None`` (heartbeat-only node) when no servo was built
-    (``--servo-port`` unset or ``L1_RSSI`` not declared). ``heading_deg``
-    is required for the L1 sweep (the boresight the servo angle is relative
-    to); a missing one is a loud config error rather than a silent zero.
-    """
+    """Build the L1 sweep loop, or ``None`` if not applicable."""
     if servo is None:
         return None
-    if config.heading_deg is None:
+    if runtime.node.heading_deg is None:
         msg = (
-            "run_node: L1 sweep requires NodeConfig.heading_deg (antenna "
-            "boresight azimuth, set by survey-and-align); it is None."
+            "run_node: L1 sweep requires node.heading_deg in the YAML "
+            "(antenna boresight azimuth, set by survey-and-align); it is None."
         )
         raise ValueError(msg)
 
-    sweep_cfg = L1SweepConfig(
-        min_deg=args.sweep_min_deg,
-        max_deg=args.sweep_max_deg,
-        step_deg=args.sweep_step_deg,
-        settle_s=args.settle_ms / 1000.0,
-        dwell_samples=args.dwell_samples,
-        inter_sweep_s=args.inter_sweep_s,
-    )
     return L1SweepLoop(
         receiver=receiver,
         bearer=bearer,
         servo=servo,
-        node_id=config.node_id,
-        node_position=config.position,
-        boresight_heading_deg=config.heading_deg,
-        config=sweep_cfg,
+        node_id=runtime.node.node_id,
+        node_position=runtime.node.position,
+        boresight_heading_deg=runtime.node.heading_deg,
+        config=runtime.sweep_dataclass(),
     )
 
 
 def _build_rendezvous_loop(
-    config: NodeConfig,
+    runtime: NodeRuntimeConfig,
     receiver: Receiver,
     servo: ServoDriver | None,
-    args: argparse.Namespace,
 ) -> RendezvousLoop | None:
-    """Build the rendezvous loop, or ``None`` if not requested.
-
-    Returns ``None`` unless a peer was given (``--peer-id`` + ``--peer-lat`` +
-    ``--peer-lon``) and a servo was built. Like the L1 sweep, ``heading_deg``
-    is required (the boresight the servo angle is relative to). Partial peer
-    args are a loud config error (B3) rather than a silent skip.
-    """
-    peer_args = (args.peer_id, args.peer_lat, args.peer_lon)
-    if all(a is None for a in peer_args):
+    """Build the rendezvous loop, or ``None`` if no ``rendezvous:`` block."""
+    rv_dc = runtime.rendezvous_dataclass()
+    if rv_dc is None:
         return None
-    if any(a is None for a in peer_args):
-        msg = (
-            "run_node: rendezvous needs --peer-id, --peer-lat and --peer-lon "
-            "together (got a partial set)."
-        )
-        raise ValueError(msg)
+    # ``NodeRuntimeConfig._coherence`` already refused this combination at
+    # load time; the guards here are defence-in-depth.
     if servo is None:
-        msg = (
-            "run_node: rendezvous needs a servo (--servo-port) and L1_RSSI "
-            "declared; neither/one is missing."
-        )
+        msg = "run_node: rendezvous needs a servo; servo_port must be set."
         raise ValueError(msg)
-    if config.heading_deg is None:
+    if runtime.node.heading_deg is None:
         msg = (
-            "run_node: rendezvous requires NodeConfig.heading_deg (antenna "
-            "boresight azimuth, set by survey-and-align); it is None."
+            "run_node: rendezvous requires node.heading_deg in the YAML "
+            "(antenna boresight azimuth, set by survey-and-align); it is None."
         )
         raise ValueError(msg)
 
-    peer_position = GeodeticPosition(
-        lat_deg=args.peer_lat,
-        lon_deg=args.peer_lon,
-        hae_m=args.peer_hae_m,
-        sigma_m=args.peer_sigma_m,
-    )
-    rv_cfg = RendezvousConfig(
-        peer_node_id=args.peer_id,
-        peer_position=peer_position,
-        refine_step_deg=args.sweep_step_deg,
-        settle_s=args.settle_ms / 1000.0,
-        dwell_samples=args.dwell_samples,
-        refine_half_arc_deg=args.rendezvous_refine_half_arc_deg,
-        link_hold_s=args.rendezvous_link_hold_s,
-    )
     return RendezvousLoop(
         receiver=receiver,
         servo=servo,
-        node_id=config.node_id,
-        node_position=config.position,
-        boresight_heading_deg=config.heading_deg,
-        config=rv_cfg,
+        node_id=runtime.node.node_id,
+        node_position=runtime.node.position,
+        boresight_heading_deg=runtime.node.heading_deg,
+        config=rv_dc,
     )
 
 
-async def _run(config: NodeConfig, args: argparse.Namespace) -> None:
+async def _run(runtime: NodeRuntimeConfig) -> None:
     """Bring the node up; wait for SIGINT; tear down."""
-    receiver = _build_receiver(config)
-    bearer = _build_bearer(config)
-    servo = _build_servo(config, args)
-    sweep_loop = _build_sweep_loop(config, receiver, bearer, servo, args)
-    rendezvous_loop = _build_rendezvous_loop(config, receiver, servo, args)
+    receiver = _build_receiver(runtime)
+    bearer = _build_bearer(runtime)
+    servo = _build_servo(runtime)
+    sweep_loop = _build_sweep_loop(runtime, receiver, bearer, servo)
+    rendezvous_loop = _build_rendezvous_loop(runtime, receiver, servo)
     node = Node(
-        config,
+        runtime.node,
         receiver=receiver,
         bearer=bearer,
         sweep_loop=sweep_loop,
         rendezvous_loop=rendezvous_loop,
         servo=servo,
+        command_endpoint=runtime.command_endpoint if runtime.command_endpoint.enabled else None,
     )
 
     loop = asyncio.get_running_loop()
@@ -260,19 +245,62 @@ async def _run(config: NodeConfig, args: argparse.Namespace) -> None:
     await node.run()
 
 
+def _legacy_flag_check(argv: list[str]) -> None:
+    """Refuse legacy CLI flags with an actionable error (ADR-022).
+
+    If ``RFMESH_NODE_ALLOW_LEGACY_FLAGS=1`` is set, demote the refusal to
+    a ``DeprecationWarning`` for one release. Otherwise raise ``SystemExit``.
+    """
+    hits: list[tuple[str, str]] = []
+    for tok in argv:
+        head = tok.split("=", 1)[0]
+        yaml_key = _LEGACY_FLAGS.get(head)
+        if yaml_key is not None:
+            hits.append((head, yaml_key))
+    if not hits:
+        return
+    bullet_lines = "\n".join(f"  {flag}  ->  YAML key {key!r}" for flag, key in hits)
+    msg = (
+        "rfmesh-node: per-knob CLI flags removed in ADR-022. Move these into "
+        "the single YAML at --config:\n"
+        f"{bullet_lines}\n"
+        "See docs/adr/ADR-022-single-yaml-node-runtime-config.md or "
+        "field-deploy/node-config.example.yaml for the YAML shape."
+    )
+    if os.environ.get("RFMESH_NODE_ALLOW_LEGACY_FLAGS") == "1":
+        warnings.warn(msg, DeprecationWarning, stacklevel=2)
+        _LOG.warning("%s", msg)
+        return
+    raise SystemExit(msg)
+
+
 def run_node_main(argv: list[str] | None = None) -> int:  # noqa: PLR0911
     """``rfmesh-node`` CLI -- returns a process exit code.
 
-    Multiple returns (one per distinct error class) are intentional --
-    each gives the operator a specific, actionable log message instead
-    of a generic "config failed" string (demo-integrity council R5).
+    Many distinct returns (one per error class) is intentional -- each
+    gives the operator a specific, actionable log message instead of a
+    generic "config failed" string (demo-integrity council R5).
     """
-    parser = argparse.ArgumentParser(prog="rfmesh-node")
+    argv_list = list(argv) if argv is not None else None
+    if argv_list is not None:
+        _legacy_flag_check(argv_list)
+    else:
+        import sys  # noqa: PLC0415
+
+        _legacy_flag_check(sys.argv[1:])
+
+    parser = argparse.ArgumentParser(
+        prog="rfmesh-node",
+        description=(
+            "Bench/admin CLI for one rfmesh field node. Soldier-facing operation "
+            "boots via systemd (field-deploy/) and is controlled from link.html."
+        ),
+    )
     parser.add_argument(
         "--config",
         type=Path,
         required=True,
-        help="path to a NodeConfig YAML",
+        help="path to a NodeRuntimeConfig YAML (see ADR-022)",
     )
     parser.add_argument(
         "--log-level",
@@ -280,112 +308,18 @@ def run_node_main(argv: list[str] | None = None) -> int:  # noqa: PLR0911
         default="INFO",
         help="logging level (DEBUG/INFO/WARNING/ERROR)",
     )
-    parser.add_argument(
-        "--servo-port",
-        type=str,
-        default=None,
-        help=(
-            "serial port of the ESP32 servo controller (e.g. /dev/ttyACM0 or "
-            "COM5). Enables the L1 sweep when set and L1_RSSI is declared."
-        ),
-    )
-    parser.add_argument(
-        "--sweep-min-deg",
-        type=float,
-        default=-90.0,
-        help="servo sweep arc start, degrees relative to boresight (default -90)",
-    )
-    parser.add_argument(
-        "--sweep-max-deg",
-        type=float,
-        default=90.0,
-        help=(
-            "servo sweep arc end, degrees relative to boresight (default +90). "
-            "Arc must exceed the antenna HPBW so the off-axis floor is real."
-        ),
-    )
-    parser.add_argument(
-        "--sweep-step-deg",
-        type=float,
-        default=2.0,
-        help="servo sweep step, degrees (default 2.0)",
-    )
-    parser.add_argument(
-        "--settle-ms",
-        type=float,
-        default=200.0,
-        help="dwell after each servo move before sampling, ms (default 200)",
-    )
-    parser.add_argument(
-        "--dwell-samples",
-        type=int,
-        default=1024,
-        help="IQ samples read per heading (default 1024)",
-    )
-    parser.add_argument(
-        "--inter-sweep-s",
-        type=float,
-        default=1.0,
-        help="pause between sweeps, seconds (default 1.0)",
-    )
-    # Rendezvous (directional node-to-node link, ADR-019). Giving --peer-id +
-    # --peer-lat + --peer-lon enables it; the node then time-shares the servo
-    # between holding the link and the jammer sweep.
-    parser.add_argument(
-        "--peer-id",
-        type=str,
-        default=None,
-        help="peer node_id to establish a directional link with (enables rendezvous)",
-    )
-    parser.add_argument(
-        "--peer-lat",
-        type=float,
-        default=None,
-        help="peer surveyed latitude, degrees WGS-84 (required with --peer-id)",
-    )
-    parser.add_argument(
-        "--peer-lon",
-        type=float,
-        default=None,
-        help="peer surveyed longitude, degrees WGS-84 (required with --peer-id)",
-    )
-    parser.add_argument(
-        "--peer-hae-m",
-        type=float,
-        default=0.0,
-        help="peer height above WGS-84 ellipsoid, metres (default 0)",
-    )
-    parser.add_argument(
-        "--peer-sigma-m",
-        type=float,
-        default=10.0,
-        help="peer position 1-sigma uncertainty, metres (default 10)",
-    )
-    parser.add_argument(
-        "--rendezvous-refine-half-arc-deg",
-        type=float,
-        default=20.0,
-        help="SCANNER refine half-arc around the GPS-prior bearing, degrees (default 20)",
-    )
-    parser.add_argument(
-        "--rendezvous-link-hold-s",
-        type=float,
-        default=30.0,
-        help="how long to hold the link before breaking for a jammer sweep, s (default 30)",
-    )
-    args = parser.parse_args(argv)
+    args = parser.parse_args(argv_list)
 
     logging.basicConfig(level=args.log_level.upper())
 
-    # Operator-facing error UX (demo-integrity council R5): YAML
-    # parse errors, schema-validation errors and capability mismatches
-    # are caught at the CLI boundary and rendered as `_LOG.error(...)`
-    # with a non-zero exit code, instead of dumping a Python traceback
-    # at the operator.
+    # Operator-facing error UX: YAML parse errors, schema-validation
+    # errors and capability mismatches are caught here and rendered as
+    # ``_LOG.error`` with a non-zero exit code, instead of a Python
+    # traceback at the operator (demo-integrity council R5).
     try:
         with args.config.open("r", encoding="utf-8") as fp:
             payload = yaml.safe_load(fp)
-        config = NodeConfig.model_validate(payload)
+        runtime = NodeRuntimeConfig.model_validate(payload)
     except FileNotFoundError as exc:
         _LOG.error("rfmesh-node: config not found: %s", exc)
         return 2
@@ -397,7 +331,7 @@ def run_node_main(argv: list[str] | None = None) -> int:  # noqa: PLR0911
         return 2
 
     try:
-        asyncio.run(_run(config, args))
+        asyncio.run(_run(runtime))
     except CapabilityMismatchError as exc:
         _LOG.error("rfmesh-node: capability mismatch: %s", exc)
         return 2
@@ -405,9 +339,7 @@ def run_node_main(argv: list[str] | None = None) -> int:  # noqa: PLR0911
         _LOG.error("rfmesh-node: %s", exc)
         return 2
     except ValueError as exc:
-        # _build_bearer ValueError when LoRa port missing despite validator
-        # (defensive guard against future refactor dropping _lora_needs_port).
-        _LOG.error("rfmesh-node: bearer build failed: %s", exc)
+        _LOG.error("rfmesh-node: %s", exc)
         return 2
     except KeyboardInterrupt:
         return 0

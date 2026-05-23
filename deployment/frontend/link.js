@@ -151,8 +151,37 @@
 
   function selectNode(nodeId) {
     state.selectedNodeId = nodeId;
+    // ADR-022: pull a fresh per-node capability snapshot. The WS push
+    // would have already merged the same payload, but a freshly-opened
+    // page that selects a node before any push arrives must still be
+    // able to clamp the slider.
+    fetchNodeCapabilities(nodeId);
     renderNodeList();
     renderDetail();
+  }
+
+  async function fetchNodeCapabilities(nodeId) {
+    try {
+      const resp = await fetch(`/node/${encodeURIComponent(nodeId)}/capabilities`);
+      if (!resp.ok) return;
+      const body = await resp.json();
+      mergeHello(body.node_id, body.hello || {});
+    } catch (e) {
+      console.warn(`capability fetch failed for ${nodeId}: ${e.message}`);
+    }
+  }
+
+  async function hydrateAllCapabilities() {
+    try {
+      const resp = await fetch("/nodes/capabilities");
+      if (!resp.ok) return;
+      const body = await resp.json();
+      for (const entry of body.nodes || []) {
+        mergeHello(entry.node_id, entry.hello || {});
+      }
+    } catch (e) {
+      console.warn(`capability list fetch failed: ${e.message}`);
+    }
   }
 
   detailCloseBtn.addEventListener("click", () => {
@@ -173,25 +202,46 @@
     detailStateBadge.className = "badge " + (n.state || "stale");
     detailStateBadge.textContent = n.state || "stale";
     detailCalEl.textContent = n.cal_label || "unknown";
-    detailPeerEl.textContent = n.peer_id || "—";
+    detailPeerEl.textContent = (n.peer && n.peer.node_id) || n.peer_id || "—";
     detailMarginEl.textContent =
       typeof n.link_margin_db === "number"
         ? `${n.link_margin_db.toFixed(1)} dB`
         : "—";
     detailLastEl.textContent = n.last_acquired_age || "never";
 
+    // ADR-022 manual-steer slider clamp: if the node has reported a
+    // calibrated_geographic_arc_deg in its node_hello, clamp the slider
+    // to that arc. Otherwise leave it disabled (B3 — never let the
+    // operator command an angle the system cannot verify).
+    if (n.cal_arc && Number.isFinite(n.cal_arc.min) && Number.isFinite(n.cal_arc.max)) {
+      detailSliderEl.min = n.cal_arc.min;
+      detailSliderEl.max = n.cal_arc.max;
+      const cur = parseFloat(detailSliderEl.value);
+      if (!(cur >= n.cal_arc.min && cur <= n.cal_arc.max)) {
+        const mid = (n.cal_arc.min + n.cal_arc.max) / 2;
+        detailSliderEl.value = mid;
+        detailSliderValEl.textContent = `${mid.toFixed(1)}°`;
+      }
+    }
+
     // Steering controls enabled iff (a) WS to backend is up,
-    // (b) node has a known calibration, (c) node is not in FAULT.
-    const calibrated = n.cal_label && n.cal_label !== "uncalibrated";
-    const canSteer = state.wsConnected && calibrated && n.state !== "fault";
+    // (b) node has a known calibrated arc, (c) node has a wired
+    // controller (ADR-022 stub refuses until NodeController lands),
+    // (d) node is not in FAULT.
+    const calibrated = !!(n.cal_arc && Number.isFinite(n.cal_arc.min));
+    const controllerReady = !!n.controller_ready;
+    const canSteer =
+      state.wsConnected && calibrated && controllerReady && n.state !== "fault";
     detailSliderEl.disabled = !canSteer;
     detailSendBtn.disabled = !canSteer;
     if (!canSteer) {
-      detailMsgEl.textContent = calibrated
-        ? state.wsConnected
-          ? "Node is FAULT — manual steering disabled."
-          : "Backend offline — controls disabled."
-        : "Node uncalibrated — run rfmesh-servo-calibrate.";
+      let reason;
+      if (!state.wsConnected) reason = "Backend offline — controls disabled.";
+      else if (!calibrated) reason = "Node arc unknown — awaiting node_hello.";
+      else if (!controllerReady)
+        reason = "NodeController not wired (ADR-022 stub) — steer disabled.";
+      else reason = "Node is FAULT — manual steering disabled.";
+      detailMsgEl.textContent = reason;
       detailMsgEl.style.color = "var(--low)";
     } else {
       detailMsgEl.textContent = "";
@@ -343,9 +393,53 @@
     if (!payload || !payload.kind) return;
     if (payload.kind === "bearing") {
       mergeBearing(payload.data || {});
+    } else if (payload.kind === "node_hello") {
+      // ADR-022: backend forwarded a freshly-arrived capability snapshot.
+      // Cache the slider clamp + light up the node in the list even
+      // before the first /bearings push arrives.
+      mergeHello(payload.node_id, payload.data || {});
+    } else if (payload.kind === "command_refused") {
+      // Node-side refusal (B3, stub handler until NodeController lands).
+      // Surface red toast on the detail panel of the affected node.
+      showRefusal(payload.node_id, payload.data || {});
     }
-    // Future kinds: "node_status", "link_state", etc. The schema is
-    // additive; unknown kinds are ignored honestly.
+    // Future kinds: "node_status", "link_state". Schema is additive;
+    // unknown kinds are ignored honestly.
+  }
+
+  function mergeHello(nodeId, hello) {
+    if (!nodeId) return;
+    const n = state.nodes.get(nodeId) || { node_id: nodeId };
+    if (hello.position) {
+      n.lat = hello.position.lat_deg;
+      n.lon = hello.position.lon_deg;
+    }
+    n.active_capabilities = hello.active_capabilities || [];
+    n.heading_deg = hello.heading_deg;
+    n.cal_arc = hello.calibrated_geographic_arc_deg || null;
+    n.cal_label = hello.cal_provenance
+      ? `${hello.cal_provenance}`
+      : "unknown";
+    n.peer = hello.peer || null;
+    n.controller_ready = !!hello.controller_ready;
+    // Only set "searching" if the node has not yet emitted a bearing;
+    // otherwise leave the bearing-driven state alone.
+    if (!n.state) n.state = "searching";
+    state.nodes.set(nodeId, n);
+    renderNode(n);
+    renderNodeList();
+    if (state.selectedNodeId === nodeId) renderDetail();
+  }
+
+  function showRefusal(nodeId, payload) {
+    if (state.selectedNodeId !== nodeId) {
+      // Not selected -- log to console; the next time the user opens
+      // this node's drawer they'll see the controller_ready=false note.
+      console.warn(`refusal from ${nodeId}: ${payload.reason || "(no reason)"}`);
+      return;
+    }
+    detailMsgEl.textContent = `Refused: ${payload.reason || "(no reason)"}`;
+    detailMsgEl.style.color = "var(--low)";
   }
 
   function mergeBearing(report) {
@@ -403,6 +497,7 @@
   // ---------------------------------------------------------------
 
   connectWs();
+  hydrateAllCapabilities();
   renderNodeList();
   renderDetail();
 })();

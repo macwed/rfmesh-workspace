@@ -104,20 +104,27 @@ class AllStopCommand(BaseModel):
 
 
 class NodeWsRegistry:
-    """Registry of currently-connected node WebSockets.
+    """Registry of currently-connected node WebSockets + capability snapshots.
 
     A single registry instance lives on ``app.state.node_ws_registry``,
     populated by the ``/ws/node/{node_id}`` handler on connect and
-    cleared on disconnect. Lookups by the manual-steer POST handler
-    return the connected WS or raise.
+    cleared on disconnect. ADR-022: the node sends a ``node_hello``
+    frame once per connect carrying its capability + calibrated-arc
+    snapshot; the registry caches it so ``GET /node/{id}/capabilities``
+    can serve it (the soldier UI clamps the manual-steer slider to
+    that arc, ADR-021 §"Manual-steer safety" layer 3).
 
     Thread-safety: FastAPI's event loop is single-threaded; the
-    registry's mutation points (add / remove) happen on the loop, so
-    no lock is required.
+    registry's mutation points (add / remove / snapshot) happen on the
+    loop, so no lock is required.
     """
 
     def __init__(self) -> None:
         self._by_node: dict[str, WebSocket] = {}
+        # ADR-022 capability snapshots, populated from inbound node_hello
+        # frames. Kept across reconnect-disconnect transitions intentionally:
+        # a brief network flap should not lose the slider clamp.
+        self._hello_by_node: dict[str, dict[str, Any]] = {}
 
     def register(self, node_id: str, ws: WebSocket) -> None:
         """Register a connected node WS. Overwrites any prior entry.
@@ -155,6 +162,24 @@ class NodeWsRegistry:
 
     def __len__(self) -> int:
         return len(self._by_node)
+
+    # ----- ADR-022 capability snapshots ------------------------------------
+
+    def set_hello(self, node_id: str, payload: dict[str, Any]) -> None:
+        """Cache a ``node_hello`` snapshot for this node (ADR-022)."""
+        self._hello_by_node[node_id] = payload
+
+    def get_hello(self, node_id: str) -> dict[str, Any] | None:
+        """Return the cached snapshot, or ``None`` if no hello has been seen."""
+        return self._hello_by_node.get(node_id)
+
+    def online_node_ids(self) -> set[str]:
+        """Currently-connected node_ids (subset of nodes with cached hellos)."""
+        return set(self._by_node)
+
+    def hello_snapshots(self) -> dict[str, dict[str, Any]]:
+        """Snapshot of every cached node_hello payload (read-only copy)."""
+        return dict(self._hello_by_node)
 
 
 class UiWsRegistry:
@@ -208,16 +233,18 @@ async def node_socket(ws: WebSocket, node_id: str) -> None:
     Connection lifecycle:
       1. Node opens ``ws://backend/ws/node/{node_id}``.
       2. Backend ``accept()``s + registers in ``NodeWsRegistry``.
-      3. Backend pushes ``ManualSteerCommand`` / ``AllStopCommand``
+      3. Node sends ``{"kind": "node_hello", ...}`` once -- ADR-022
+         capability handshake. Backend caches it on the registry; the
+         UI fetches via ``GET /node/{node_id}/capabilities``.
+      4. Backend pushes ``ManualSteerCommand`` / ``AllStopCommand``
          frames down the socket when the UI issues commands.
-      4. Node sends a heartbeat frame (any non-empty JSON) periodically
-         so the backend can detect dead connections; the backend reads
-         and discards.
-      5. On disconnect (network flap, node shutdown) the handler
-         unregisters and exits.
-
-    Frame format: JSON over text-frames. Binary frames are reserved for
-    a future msgpack envelope (mirrors ``rfmesh-node`` ``WebSocketSubscriber``).
+      5. Node optionally sends ``{"kind": "command_refused", ...}`` /
+         future ack frames; backend fans them out to the UI via
+         ``push_to_ui_subscribers`` so a red toast appears on
+         ``link.html`` when a steer is refused (B3).
+      6. On disconnect the handler unregisters and exits. The cached
+         hello snapshot persists across the disconnect so a brief
+         flap does not drop the slider clamp.
     """
     app = ws.app
     registry: NodeWsRegistry = app.state.node_ws_registry
@@ -229,14 +256,42 @@ async def node_socket(ws: WebSocket, node_id: str) -> None:
         len(registry),
     )
     try:
-        # Drain client-side messages; we don't act on them today but
-        # they keep the connection alive and let the node send
-        # heartbeats / ack frames for future use.
         while True:
             msg = await ws.receive()
             if msg.get("type") == "websocket.disconnect":
                 break
-            # Future: dispatch ack frames to a per-command outstanding map.
+            text = msg.get("text")
+            if not text:
+                continue
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError:
+                _LOG.warning("ws/node: %s sent non-JSON frame; dropping", node_id)
+                continue
+            if not isinstance(payload, dict):
+                continue
+            kind = payload.get("kind")
+            if kind == "node_hello":
+                registry.set_hello(node_id, payload)
+                _LOG.info(
+                    "ws/node: %s hello received (caps=%s arc=%s)",
+                    node_id,
+                    payload.get("active_capabilities"),
+                    payload.get("calibrated_geographic_arc_deg"),
+                )
+                # Fan a "node_hello" event to the UI so a freshly-opened
+                # link.html that loaded before this node connected can
+                # pick the snapshot up without polling.
+                await push_to_ui_subscribers(
+                    app, {"kind": "node_hello", "node_id": node_id, "data": payload}
+                )
+            elif kind == "command_refused":
+                # Refusal from the node (ADR-022 stub handler) -- forward
+                # to the UI so link.html can render the red toast (B3).
+                await push_to_ui_subscribers(
+                    app, {"kind": "command_refused", "node_id": node_id, "data": payload}
+                )
+            # Other frames (future ack / status / heartbeat) ignored for now.
     except WebSocketDisconnect:
         pass
     finally:
@@ -325,6 +380,41 @@ async def post_command(
             detail=f"node {node_id!r}: WS send failed ({exc!r})",
         ) from exc
     return {"delivered_to": node_id, "kind": command.kind}
+
+
+@router.get("/node/{node_id}/capabilities")
+async def get_node_capabilities(node_id: str, request: Request) -> dict[str, Any]:
+    """Return the cached ``node_hello`` snapshot for one node (ADR-022).
+
+    The soldier UI reads this when a node is selected so the
+    manual-steer slider can clamp to the node's calibrated arc. 404 if
+    the node has never sent a hello (e.g. not yet connected, or running
+    an older build without the comms-mode wiring).
+    """
+    registry: NodeWsRegistry = request.app.state.node_ws_registry
+    hello = registry.get_hello(node_id)
+    if hello is None:
+        msg = (
+            f"node {node_id!r}: no capability snapshot cached. The node has "
+            "either never connected or is running a build that predates "
+            "ADR-022. Bring it up with command_endpoint.enabled=true."
+        )
+        raise HTTPException(status_code=404, detail=msg)
+    online = node_id in registry.online_node_ids()
+    return {"node_id": node_id, "online": online, "hello": hello}
+
+
+@router.get("/nodes/capabilities")
+async def list_node_capabilities(request: Request) -> dict[str, Any]:
+    """List every cached node snapshot (ADR-022). Used by link.html for the
+    initial node list when the page loads before any /bearings push arrives."""
+    registry: NodeWsRegistry = request.app.state.node_ws_registry
+    online = registry.online_node_ids()
+    nodes = [
+        {"node_id": node_id, "online": node_id in online, "hello": hello}
+        for node_id, hello in registry.hello_snapshots().items()
+    ]
+    return {"nodes": nodes}
 
 
 @router.post("/command_broadcast")

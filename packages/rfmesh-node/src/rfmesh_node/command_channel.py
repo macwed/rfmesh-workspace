@@ -33,23 +33,27 @@ Out of scope for this module:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import random
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
+from typing import Any
 
 import aiohttp
 
 from .commands import AllStopCommand, ManualSteerCommand, parse_command
-
-if TYPE_CHECKING:
-    pass
 
 _LOG = logging.getLogger(__name__)
 
 CommandHandler = Callable[[ManualSteerCommand | AllStopCommand], Awaitable[None]]
 """Async callable consuming one command. Implemented by NodeController
 (or a test fake)."""
+
+HelloPayloadFn = Callable[[], dict[str, Any]]
+"""Returns the ``node_hello`` payload sent once per WS connect (ADR-022).
+
+Recomputed on every (re)connect so capability changes since the last
+session reach the backend."""
 
 # Reconnect backoff: starts at _RECONNECT_BASE_S, doubles each failure
 # (with ±25 % jitter to spread herd-reconnects), capped at _RECONNECT_MAX_S.
@@ -81,6 +85,7 @@ class CommandChannel:
         backend_ws_url: str,
         node_id: str,
         handler: CommandHandler,
+        hello_payload_fn: HelloPayloadFn | None = None,
         session: aiohttp.ClientSession | None = None,
     ) -> None:
         """Bind config + dispatch handler.
@@ -93,16 +98,21 @@ class CommandChannel:
                 Exceptions raised by the handler are logged and do NOT
                 tear down the channel — a flaky NodeController must not
                 kill the command-channel task.
+            hello_payload_fn: Optional zero-arg callable producing the
+                ``node_hello`` payload sent once per connect (ADR-022 web
+                UI capability handshake). ``None`` disables the hello
+                frame (legacy / test path).
             session: Optional aiohttp ClientSession. When None, the
-                channel owns its session (closes on shutdown). Pass a
-                shared session for tests / multi-channel setups.
+                channel owns its session (closes on shutdown).
         """
         self._url = f"{backend_ws_url.rstrip('/')}/ws/node/{node_id}"
         self._node_id = node_id
         self._handler = handler
+        self._hello_payload_fn = hello_payload_fn
         self._session = session
         self._owns_session = session is None
         self._attempt = 0
+        self._ws: aiohttp.ClientWebSocketResponse | None = None
 
     async def run(self, stopping: asyncio.Event) -> None:
         """Connect + dispatch loop. Returns when ``stopping`` is set."""
@@ -136,25 +146,56 @@ class CommandChannel:
                 await self._session.close()
 
     async def _connect_and_serve(self, stopping: asyncio.Event) -> None:
-        """Open one WS, dispatch frames until disconnect or stop."""
+        """Open one WS, send the hello frame, dispatch frames until disconnect."""
         assert self._session is not None
         async with self._session.ws_connect(self._url) as ws:
             _LOG.info("CommandChannel %s: connected to %s", self._node_id, self._url)
             self._attempt = 0  # reset backoff on a successful connect
-            while not stopping.is_set():
+            self._ws = ws
+            # ADR-022 capability handshake: send node_hello once per connect.
+            # If the call fails (network flap right after connect, ws closed
+            # by backend), log and continue; the next reconnect retries.
+            if self._hello_payload_fn is not None:
                 try:
-                    msg = await asyncio.wait_for(ws.receive(), timeout=0.5)
-                except TimeoutError:
-                    continue
-                if msg.type == aiohttp.WSMsgType.TEXT:
-                    await self._dispatch(msg.data)
-                elif msg.type in (
-                    aiohttp.WSMsgType.CLOSED,
-                    aiohttp.WSMsgType.CLOSE,
-                    aiohttp.WSMsgType.CLOSING,
-                    aiohttp.WSMsgType.ERROR,
-                ):
-                    break
+                    payload = self._hello_payload_fn()
+                    payload.setdefault("kind", "node_hello")
+                    await ws.send_str(json.dumps(payload, separators=(",", ":")))
+                except Exception:
+                    _LOG.exception("CommandChannel %s: node_hello send failed", self._node_id)
+            try:
+                while not stopping.is_set():
+                    try:
+                        msg = await asyncio.wait_for(ws.receive(), timeout=0.5)
+                    except TimeoutError:
+                        continue
+                    if msg.type == aiohttp.WSMsgType.TEXT:
+                        await self._dispatch(msg.data)
+                    elif msg.type in (
+                        aiohttp.WSMsgType.CLOSED,
+                        aiohttp.WSMsgType.CLOSE,
+                        aiohttp.WSMsgType.CLOSING,
+                        aiohttp.WSMsgType.ERROR,
+                    ):
+                        break
+            finally:
+                self._ws = None
+
+    async def send_response(self, payload: dict[str, Any]) -> bool:
+        """Send a node->backend JSON frame on the open WS.
+
+        Used by the command handler to surface refusals back to the UI
+        (B3: never silently drop). Returns True on send, False if the WS
+        is not currently connected. Does not raise on send failure.
+        """
+        ws = self._ws
+        if ws is None:
+            return False
+        try:
+            await ws.send_str(json.dumps(payload, separators=(",", ":")))
+        except Exception:
+            _LOG.exception("CommandChannel %s: send_response failed", self._node_id)
+            return False
+        return True
 
     async def _dispatch(self, frame: str) -> None:
         """Parse one frame; invoke handler. Bad frames logged + dropped."""
@@ -186,4 +227,4 @@ class CommandChannel:
         return float(max(0.1, delay + jitter))
 
 
-__all__ = ["CommandChannel", "CommandHandler"]
+__all__ = ["CommandChannel", "CommandHandler", "HelloPayloadFn"]

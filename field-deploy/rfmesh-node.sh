@@ -40,14 +40,12 @@ else
   echo "rfmesh-node: rtl_test not on PATH — run deployment/node/setup-node.sh first"; exit 1
 fi
 
-# Servo port: explicit env var beats auto-detect.
-if [[ -z "${SERVO_PORT:-}" ]]; then
-  for _p in /dev/ttyACM0 /dev/ttyACM1 /dev/ttyACM2; do
-    [[ -e "$_p" ]] && { SERVO_PORT="$_p"; break; }
-  done
+# Pre-flight servo presence check. The YAML's `servo_port:` is the
+# authoritative source; we just warn if SERVO_PORT is exported but the
+# device is absent, so the operator sees a clear systemd-journal line.
+if [[ -n "${SERVO_PORT:-}" && ! -e "$SERVO_PORT" ]]; then
+  echo "rfmesh-node: WARNING SERVO_PORT=$SERVO_PORT exported but device absent (YAML servo_port: will be used as-is)"
 fi
-[[ -n "${SERVO_PORT:-}" && -e "$SERVO_PORT" ]] \
-  || { echo "rfmesh-node: no ESP32 servo port found (set SERVO_PORT in /etc/rfmesh-node.env)"; exit 1; }
 
 # Backend reachability: warn only — node remains up and retries while running.
 _endpoint="$(grep -E '^[[:space:]]*fusion_endpoint:' "$CONFIG" 2>/dev/null | head -1 \
@@ -61,5 +59,8 @@ case "${_endpoint:-}" in
     ;;
 esac
 
-echo "rfmesh-node: starting — config=$CONFIG  servo=$SERVO_PORT"
-exec "$UV" run rfmesh-node --config "$CONFIG" --servo-port "$SERVO_PORT"
+# ADR-022: CLI shrinks to --config + --log-level. servo_port, sweep/*,
+# rendezvous/*, command_endpoint live in the YAML. Operators that need
+# to override servo_port at deploy time edit the YAML, not the CLI.
+echo "rfmesh-node: starting — config=$CONFIG"
+exec "$UV" run rfmesh-node --config "$CONFIG"
