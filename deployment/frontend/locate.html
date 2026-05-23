@@ -6,7 +6,7 @@
   <title>both3 — Locate emitter</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <link rel="stylesheet" href="style.css?v=20260523b" />
+  <link rel="stylesheet" href="style.css?v=20260523j" />
 </head>
 <body data-page="locate">
   <div id="app">
@@ -15,18 +15,26 @@
         <span class="dot"></span>
         <div>
           <h1>both3</h1>
-          <p class="sub">Locate emitter — <span id="status-line">connecting…</span></p>
+          <p class="sub">Locate emitter</p>
         </div>
       </header>
       <nav class="page-nav">
         <a href="index.html" class="home">⌂</a>
-        <a href="locate.html" class="on">Locate</a>
+        <a href="link.html">Connect nodes</a>
+        <a href="locate.html" class="on">Locate jammer</a>
         <a href="jam.html">Avoid jam</a>
         <a href="hide.html">Hide</a>
         <a href="emit.html">Site emitter</a>
         <a href="ideal.html">Ideal site</a>
       </nav>
 
+      <section id="sidebar-legend" class="map-legend sidebar-legend" aria-label="Map legend"></section>
+
+      <div class="settings-toggle-wrap">
+        <button id="settings-toggle" class="ghost" type="button" aria-controls="settings-drawer" aria-expanded="false">&#9881; Settings</button>
+      </div>
+
+      <div id="settings-drawer" hidden>
       <section class="panel" id="filters">
         <h2>Filters</h2>
         <div class="row" id="conf-filter">
@@ -77,6 +85,7 @@
           </div>
         </div>
       </section>
+      </div>
     </aside>
 
     <main id="map"></main>
@@ -86,6 +95,6 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="app.js?v=20260523b"></script>
+  <script src="app.js?v=20260523i"></script>
 </body>
 </html>

@@ -5,7 +5,8 @@
 // Setup flow is explicit numbered steps so the operator knows what to place.
 
 const PAGES = [
-  { key: "locate", href: "locate.html", label: "Locate" },
+  { key: "link", href: "link.html", label: "Connect nodes" },
+  { key: "locate", href: "locate.html", label: "Locate jammer" },
   { key: "jam", href: "jam.html", label: "Avoid jam" },
   { key: "hide", href: "hide.html", label: "Hide" },
   { key: "emit", href: "emit.html", label: "Site emitter" },
@@ -66,7 +67,7 @@ function buildSidebar(S) {
   document.getElementById("sidebar").innerHTML = `
     <header id="brand">
       <span class="dot"></span>
-      <div><h1>${cfg.title}</h1><p class="sub">${cfg.subtitle}</p></div>
+      <div><h1>both3</h1><p class="sub">${cfg.title}</p></div>
     </header>
     ${navHtml(cfg.key)}
     <section class="panel step"><div class="step-n">1</div><div class="step-b">

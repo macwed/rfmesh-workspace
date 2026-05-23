@@ -2,7 +2,7 @@
 
 // ---- config ----
 const POLL_MS = 2500;
-const COLORS = { high: "#2ecc71", medium: "#f1c40f", low: "#e74c3c" };
+const COLORS = { high: "#e74c3c", medium: "#f1c40f", low: "#2ecc71" };
 const STALE_COLOR = "#7a8493";
 const OUTLIER_SIGMA = 3.0;
 const DEFAULT_VIEW = [50.356, 5.0];
@@ -46,6 +46,48 @@ L.control.layers(
   { "Hillshade relief": hillshade },
   { position: "topleft", collapsed: true },
 ).addTo(map);
+
+function addLocateControl(targetMap) {
+  let marker = null;
+  const control = L.control({ position: "bottomleft" });
+  control.onAdd = () => {
+    const wrap = L.DomUtil.create("div", "map-locate");
+    const button = L.DomUtil.create("button", "", wrap);
+    button.type = "button";
+    button.textContent = "Locate me";
+    button.setAttribute("aria-label", "Locate me");
+    L.DomEvent.disableClickPropagation(wrap);
+    L.DomEvent.disableScrollPropagation(wrap);
+    L.DomEvent.on(button, "click", () => {
+      if (!navigator.geolocation) {
+        toast("Location is unavailable in this browser.", "err");
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => {
+          const position = [coords.latitude, coords.longitude];
+          targetMap.setView(position, Math.max(targetMap.getZoom(), 16));
+          if (marker) {
+            marker.setLatLng(position);
+            return;
+          }
+          marker = L.circleMarker(position, {
+            radius: 6,
+            color: "#d6dde6",
+            weight: 2,
+            fillColor: "#4aa8ff",
+            fillOpacity: 1,
+          }).bindTooltip("You are here").addTo(targetMap);
+        },
+        () => toast("Unable to access your location.", "err"),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 },
+      );
+    });
+    return wrap;
+  };
+  control.addTo(targetMap);
+}
+addLocateControl(map);
 
 // Live RF-status badge over the map (computing / terrain-effect strength / no-data).
 const rfStatusEl = document.createElement("div");
@@ -188,10 +230,10 @@ function legendRowHtml(r) {
     </div></details>`;
 }
 
-const legend = L.control({ position: "bottomright" });
-legend.onAdd = () => {
-  const d = L.DomUtil.create("div", "map-legend");
-  const shellOpen = localStorage.getItem("legend.open") !== "0" ? " open" : "";
+const legend = document.getElementById("sidebar-legend");
+{
+  const d = legend;
+  const shellOpen = " open";
   const seen = localStorage.getItem("legend.seen") === "1";
   d.innerHTML = `<details class="lg-shell"${shellOpen}>
     <summary class="lg-chip">ⓘ Legend — how to read this${seen ? "" : '<span class="lg-new">new</span>'}</summary>
@@ -200,12 +242,7 @@ legend.onAdd = () => {
       ${LEGEND_ROWS.map(legendRowHtml).join("")}
       <div class="lg-note">soft cue · not a target point</div>
     </div></details>`;
-  // Don't let clicks/scroll inside the legend pan or zoom the map.
-  L.DomEvent.disableClickPropagation(d);
-  L.DomEvent.disableScrollPropagation(d);
-  // Persist open/closed state.
-  d.querySelector(".lg-shell").addEventListener("toggle", (e) => {
-    localStorage.setItem("legend.open", e.target.open ? "1" : "0");
+  d.querySelector(".lg-shell").addEventListener("toggle", () => {
     localStorage.setItem("legend.seen", "1");
     const n = d.querySelector(".lg-new"); if (n) n.remove();
   });
@@ -213,9 +250,7 @@ legend.onAdd = () => {
     row.addEventListener("toggle", (e) =>
       localStorage.setItem("legend.row." + e.target.dataset.k, e.target.open ? "1" : "0"));
   }
-  return d;
-};
-legend.addTo(map);
+}
 
 function centerCallout(props) {
   const inv = state.investigation && state.investigation.fixId === props.fix_id ? state.investigation.data : null;
@@ -275,6 +310,13 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") _hideTip()
 
 // ---- helpers ----
 const $ = (sel) => document.querySelector(sel);
+const settingsToggle = $("#settings-toggle");
+settingsToggle.addEventListener("click", () => {
+  const settings = $("#settings-drawer");
+  const open = settings.hidden;
+  settings.hidden = !open;
+  settingsToggle.setAttribute("aria-expanded", String(open));
+});
 const ringToLatLngs = (lonlatRing) => lonlatRing.map(([lon, lat]) => [lat, lon]);
 
 function fmtAge(props) {
@@ -286,8 +328,7 @@ function fmtAge(props) {
   return `${Math.round(s / 3600)}h`;
 }
 
-// The emitter is RED TEAM — always red (stale = grey). Confidence is conveyed by
-// ellipse size + the HIGH/MED/LOW label, not hue (user: red=threat, green=friendly).
+// The emitter center marker is RED TEAM - always red (stale = grey).
 const THREAT = "#ff4d4f";
 function confColor(props) {
   if (props.stale) return STALE_COLOR;
@@ -296,6 +337,7 @@ function confColor(props) {
 function confidenceColor(props) {
   if (props.stale) return STALE_COLOR;
   const level = String(props.confidence_level).toLowerCase();
+  // Threat probability reads hotter as confidence increases.
   return COLORS[level === "med" ? "medium" : level] || COLORS.low;
 }
 // Confidence → fill opacity (stronger = more certain) so the red emitter still
@@ -888,10 +930,7 @@ async function pollFixes() {
       }
     }
     refreshClassFilter(classes);
-    $("#status-line").textContent = "live · " + state.fixes.size + " fixes";
-  } catch (e) {
-    $("#status-line").textContent = "backend unreachable";
-  }
+  } catch (e) { /* Retain the last visible map state during a failed poll. */ }
 }
 
 async function pollBearings() {

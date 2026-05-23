@@ -10,6 +10,47 @@ const RFCore = (() => {
   const DEFAULT_VIEW = [50.356, 5.0];
   const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
+  function addLocateControl(map) {
+    let marker = null;
+    const control = L.control({ position: "bottomleft" });
+    control.onAdd = () => {
+      const wrap = L.DomUtil.create("div", "map-locate");
+      const button = L.DomUtil.create("button", "", wrap);
+      button.type = "button";
+      button.textContent = "Locate me";
+      button.setAttribute("aria-label", "Locate me");
+      L.DomEvent.disableClickPropagation(wrap);
+      L.DomEvent.disableScrollPropagation(wrap);
+      L.DomEvent.on(button, "click", () => {
+        if (!navigator.geolocation) {
+          toast("Location is unavailable in this browser.", "err");
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          ({ coords }) => {
+            const position = [coords.latitude, coords.longitude];
+            map.setView(position, Math.max(map.getZoom(), 16));
+            if (marker) {
+              marker.setLatLng(position);
+              return;
+            }
+            marker = L.circleMarker(position, {
+              radius: 6,
+              color: "#d6dde6",
+              weight: 2,
+              fillColor: "#4aa8ff",
+              fillOpacity: 1,
+            }).bindTooltip("You are here").addTo(map);
+          },
+          () => toast("Unable to access your location.", "err"),
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 },
+        );
+      });
+      return wrap;
+    };
+    control.addTo(map);
+  }
+
   function makeMap(elId) {
     const map = L.map(elId, { zoomControl: true }).setView(DEFAULT_VIEW, 13);
     const street = L.tileLayer(TILE_URL, { maxZoom: 19, attribution: "© OpenStreetMap" });
@@ -22,6 +63,7 @@ const RFCore = (() => {
     street.addTo(map); hill.addTo(map);
     L.control.layers({ "Street": street, "Terrain": terrain }, { "Hillshade": hill },
       { position: "topleft", collapsed: true }).addTo(map);
+    addLocateControl(map);
     return map;
   }
 

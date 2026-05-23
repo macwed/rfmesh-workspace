@@ -51,9 +51,9 @@ body {
 
 .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 3px 8px; border-radius: 12px;
   border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; }
-.chip.high { color: var(--high); }
+.chip.high { color: var(--low); }
 .chip.medium { color: var(--medium); }
-.chip.low { color: var(--low); }
+.chip.low { color: var(--high); }
 
 #fix-list { list-style: none; margin: 0; padding: 0; }
 .fix-item { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
@@ -72,6 +72,11 @@ body {
 
 button { font: inherit; cursor: pointer; border: none; border-radius: 6px; padding: 8px 12px; background: var(--accent); color: #04121f; font-weight: 600; }
 button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+.settings-toggle-wrap { padding: 10px 16px; border-bottom: 1px solid var(--line); }
+#settings-toggle { width: 100%; text-align: left; }
+#settings-toggle[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
+.sidebar-legend { margin: 10px 16px; max-width: none; box-shadow: none; }
+.sidebar-legend .lg-body { max-height: none; }
 #send-btn { width: 100%; margin-top: 10px; }
 #send-btn:disabled { opacity: .5; cursor: not-allowed; }
 
@@ -88,6 +93,22 @@ button.ghost { background: transparent; color: var(--text); border: 1px solid va
 .toast { padding: 10px 14px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); max-width: 320px; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.4); }
 .toast.ok { border-left: 3px solid var(--high); }
 .toast.err { border-left: 3px solid var(--low); }
+
+.map-locate button {
+  height: 34px; padding: 0 11px; background: rgba(14,17,22,.92); color: var(--text);
+  border: 1px solid var(--line); box-shadow: 0 4px 14px rgba(0,0,0,.4);
+}
+.map-locate button:hover { background: var(--panel-2); border-color: var(--accent); color: var(--accent); }
+
+/* Preserve the layers button while its menu opens immediately underneath. */
+.leaflet-control-layers { position: relative; }
+.leaflet-control-layers-expanded { padding: 0; }
+.leaflet-control-layers-expanded .leaflet-control-layers-toggle { display: block; }
+.leaflet-control-layers-expanded .leaflet-control-layers-list {
+  position: absolute; top: 100%; left: 0; white-space: nowrap;
+  padding: 6px 10px 6px 6px; border-radius: 5px; background: #fff;
+  box-shadow: 0 1px 5px rgba(0,0,0,.65);
+}
 
 .legend { font-size: 11px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
 .swatch-cyan { width: 12px; height: 12px; border-radius: 3px; background: #00e5ff; opacity: .5; display: inline-block; }
@@ -196,8 +217,8 @@ button.ghost { background: transparent; color: var(--text); border: 1px solid va
 /* dim the existing heat underneath while an enhance compute is in flight */
 .posterior-dim { opacity: .35; transition: opacity .2s; }
 
-/* hover inspector — pinned bottom-left, opposite the bottom-right legend */
-#rf-inspector { position: absolute; left: 10px; bottom: 48px; z-index: 1000;
+/* hover inspector - pinned above the lower-left map controls */
+#rf-inspector { position: absolute; left: 10px; bottom: 84px; z-index: 1000;
   background: rgba(14,17,22,.92); border: 1px solid var(--line); border-radius: 8px;
   padding: 8px 10px; font-size: 11px; color: var(--text); line-height: 1.55;
   box-shadow: 0 6px 20px rgba(0,0,0,.45); max-width: 320px; max-height: 60vh; overflow-y: auto;
@@ -230,12 +251,12 @@ button.ghost { background: transparent; color: var(--text); border: 1px solid va
   color: var(--muted); font-style: italic; }
 
 /* persistent "how to read these numbers" chip + explainer card */
-#rf-help-chip { position: absolute; left: 10px; bottom: 18px; z-index: 1001;
+#rf-help-chip { position: absolute; left: 10px; bottom: 54px; z-index: 1001;
   background: rgba(14,17,22,.92); border: 1px solid var(--accent); color: var(--accent);
   border-radius: 14px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
   box-shadow: 0 4px 14px rgba(0,0,0,.4); }
 #rf-help-chip:hover { background: var(--accent); color: #04121f; }
-#rf-help-card { position: absolute; left: 10px; bottom: 50px; z-index: 1002; width: 340px;
+#rf-help-card { position: absolute; left: 10px; bottom: 86px; z-index: 1002; width: 340px;
   max-width: calc(100vw - 24px); max-height: 72vh; overflow-y: auto;
   background: rgba(12,15,20,.97); border: 1px solid var(--accent); border-radius: 10px;
   box-shadow: 0 10px 34px rgba(0,0,0,.6); font-size: 12px; line-height: 1.5; color: var(--text); }

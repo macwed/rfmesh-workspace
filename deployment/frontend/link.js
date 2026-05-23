@@ -291,7 +291,7 @@
 
   const statusLineEl = document.getElementById("status-line");
   function setStatus(s) {
-    statusLineEl.textContent = s;
+    if (statusLineEl) statusLineEl.textContent = s;
   }
 
   function connectWs() {
