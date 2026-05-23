@@ -1,4 +1,4 @@
-# ADR-015 — Frequency as a dimension: per-band reports + band-aware fusion association
+# ADR-020 — Frequency as a dimension: per-band reports + band-aware fusion association
 
 **Status:** PROPOSED (2026-05-22)
 **Date:** 2026-05-22

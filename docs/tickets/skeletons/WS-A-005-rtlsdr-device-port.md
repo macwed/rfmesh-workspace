@@ -1,3 +1,5 @@
+**Status: CLOSED in a4576d3**
+
 # TICKET WS-A-005: Port `RTLSDRDevice` to the `Receiver` Protocol
 
 ## Goal (one sentence)

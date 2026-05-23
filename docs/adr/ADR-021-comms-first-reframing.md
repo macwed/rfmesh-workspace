@@ -1,4 +1,4 @@
-# ADR-018 — Directional comms primary; geolocation secondary
+# ADR-021 — Directional comms primary; geolocation secondary
 
 **Status:** PROPOSED (2026-05-23)
 **Date:** 2026-05-23 (PROPOSED)
