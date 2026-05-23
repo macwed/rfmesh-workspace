@@ -1,18 +1,26 @@
-# Deprecated
+# docs/deprecated/
 
-Files here are **no longer current**. They contain stale, superseded, or retired content. Do not consult them for active decisions.
+Historical or pre-pivot documentation kept for institutional memory.
+**Not binding.** Do not rely on for current decisions.
 
-For historical context that remains archaeologically useful (but is also not current), see `docs/archive/`.
+What lives here:
 
-## Contents
-
-| File | Why deprecated |
-|---|---|
-| `NEXT_SESSION.md` | Stale session-handoff from 2026-05-20 evening. The file itself stated "rewrite or remove at session boundaries." Superseded by the 2026-05-23 session context. |
-| `bootstrap-A.md` | Onboarding for Workstream A's mid-level Opus agent — a model retired 2026-05-17 per `WORKSTREAMS.md §0`. Current model: lead-Opus + council subagents. |
-| `bootstrap-B.md` | Same reason as `bootstrap-A.md`. |
-| `bootstrap-CD.md` | Same reason as `bootstrap-A.md`. |
-
-## Promotion rules
-
-Nothing here should be acted upon directly. If content seems relevant to a current decision, check the live binding docs first (`ARCHITECTURE.md`, `AGENTS.md`, `INTERFACES.md`, `WORKSTREAMS.md`, `INHERITED_CONTEXT.md`) — the operative version of any decision lives there.
+- `HANDOFF_TO_CLAUDE_CODE_LEAD.md` — pre-lead-Opus handoff brief (retired
+  per `AGENTS.md` §3 history note).
+- `SALVAGE_AUDIT.md` — file-by-file disposition of `macwed/rf-mesh` into
+  this workspace. Salvage shipped; reference only.
+- `WORKSTREAMS.md` — workstream ownership pre-lead-Opus model (retired
+  per `AGENTS.md` §0 amendment).
+- `INHERITED_CONTEXT.md` — full prior-project knowledge file; binding
+  parts folded into `ARCHITECTURE.md` Appendix B.
+- `SPRINT_LOG.md`, `plan-proposition-18-05-2026.md`, `WORK-SPLIT.md`,
+  `BACKLOG.md`, `ONBOARDING.md` — sprint-era artifacts.
+- `tickets/` — all tickets superseded by shipped code (ADRs carry the
+  durable record).
+- `demo/` — pre-pivot pitch deck + scripts. To be rewritten per ADR-021
+  (directional-comms primary).
+- `hardware/` — Phase C bench tutorials, bench checklist, 3-node
+  bring-up. All to be rewritten for the comms-first product.
+- `phase-c-report/` — Phase C bench session findings (the validation
+  shipped; this is the historical capture).
+- `design/ops-architecture.md` — folded into root `ARCHITECTURE.md`.

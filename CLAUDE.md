@@ -14,14 +14,13 @@ Quick reference for Claude Code working on rfmesh. The full agent rules are in @
 4. Council review produces a split verdict with no clear resolution
 
 Everything else: resolve internally. Do not ask for confirmation on:
-- file reads, writes, test runs, ruff/mypy, git operations within 
-  a workstream branch
+- file reads, writes, test runs, ruff/mypy, git operations on `main`
 - dependency of uv packages (add with rationale in commit message)
 - spawning subagents for parallel work
-- sequencing decisions within a workstream
+- sequencing decisions within a feature
 
-### Council review protocol (sequential, before any PR merge to main)
-When a workstream ticket is ready to merge, run sequentially:
+### Council review protocol (sequential, before any merge to main)
+When a substantive change is ready to merge, run sequentially:
 
 1. **Architect** (`--agents architect`) 
    — checks: contracts untouched? invariants B1-B7 held? ADRs needed?
@@ -50,9 +49,13 @@ When a workstream ticket is ready to merge, run sequentially:
 Only after 4x APPROVE (or APPROVE+NOTE/RECOMMENDATION): merge to main.
 
 ### Parallel work policy
-Workstream subagents (A, B, C+D) run in parallel wherever tickets 
-are independent. Council review is sequential and gates merges — 
-it does not block parallel development in-flight.
+Spawn builder / investigator subagents in parallel wherever the work
+is independent. Council review (above) is sequential and gates merges
+— it does not block parallel development in-flight.
+
+EW-specialist (`--agents ew-specialist`) is available for pitch /
+tactical / tradecraft calls; consult when the question is about how
+the product reads to an RF/EW jury rather than about code.
 
 ## Commands
 
@@ -73,7 +76,17 @@ Paste `just verify` output into the conversation when declaring a ticket done.
 
 ## Architecture (one-paragraph orientation)
 
-rfmesh is a cooperative bearing mesh for RF emitter geolocation. Distributed nodes compute bearings locally, ship them via contracts, fusion server cross-fixes positions. Star dependency graph: every workstream imports only from `rfmesh-contracts`. See @ARCHITECTURE.md §1 for binding architectural invariants and @INTERFACES.md for the semantic dictionary of contracts.
+rfmesh is a **€250 directional radio that points itself, survives
+jamming by pointing away from it, and triangulates the jammer as a
+free side-effect** (ADR-021 reframing, 2026-05-23). Each node carries
+an SDR + directional Yagi on a 1-axis pan servo; two nodes
+auto-acquire each other (GPS-prior pointing + scan-and-stare per
+ADR-019) for high-gain directional comms. The geolocation pipeline
+(L1 amplitude DF + Stansfield/MLE fusion + ATAK markers) is preserved
+as a side-effect feature. Star dependency graph: every package imports
+only from `rfmesh-contracts`. See @ARCHITECTURE.md §1 for binding
+architectural invariants, @INTERFACES.md for contract semantics,
+@docs/DOC_INDEX.md for selective deep-dives.
 
 ## Binding rules
 
@@ -88,13 +101,24 @@ Escalation conditions and the SCRATCHPAD protocol live in @AGENTS.md §6. When i
 - Python 3.12, uv workspaces, ruff line-length 100, mypy strict
 - `extra="forbid"` on every Pydantic model
 - `tests/hardware/` and `@pytest.mark.hardware` are opt-in (never CI)
-- Each ticket runs in its own worktree under `worktree/ws-<x>/<ticket>/`
+- Lead-Opus operates on `main` directly; subagents may run in
+  isolated worktrees the runtime auto-creates under `.claude/worktrees/`.
 
 ## Key documents (read on cold start, in order)
 
-1. @ARCHITECTURE.md — the *why*
-2. @AGENTS.md — agent behaviour (binding)
-3. @INTERFACES.md — contract semantics
-4. @INHERITED_CONTEXT.md — prior project lessons
-5. @WORKSTREAMS.md — ownership
-6. @SALVAGE_AUDIT.md — disposition of macwed/rf-mesh
+1. @ARCHITECTURE.md — the *why* + Appendix A (interface conventions) +
+   Appendix B (hardware quirks + regression anchors)
+2. @AGENTS.md — agent behaviour (binding); Seven Binding Invariants
+3. @INTERFACES.md — contract semantics (full per-field dictionary)
+4. @docs/DOC_INDEX.md — selective-read pointer index (jump to a
+   binding section without scanning the whole tree)
+5. @docs/adr/ — append-only architectural decisions; binding ones are
+   ADR-021 (comms-first reframing), ADR-019 (rendezvous), ADR-018
+   (operator-authored CoT), ADR-015 (firmware target C6), ADR-014
+   (Mast C empirical anchor), ADR-008 (L2 enum split)
+
+Retired but reference-readable under `docs/deprecated/`:
+`WORKSTREAMS.md`, `SALVAGE_AUDIT.md`, full `INHERITED_CONTEXT.md`,
+sprint logs, ticket history. Their binding content (Seven Invariants,
+hardware quirks, regression anchors) is already folded into
+`AGENTS.md` §1 and `ARCHITECTURE.md` Appendix B.

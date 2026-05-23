@@ -1,7 +1,7 @@
 # rfmesh — The Eight Architectural Advantages
 
-**Status:** binding pitch content. Edits by lead via ADR only.
-**Date:** 2026-05-18 (extracted from a prior handoff doc on the same date; content unchanged).
+**Status:** binding pitch content (B7). Edits by lead via ADR only.
+**Date:** 2026-05-23 (advantage order reframed per ADR-021 directional-comms pivot; content unchanged, only the priority order moves).
 **Audience:** every collaborator, every council subagent, every jury-facing surface (slides, dashboard captions, CoT remarks).
 
 This file is the canonical statement of what the rfmesh project competes on. Every demo claim, every slide caption, every jury Q&A answer cross-references one of the eight advantages here. If a proposed change would remove or weaken one of them, escalate to the lead before proceeding (per AGENTS.md §1 Invariant B7).
@@ -10,15 +10,17 @@ This file is the canonical statement of what the rfmesh project competes on. Eve
 
 ## §0 What rfmesh is competing on
 
-rfmesh is a **cooperative bearing mesh for RF emitter geolocation**, targeting the BoTH3 Challenge 2 (Counter-Jamming, organised by the Belgian Ministry of Defence at the Commando Training Centre in Marche-les-Dames). The challenge asks competitors to triangulate adversarial RF emitters (jammers, FPV control links, IED command-detonation phones) to within **20 m at 2–5 km range**, on a **€250 hardware budget per node**, in an **EW-contested environment where GNSS is jammed first**.
+rfmesh is a **€250 directional radio that points itself, survives jamming by pointing away from it, and triangulates the jammer as a free side-effect** (ADR-021 reframing, 2026-05-23). Target event: the BoTH3 Challenge 2 (Counter-Jamming, Belgian MoD, Commando Training Centre Marche-les-Dames). The brief asks for counter-jamming solutions; the technically defensible niche of the same hardware (Yagi + servo + RTL-SDR + ESP32) is **side-lobe rejection of co-channel jammers + GPS-prior auto-acquisition of peer links** — directional comms first. The triangulation pipeline (L1 amplitude DF + Stansfield/MLE fusion + ATAK + confidence ellipses) is preserved as a side-effect feature; the cross-fix story is honest, demonstrable, and still on the dashboard.
 
-The jury includes first-class RF/EW specialists of the Belgian Defence. They will technically scrutinise every number on every slide. They will ask questions calibrated to distinguish *"this person built and understands a working DF system"* from *"this person ran an AI and showed up at our event"*. The project's success is measured by their judgement.
+The jury includes first-class RF/EW specialists of the Belgian Defence. They will technically scrutinise every number on every slide. They will ask questions calibrated to distinguish *"this person built and understands a working directional radio + DF system"* from *"this person ran an AI and showed up at our event"*. The project's success is measured by their judgement.
 
 ---
 
-## §1 The winning edge — eight architectural advantages
+## §1 The winning edge — eight architectural advantages (order per ADR-021)
 
 We are not trying to out-engineer Bukovel-AD (classified Ukrainian system) or RfPatrol Mk2 (commercial, €5k+, closed threat library). We are trying to demonstrate, on €250-per-node hardware, **a small number of architectural advantages that those systems either do not have or do not ship**. Each one is grounded in a real technical decision the architecture already encodes.
+
+The priority order (which slides lead the pitch) follows ADR-021: **#4 null-steering is the headline**, followed by GNSS-denied + honesty + budget; then simulator + heterogeneous + density + threat library as supporting evidence. Advantage *numbering* is preserved (everything in the codebase + ADRs cross-references the original numbers); only the pitch order moves.
 
 ### Advantage #1 — Scaling through deployment density, not per-sensor magic
 
@@ -56,6 +58,41 @@ Three RTL-SDR V4 (€25 each) + three ATK-10 Yagi antennas (€20 each) + three 
 
 ---
 
+### Advantage #9 — Self-locating directional mesh, no infrastructure (additive per ADR-021)
+
+Each pair of nodes that wants to talk computes the great-circle bearing
+to each other from surveyed positions, points the Yagis there directly
+(GPS-prior pointing per ADR-019), and refines via a small scan-and-stare
+mini-sweep. No central coordinator, no infrastructure, no shared clock
+beyond NTP. The link comes up in ~9 seconds typical / ~41 seconds worst
+case (escalation ladder ±20° → ±45° → ±90°). Add a node mid-operation,
+edit one YAML entry on its peer, and the mesh self-extends. This is
+what "troop-deployable" actually means in software terms.
+
+---
+
+## §1.5 Pitch order (ADR-021)
+
+The deck leads with **#4 null-steering** as the headline counter-jamming
+sentence: *"Under barrage jamming, omni radios die; rotating the Yagi
+90° off the jammer keeps the link at +12 dB margin while logging the
+jammer's bearing for kinetic prosecution."* Then in order:
+
+1. **#4 Null-steering** — headline (counter-jamming brief, dual-use)
+2. **#2 GNSS-denied** — survives EW's first move
+3. **#6 Honesty payload** — reframed for link health (margin / age / state)
+4. **#8 €250 per node** — vs €5k commercial directional radios
+5. **#9 Self-locating mesh** — troop-deployable, additive per ADR-021
+6. **#7 Simulator-first** — the demo has a working fallback
+7. **#3 Heterogeneous mesh** — side-effect-feature evidence (triangulation)
+8. **#1 Scaling via density** — triangulation slide (side-effect)
+9. **#5 Open threat library** — roadmap section, not a flagship slide
+
+Advantage numbering in cross-references (commit messages, ADRs, code
+comments) stays the same as §1 above — only the **pitch order** moves.
+
+---
+
 ## §2 How the advantages compound
 
 These eight advantages compound. The demo shows them as a coherent story: **cheap nodes, smart software, honest output, EW-resilient, operator-extensible, real ATAK integration**. That is the pitch.
@@ -79,7 +116,8 @@ The demo script (`docs/demo/script.md`) maps each advantage onto a specific dash
 
 Any subagent or council reviewer who proposes a change that **removes** one of these advantages must surface it as an ADR proposal first — per AGENTS.md §1 Invariant B7. **Tightening or extending an advantage is fine.** The list is the floor of what the demo guarantees, not the ceiling.
 
-If a contributor (Maciej, friend, lead-Opus, council subagent) believes a ninth advantage exists and should be added, that is an ADR proposal too — additive changes still need a sign-off to keep the eight-item pitch coherent.
+A ninth advantage (#9 — self-locating directional mesh) was added
+additively per ADR-021; the same rule binds future additions.
 
 ## §4 What to cross-reference
 
@@ -89,4 +127,5 @@ When a doc or ticket needs to anchor a claim to one of these advantages, cite:
 docs/ADVANTAGES.md §1 Advantage #N
 ```
 
-Not `HANDOFF_TO_CLAUDE_CODE_LEAD.md §0` (the prior handoff doc is operator-local on Maciej's bench and not committed to the repo — see AGENTS.md §1 history note).
+`docs/deprecated/` carries the retired pre-pivot pitch materials; do
+not cite them in new work.

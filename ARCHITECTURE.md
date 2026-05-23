@@ -1,34 +1,40 @@
 # rfmesh — Architecture
 
 **Status:** binding. Edits only by the lead architect, via an ADR (`docs/adr/`).
-**Audience:** everyone working on rfmesh — the lead, the mid-level Opus agents
-who own workstreams, the Claude Code agents who write tickets' worth of code,
-and Maciej as project owner.
-**Date:** 2026-05-14 (last amended 2026-05-17 for L2 enum split per ADR-008).
+**Audience:** everyone working on rfmesh — the lead, council subagents, Claude
+Code workers, and Maciej as project owner.
+**Date:** 2026-05-14 (last amended 2026-05-23 for ADR-021 directional-comms
+reframing; the geolocation framing remains as a side-effect feature).
 **Mirrors contracts at:** `SCHEMA_VERSION = "1.1.0"`.
 
 This document is the *why*. It explains the small number of decisions that
-every workstream depends on, and the reasoning behind each. The *what* of any
+every layer depends on, and the reasoning behind each. The *what* of any
 given component lives in its package; the *interface contracts* it must meet
-live in `INTERFACES.md`; the *who builds it* lives in `WORKSTREAMS.md`. Start
-here.
+live in `INTERFACES.md`. Start here.
 
 The document is short on purpose. If something is not stated as a binding
-invariant, it is a workstream's freedom to decide, and disagreements are
+invariant, it is a layer's freedom to decide, and disagreements are
 resolved by ADR — not by editing this file in a rush.
 
 ---
 
 ## §0 What rfmesh is
 
-rfmesh is a **cooperative bearing mesh for RF emitter geolocation**, targeting
-BoTH3 Counter-Jamming Challenge 2 (triangulate jammer antennas / signal
-sources to within 20 m at 2–5 km, to enable hard-kill cueing). The system is
-a small number of distributed nodes, each with an SDR and a directional
-antenna or coherent array, that compute *bearings* locally and ship them to a
-fusion server which cross-fixes them into emitter positions with honest
-uncertainty, surfaced in ATAK as hostile-emitter markers with confidence
-ellipses.
+rfmesh is a **€250 directional radio that points itself, survives jamming by
+pointing away from it, and triangulates the jammer as a free side-effect**
+(per ADR-021, 2026-05-23). Each node carries an SDR and a directional Yagi
+on a 1-axis pan servo. Two nodes that want to talk auto-acquire each other
+(GPS-prior pointing + scan-and-stare refinement, ADR-019) and lock a
+directional inter-node link with side-lobe rejection of off-axis co-channel
+jammers as the binding tactical advantage. The geolocation pipeline (L1
+amplitude DF + Stansfield/MLE fusion + ATAK markers + confidence ellipses)
+is preserved as a **side-effect feature**: every peer-acquisition sweep
+produces RSSI-vs-bearing data that drops bearings on any unknown emitter in
+the band, and with 2+ nodes the same fusion stack draws an honest
+confidence ellipse — the same hardware, two operational effects.
+
+Targeted event: **BoTH3 Counter-Jamming Challenge 2** (Belgian MoD,
+Commando Training Centre Marche-les-Dames, 22–24 May 2026).
 
 The system is hardware-agnostic by *structure*, not by marketing: any SDR the
 on-site partner pool yields — RTL-SDR V4, HackRF One, bladeRF 2.0 micro,
@@ -38,8 +44,9 @@ integration is a configuration change, not a code change.
 
 A note on the project name: the same name `rfmesh` also identifies the prior
 codebase at `github.com/macwed/rf-mesh`, which is the parts donor (see
-`SALVAGE_AUDIT.md`). Throughout this document, "rfmesh" refers to the new
-workspace; the old repo is referred to as "the old repo" or "rf-mesh".
+`docs/deprecated/SALVAGE_AUDIT.md`). Throughout this document, "rfmesh"
+refers to the new workspace; the old repo is referred to as "the old repo"
+or "rf-mesh".
 
 ---
 
@@ -358,13 +365,168 @@ For navigation:
 
 - **`ARCHITECTURE.md`** (this file) — the *why*. Binding invariants.
 - **`INTERFACES.md`** — the *what*. Semantic dictionary of every contract type.
-- **`WORKSTREAMS.md`** — the *who*. Workstream ownership, dependencies, salvage column.
-- **`AGENTS.md`** — the *how*. Rules for AI agents: the Seven Binding Invariants, allowed commands, escalation, ticket format.
-- **`INHERITED_CONTEXT.md`** — the *what we already learned*. Knowledge from the previous project that cannot be derived from the code alone.
-- **`SALVAGE_AUDIT.md`** — file-by-file disposition of the old repo (`github.com/macwed/rf-mesh`) into the new workspace.
-- **Three workstream bootstraps** — one-page onboarding for each Opus 4.7 mid-level agent: A (SDR + simulator), B (DSP + ML), C+D (fusion + CoT + node runtime).
+- **`AGENTS.md`** — the *how*. Rules for AI agents: the Seven Binding
+  Invariants, allowed commands, escalation, council protocol.
+- **`CLAUDE.md`** — the *quick reference*. Claude Code project autonomy
+  policy + council protocol; binds at every session start.
+- **`README.md`** — the *what is this repo*. One-page orientation; points
+  here.
+- **`docs/DOC_INDEX.md`** — the *pointer index*. Table of contents naming
+  every section, ADR, and binding fact so an agent can read selectively
+  instead of scanning the whole tree.
+- **`docs/adr/`** — append-only architectural-decision record.
+- **`docs/MANUAL.md`** — operator-facing setup / dev / demo guide.
+- **`docs/ADVANTAGES.md`** — the 8 pitch advantages (B7). Reordered per
+  ADR-021.
+- **`docs/wire-protocols/servo_uart_v1.md`** — frozen wire spec.
+- **Appendix A** below — folded interface conventions worth reading
+  alongside `INTERFACES.md`.
+- **Appendix B** below — folded hardware quirks + binding regression
+  anchors from the retired `INHERITED_CONTEXT.md`.
 
-Read order for someone joining cold: this file → `INTERFACES.md` →
-`INHERITED_CONTEXT.md` → their workstream bootstrap → `AGENTS.md` for the
-governance. `WORKSTREAMS.md` is a reference; `SALVAGE_AUDIT.md` is consulted
-when porting salvaged code.
+Read order for someone joining cold: this file (`ARCHITECTURE.md`) →
+`INTERFACES.md` → `AGENTS.md` → `docs/DOC_INDEX.md` for selective
+deep-dives. `docs/deprecated/` carries the historical files
+(`WORKSTREAMS.md`, `SALVAGE_AUDIT.md`, full `INHERITED_CONTEXT.md`, sprint
+logs, retired tickets) — reference only; **not binding**.
+
+---
+
+## Appendix A — Universal contract conventions (mirror of `INTERFACES.md` §0)
+
+These conventions are binding on every contract in `rfmesh-contracts/`.
+Pydantic docstrings are canonical; this appendix is the quick-lookup
+version so an agent does not have to load all of `INTERFACES.md` to
+recall a sign or a unit.
+
+- **Time.** `t_unix_ns` = integer nanoseconds since Unix epoch, UTC.
+  Integer (not float — float64 loses ns precision past ~104 days).
+- **Geodetic.** WGS-84. Latitude / longitude in **decimal degrees**;
+  height in **metres above WGS-84 ellipsoid (HAE)**, not above mean sea
+  level. Matches u-blox + CoT directly — no datum conversion in this
+  codebase.
+- **Local tangent plane.** **ENU** (East-North-Up), metres, right-handed.
+- **Azimuths and bearings.** Degrees, **true north = 0, clockwise
+  positive, range [0, 360)**. Never magnetic, never radians on wire.
+- **Angular uncertainty.** Degrees, **1-σ** (one standard deviation).
+  95% ellipses derived via chi-square scaling from the covariance.
+- **Power and SNR.** Decibels. SNR is dB **above this node's own
+  noise-floor estimate**, not absolute. **No `dBm` field anywhere** —
+  none of the SDRs in scope (RTL-SDR V4, HackRF One, bladeRF, Pluto+)
+  is power-calibrated; `ReceiverCapabilities.is_power_calibrated`
+  is the checked fact.
+
+Validation discipline:
+
+- Every Pydantic model uses `ConfigDict(frozen=True, extra="forbid")`.
+- Numeric ranges enforced by `Field(...)` constraints; cross-field
+  invariants enforced by `@model_validator(mode="after")`.
+- Optional fields (`X | None`) mean "datum not available" — never a
+  silent default.
+- Every wire message carries `schema_version: Literal[SCHEMA_VERSION]`;
+  any bump is caught at type-check time across every workstream.
+
+For the full per-type semantics (every field on `BearingReport`,
+`FixEvent`, `NodeStatus`, every config, every Protocol) read
+`INTERFACES.md`.
+
+---
+
+## Appendix B — Hardware quirks + regression anchors (folded from retired `INHERITED_CONTEXT.md`)
+
+These are facts about hardware, RF physics, and prior-project failures
+that **cannot be derived from reading the current code**. Binding.
+
+### B.1 Servo cal: MG996R clone pulse range is unknown until calibrated per axis
+
+MG996R clones deviate from the nominal 500–2500 µs ±90° hobby
+convention; deviation is undocumented on the package. Every axis must
+be calibrated; firmware exposes a `cal` command + per-axis NVS table
+(`cal_types.h`, `calibration.c`). Concretely:
+
+- DSP code consumes calibrated angle, never raw PWM.
+- A node refuses to boot into L1 against an uncalibrated axis (B3).
+- No hard-coded pulse-to-angle constants anywhere in DSP code.
+
+### B.2 SDR amplitude readings are not absolute power
+
+No SDR in scope (RTL-SDR V4, HackRF One, bladeRF 2.0 micro, ADALM
+Pluto+) is power-calibrated. Contracts carry no `dBm` field. Any UI
+label of "dBm" is a UX bug. SNR is always "dB above this node's own
+noise floor". Honest path to absolute power would require a one-point
+on-site calibration against a signal generator — not done.
+
+### B.3 Why AoA, not TDOA
+
+TDOA needs ns-level sync (GPS-disciplined oscillators + known cable
+latencies); both jam-first under EW. AoA cross-fixing needs only that
+the fusion batch window be wider than inter-node clock skew (NTP over
+mesh = ~10 ms; default `FusionConfig.batch_window_ms = 100`). Plus
+AoA degrades to "ellipse wider" under multipath, while TDOA degrades
+to "fix is wrong". TDOA is parked for a future system, not v1.
+
+### B.4 Why no magnetometer for heading
+
+A magnetometer at the mast measures local field from servos, cables,
+SDR PSU, not Earth field. Calibration is per-site and per-cabling.
+Heading-by-aim (point Yagi at a known visible landmark, read azimuth
+off the map, write into `NodeConfig.heading_deg`) gives ~1–2° with
+no extra hardware. The mechanical zero-stop in firmware links bracket
+frame to geographic. 6-axis IMUs in inventory become optional
+tilt-monitoring (`NodeStatus.healthy`), not heading.
+
+### B.5 GNSS is observed, not depended on
+
+The mesh has no critical dependency on GNSS (which is jammed first on
+the front). `NodeStatus.gnss_locked` exists as a separate flag so a
+deployment can *observe* GNSS jamming as an EW indicator while the
+mesh continues to function on surveyed positions + NTP timing. This is
+a slide-worthy advantage, not a workaround.
+
+### B.6 Agent push-back authority (procedural, still binding)
+
+When a ticket or instruction conflicts with binding facts (this
+appendix, `AGENTS.md` §1, `INTERFACES.md` §0), the agent **stops with
+evidence and surfaces the conflict** — never papers over it with a
+silent workaround. Inherited from the prior project's two real bug
+catches (§B.7, §B.8); preserved deliberately as a quality gate.
+
+### B.7 Regression anchor — the 25 dB SNR-invariant error
+
+Prior project proposed a test invariant `in_band_snr >= peak_snr - 5`;
+for a CW signal this is wrong by **25 dB** (peak SNR concentrates all
+signal power into one FFT bin while in-band SNR spreads it across the
+bin width). **Binding regression test for `rfmesh-dsp`:** a CW input
+at known SNR validates `peak_snr_db` and `in_band_snr_db` against
+closed-form expectations to within 0.5 dB. The numeric relationship
+between them is *computed*, never assumed.
+
+### B.8 Regression anchor — the subscriber-registration race
+
+Prior aggregator's `subscribe_measurements()` had a window where a
+subscriber registered after a measurement arrived but before the
+dispatch loop iterated would miss the just-arrived measurement.
+**Binding regression test for `rfmesh-fusion` / `rfmesh-node` ingest:**
+a subscriber registering immediately before a known burst of
+`BearingReport`s arrives receives every report in the burst. No
+first-N-dropped, no race-window.
+
+### B.9 Open hardware-validation items (status snapshot)
+
+These were "open" in the prior project; current state:
+
+- **Phase C smoke test** — *DONE.* Mast C is the empirical anchor per
+  ADR-014; simulator calibrated against the measured behaviour
+  (`scenarios/mast_c_reference.yaml` + `packages/rfmesh-sdr/tests/test_c4_mast_c_calibration.py`).
+  The original `tower_sanity_playbook.md` lives in `docs/deprecated/hardware/`
+  for historical reference.
+- **Controlled emitter beacon (LoRa)** — *DONE.* Firmware in `firmware-beacon/`
+  per `firmware-beacon/lora_beacon_spec.md`.
+- **Pluto+ delivery** — *still uncertain.* L2 phase-coherent DF is
+  developed against the coherent `SyntheticReceiver`; ships as
+  hardware-validated only if Pluto+ or borrowed bladeRF arrives in time.
+- **Vehicle-mount IMU stabilization** — *out of scope for v1.0* per
+  ADR-021 §"V1.0 scope boundary."
+- **Cold-start peer discovery in EMCON** — *unsolved.* Deferred to
+  ADR-019 follow-up. V1 cold-start assumes one omni LoRa handshake
+  to bootstrap.
