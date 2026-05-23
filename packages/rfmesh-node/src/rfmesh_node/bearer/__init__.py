@@ -24,6 +24,7 @@ from .envelope import (
     decode_envelope,
     encode_envelope,
 )
+from .http import HttpBearer
 from .lora import LoraBearer
 from .wifi import WifiBearer
 
@@ -33,6 +34,7 @@ __all__ = [
     "EnvelopeDecodeError",
     "EnvelopeError",
     "EnvelopeTooLargeError",
+    "HttpBearer",
     "LoraBearer",
     "WifiBearer",
     "decode_envelope",

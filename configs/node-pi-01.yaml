@@ -1,0 +1,48 @@
+# NodeConfig for a field L1 node: Raspberry Pi + RTL-SDR + ESP32 servo + Yagi.
+#
+# One real L1 amplitude-DF node. Edit the four ALL-CAPS placeholders before
+# deploying (position, heading, frequency, backend host), then run:
+#
+#   deployment/node/node-up.sh            # auto-detects the servo port
+#   # or directly:
+#   uv run rfmesh-node --config configs/node-pi-01.yaml --servo-port /dev/ttyACM0
+#
+# Validated against rfmesh_contracts.NodeConfig (extra="forbid" -- a typo'd
+# key is a loud error at load, not a silent ignore).
+
+schema_version: "1.1.0"
+node_id: "node-pi-01"
+
+# Surveyed position (WGS-84). Smartphone GPS (+/-5-10 m) is fine -- bearing
+# error dominates fix error at km range. sigma_m must be honest.
+position:
+  lat_deg: 50.330000      # <-- SET: surveyed latitude
+  lon_deg: 5.000000       # <-- SET: surveyed longitude
+  hae_m: 200.0
+  sigma_m: 8.0
+
+# Antenna boresight azimuth, degrees true, [0, 360). Set by survey-and-align:
+# point the Yagi at a known landmark, read the bearing off a map. The servo
+# sweep angle is measured RELATIVE to this (servo 0 == boresight). Required
+# for L1.
+heading_deg: 90.0          # <-- SET: boresight azimuth
+
+sdr:
+  driver: "rtlsdr"
+  serial: null             # null = first RTL-SDR found; set to disambiguate
+  sample_rate_hz: 2.4e6
+  center_freq_hz: 915.0e6  # <-- SET: emitter band under test
+  gain_db: 30.0            # fixed gain (not "auto") -> stable noise floor for honest sigma
+  bias_tee: false
+
+capabilities:
+  - l1_rssi
+
+bearer:
+  kind: wifi               # nominal; transport is chosen by fusion_endpoint scheme
+  heartbeat_interval_s: 2.0
+
+# http(s):// -> the node POSTs BearingReport JSON straight to the both3
+# backend's POST /bearings (rendered as a line-of-bearing on GET /bearings).
+# Use udp://host:port instead to target the UDP fusion ingest.
+fusion_endpoint: "http://BACKEND-HOST:8000"   # <-- SET: backend host/IP
