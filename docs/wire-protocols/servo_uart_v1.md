@@ -2,15 +2,17 @@
 
 **Status:** frozen contract for S2-T5a-firmware and S2-T5a-host
 **Last updated:** 2026-05-07 (test vectors finalised during host-driver implementation; see §11)
-**Owners:** RPi host (`rfmesh.scan.servo.driver`) ↔ ESP32-C3 controller firmware
+**Owners:** RPi host (`rfmesh.scan.servo.driver`) ↔ ESP32 controller firmware (production target ESP32-C6 per ADR-015; protocol survives MCU pivots — see §9 history)
 
-This document is the **single source of truth** for the binary protocol carried over USB-CDC between the RPi running `rfmesh-node` and the ESP32-C3 servo controller. Both the firmware ticket (S2-T5a-firmware) and the host driver ticket (S2-T5a-host) MUST conform to this spec exactly. Any divergence is a bug; any proposed change requires updating this document FIRST and bumping `PROTOCOL_VERSION`.
+This document is the **single source of truth** for the binary protocol carried over USB-CDC between the RPi running `rfmesh-node` and the ESP32 servo controller. Both the firmware ticket (S2-T5a-firmware) and the host driver ticket (S2-T5a-host) MUST conform to this spec exactly. Any divergence is a bug; any proposed change requires updating this document FIRST and bumping `PROTOCOL_VERSION`.
+
+The protocol is **MCU-port-invariant**: the C3 salvage baseline, the S2 port (WS-A-007a), and the current C6 port (ADR-015) all speak it byte-for-byte. 58 host-buildable C tests pass on every target.
 
 ---
 
 ## 1. Physical layer
 
-- **Transport:** USB-CDC (ESP32-C3 native USB-Serial-JTAG peripheral, not external USB-UART bridge)
+- **Transport:** USB-CDC (ESP32-C6 native USB-Serial-JTAG peripheral, not external USB-UART bridge)
 - **Baud rate:** 115200 (CDC framing makes this nominal — actual is bulk USB)
 - **Byte order:** little-endian for all multi-byte integers
 - **Flow control:** none
@@ -306,15 +308,15 @@ If a key is missing on boot, axis uses defaults from §3.7 and is in "uncalibrat
 
 ---
 
-## 9. GPIO pin assignments (ESP32-C3)
+## 9. GPIO pin assignments (ESP32-C6)
 
 | Function | Pin | Notes |
 |---|---|---|
-| Servo PWM output (axis 0 / pan) | GPIO5 | LEDC channel 0, 50 Hz |
-| Status LED (optional) | GPIO8 | Built-in LED on most ESP32-C3 dev boards; blink slow when idle, fast when commanding |
-| Reserved for future axis 1 | GPIO6 | Not used in v1 |
+| Servo PWM output (axis 0 / pan) | GPIO18 | LEDC channel 0, 50 Hz. Chosen over C3-era GPIO5 because C6 GPIO4/5 are JTAG MTMS/MTCK strap pins. |
+| Status LED (optional) | GPIO8 | Strap pin on C6 — boot-mode select. OK as output post-boot. |
+| Reserved for future axis 1 | GPIO19 | Not used in v1 |
 
-USB-CDC uses native USB pins (GPIO18/19), not configurable.
+USB-Serial-JTAG uses native USB pins (GPIO12/13 on C6), not configurable.
 
 Servo power: separate 5–6 V supply, NOT from ESP32 5V or RPi 5V. Common ground between PSU and ESP32. Document this in the firmware README.
 

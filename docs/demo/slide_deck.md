@@ -254,7 +254,7 @@ The entire pipeline (sweep → estimator → bearings → fusion → ellipse →
 | Raspberry Pi 4B | €80 | 1× |
 | MG996R servo + bracket | €15 | 1× |
 | Mast + cables + power | €50 | amortised |
-| ESP32-S2 servo controller | €15 | 1× |
+| ESP32-C6 servo controller | €15 | 1× |
 | **Total per L1 node** | | **~€205** |
 
 Plus the partner-pool **bladeRF 2.0 micro at ~€400** for the L2 upgrade — per-fix-quality enhancement, not a hardware reset (Advantage #3 makes mixing trivial).

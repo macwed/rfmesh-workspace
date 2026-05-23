@@ -10,7 +10,10 @@
 static const char *TAG = "servo";
 
 // GPIO assignments per servo_uart_v1 §9.
-static const int s_axis_gpio[SERVO_AXIS_COUNT] = { 5 };
+// ESP32-C6: GPIO18 is a regular GPIO (not strapping, not JTAG-shared,
+// not USB). Picked over GPIO5 because C6 GPIO4/5 are JTAG MTMS/MTCK
+// strap pins — safer to keep servo line off them at reset.
+static const int s_axis_gpio[SERVO_AXIS_COUNT] = { 9 };
 
 static const ledc_channel_t s_axis_channel[SERVO_AXIS_COUNT] = {
     LEDC_CHANNEL_0,
@@ -24,7 +27,14 @@ void servo_init(void) {
         .duty_resolution = LEDC_TIMER_14_BIT,
         .timer_num       = LEDC_TIMER_0,
         .freq_hz         = SERVO_PWM_FREQ_HZ,
-        .clk_cfg         = LEDC_AUTO_CLK,
+        // Pin XTAL (40 MHz) explicitly. On C6, LEDC_AUTO_CLK in low-speed
+        // mode may pick RC_FAST (~17.5 MHz ±5%) — uncalibrated, would let
+        // 50 Hz frame rate drift ±5%. XTAL gives deterministic timing
+        // across boards and removes one source of calibration-portability
+        // risk. MG996R holds position from pulse width, not frame rate,
+        // so the angle output is unaffected either way — but pinning the
+        // clock keeps L1 sigma honesty board-independent (B2).
+        .clk_cfg         = LEDC_USE_XTAL_CLK,
     };
     ESP_ERROR_CHECK(ledc_timer_config(&timer));
 

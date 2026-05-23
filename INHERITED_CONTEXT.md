@@ -18,20 +18,26 @@ Plus §4 on process realities, §5 on inherited regression anchors.
 
 ## §1 Hardware-quirk facts (binding)
 
-### §1.1 ESP32-S2 firmware port is not a rename of the build target
+### §1.1 Firmware target trajectory (C3 → S2 → C6)
 
-Prior firmware runs on ESP32-C3 SuperMini, byte-exact-tested against `servo_uart_v1` wire spec. Production hardware = ESP32-S2 mini (3 units on hand, vs 1 C3). Port = **scoped, real work** — Thread 1 sizes at ~2–3 hours — ticket scheduling it must not be written as trivial CMake-target swap.
+> **AMENDED 2026-05-23 by ADR-015.** Production target is now **ESP32-C6**, not ESP32-S2. The S2 designation below is preserved as a historical step in the trajectory; the C6 port reverses the S2-era TinyUSB detour back to USB-Serial-JTAG (the C3 baseline pattern). See `docs/adr/ADR-015-firmware-target-esp32c6.md` for full rationale, including the hardware-loss-in-transit trigger and the operator punch list. Canonical pin map: `docs/wire-protocols/servo_uart_v1.md` §9. Memory entry `project_hardware_roles.md` is also amended.
 
-Change: ESP32-C3 uses **USB-Serial-JTAG peripheral** (`usb_serial_jtag_*` API); ESP32-S2 has **USB-OTG with TinyUSB CDC** (no USB-Serial-JTAG peripheral exists on S2). Migration touches:
+**Historical trajectory (do not under-scope a future "trivial CMake-target swap"):**
 
-- Every `usb_serial_jtag_*` call in `firmware/main/main.c` → TinyUSB CDC equivalents (driver install, RX/TX, vendor strings in `sdkconfig`).
-- Console driver: `esp_console_dev_usb_serial_jtag_*` → `esp_console_dev_usb_cdc_*` in `firmware/main/shell.c`.
-- `sdkconfig.defaults` gains TinyUSB enable flags, loses USB-Serial-JTAG ones.
-- Boot-mode-select logic in `main.c` (1-second window detecting three consecutive ENTERs for linenoise) stays semantically identical but reads from CDC stream.
+Prior firmware (commit history pre-`6acf482`) ran on **ESP32-C3 SuperMini**, byte-exact-tested against `servo_uart_v1` wire spec. The 2026-05-14 baseline doc named **ESP32-S2 mini** as production target (3 units on hand vs 1 C3); WS-A-007a (commit `6acf482`) executed that port. The 2026-05-23 ADR-015 then pivoted to **ESP32-C6** after all 3 S2 units sustained transit damage and event organisers offered C6 stock.
 
-**Wire protocol** (`servo_uart_v1`, COBS + CRC-16/CCITT-FALSE + TLV) **does not change**. 58 C tests do not change. Host driver (`rfmesh-servo`) does not care which USB stack on other end. Port = bounded and low-risk — but *not* zero-effort. Fresh agent reading "port C3 → S2" without context will under-scope.
+Each hop was **scoped, real work** — not a trivial CMake-target swap. The shared insight: USB transport changes between ESP32 families.
 
-**Implication for `WORKSTREAMS.md`:** Workstream A's salvage row for firmware names this port as specific ~2–3 h ticket, with C3 firmware as proven prior art rather than "the firmware".
+- **C3 ↔ C6:** native USB-Serial-JTAG peripheral, `usb_serial_jtag_*` API, no managed components.
+- **S2:** USB-OTG only (no USB-Serial-JTAG peripheral), required TinyUSB CDC stack via `espressif/esp_tinyusb` managed component plus a custom linenoise loop in `shell.c` because no symmetric `esp_console_new_repl_usb_cdc` exists in IDF v5.4.
+
+Whichever target is in scope: assume ~2-3 h of real work touching the USB-stack layer + console driver. Fresh agent reading "port to MCU X" without context will under-scope.
+
+**Wire protocol** (`servo_uart_v1`, COBS + CRC-16/CCITT-FALSE + TLV) **does not change across hops**. 58 host-buildable C tests do not change. Host driver (`rfmesh-servo`) does not care which USB stack the MCU exposes. This port-invariance is the contract that lets the MCU pivot happen at all.
+
+**GPIO map matters per target.** The C3-era servo PWM on GPIO5 was preserved through the S2 port (S2 has no GPIO5 conflict) but lands on a strap pin on C6 (GPIO4/5/8/9/15). The C6 port moved it to GPIO18. Future ports must re-check strap-pin assignments against the target's datasheet.
+
+**Implication for `WORKSTREAMS.md`:** Workstream A's firmware row treats the C3 baseline as proven prior art; the S2 and C6 ports are tracked separately, each with its own ticket-sized scope.
 
 ### §1.2 MG996R clones: pulse range is unknown until calibrated per axis
 

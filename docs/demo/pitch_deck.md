@@ -204,7 +204,7 @@ The next slides are NOT part of the 5-min pitch. They are reserved for Q&A answe
 5. **Open extensible threat library** — YAML profile per emitter; community-growable.
 6. **Honesty payload on every fix** — covariance, ellipse, GDOP, per-node residuals.
 7. **Simulator-first development** — `SyntheticReceiver` Protocol; software validated without hardware.
-8. **€250-per-node budget** — RTL-SDR V4 + ATK-10 Yagi + ESP32-S2 + MG996R.
+8. **€250-per-node budget** — RTL-SDR V4 + ATK-10 Yagi + ESP32-C6 + MG996R.
 
 ---
 
