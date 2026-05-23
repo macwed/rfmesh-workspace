@@ -30,6 +30,7 @@ dependencies = [
     "rfmesh-node",
     "rfmesh-ops",
     "rfmesh-demo-replay",
+    "rfmesh-operator-console",
 ]
 
 [tool.uv.sources]
@@ -45,6 +46,7 @@ rfmesh-cot         = { workspace = true }
 rfmesh-node        = { workspace = true }
 rfmesh-ops         = { workspace = true }
 rfmesh-demo-replay = { workspace = true }
+rfmesh-operator-console = { workspace = true }
 
 # The workspace root is a "virtual" project (no source of its own). Members
 # carry the real code. We list the contracts package explicitly above so

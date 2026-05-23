@@ -68,6 +68,11 @@ from rfmesh_contracts import FixEvent, NodeStatus
 
 from .exceptions import CotEncodingError, CotTransportError
 from .markers import fix_event_to_cot_xml, node_status_to_cot_xml
+from .operator import (
+    OperatorMarker,
+    operator_delete_to_cot_xml,
+    operator_marker_to_cot_xml,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -121,6 +126,11 @@ class PyTAKCotPublisher:
         self._tx_task: asyncio.Task[None] | None = None
         self._closing_task: asyncio.Task[None] | None = None
         self._closed: bool = False
+        # The event loop the TX task runs on, captured at start. Used by
+        # ``_enqueue_threadsafe`` so an operator-input thread (CLI, map
+        # UI callback) can hand a blob to the loop without racing the
+        # asyncio.Queue. ``None`` until the publisher is started.
+        self._loop: asyncio.AbstractEventLoop | None = None
         # If the TX loop dies, the exception is parked here. The next
         # public call raises ``CotTransportError`` with this as cause.
         self._tx_error: BaseException | None = None
@@ -173,6 +183,62 @@ class PyTAKCotPublisher:
             raise CotEncodingError(msg) from exc
         self._enqueue(blob)
 
+    # ----- operator-authored markers (this package's concrete API; NOT
+    #       part of the frozen CotPublisher Protocol -- see ADR-018) -----
+
+    def publish_marker(self, marker: OperatorMarker) -> None:
+        """Serialise an operator-authored ``OperatorMarker`` and enqueue it.
+
+        Thread-safe: callable from an operator-input thread (CLI, map-UI
+        callback) distinct from the asyncio loop running the TX task. The
+        encode happens on the caller's thread; the hand-off to the queue
+        is marshalled onto the publisher's loop. Re-publishing the same
+        ``marker.uid`` moves / re-labels the marker in ATAK.
+        """
+        self._check_open()
+        try:
+            blob = operator_marker_to_cot_xml(marker)
+        except CotEncodingError:
+            raise
+        except Exception as exc:
+            msg = f"Failed to encode OperatorMarker.uid={marker.uid}: {exc}"
+            raise CotEncodingError(msg) from exc
+        self._enqueue_threadsafe(blob)
+
+    def delete_marker(self, uid: str) -> None:
+        """Send a CoT delete that removes the marker ``uid`` on all clients.
+
+        Thread-safe, like :meth:`publish_marker`. Use after dropping the
+        marker from an :class:`~rfmesh_cot.store.OperatorMarkerStore` so
+        the un-send reaches ATAK immediately instead of waiting for the
+        marker to go stale.
+        """
+        self._check_open()
+        try:
+            blob = operator_delete_to_cot_xml(uid)
+        except CotEncodingError:
+            raise
+        except Exception as exc:
+            msg = f"Failed to encode delete for uid={uid}: {exc}"
+            raise CotEncodingError(msg) from exc
+        self._enqueue_threadsafe(blob)
+
+    def publish_raw(self, blob: bytes) -> None:
+        """Enqueue a pre-encoded CoT ``<event>`` blob as-is (advanced).
+
+        Thread-safe, like :meth:`publish_marker`. The caller owns the
+        bytes; no validation is done. The motivating use is a **self-SA /
+        keepalive** frame: FreeTAKServer relays a sender's CoT to other
+        connected clients only while that sender behaves like a connected
+        client -- it must identify itself (a self-SA event) and hold the
+        connection open. A long-lived publisher (e.g. the operator
+        console server) sends a self-SA on connect and periodically
+        thereafter via this method so its markers are actually relayed.
+        See ``build_self_sa_xml`` in ``operator.py``.
+        """
+        self._check_open()
+        self._enqueue_threadsafe(blob)
+
     def close(self) -> None:
         """Tear down the transport. Idempotent; safe in cleanup paths.
 
@@ -224,6 +290,42 @@ class PyTAKCotPublisher:
         assert self._tx_queue is not None
         self._tx_queue.put_nowait(blob)
 
+    def _enqueue_threadsafe(self, blob: bytes) -> None:
+        """Enqueue ``blob`` safely from any thread.
+
+        The operator-input surface may run on a different thread from the
+        publisher's asyncio loop. ``asyncio.Queue`` is not thread-safe, so:
+
+        * if we are *on* the publisher's loop -> ``put_nowait`` directly;
+        * if we are on another thread but the loop is alive ->
+          ``loop.call_soon_threadsafe`` to enqueue on the loop's thread;
+        * if no persistent loop is up (pure sync caller) -> fall back to
+          ``_enqueue`` (which spins a one-shot loop).
+
+        This is the mechanism behind the "thread-safe located places"
+        design: many producer threads, one drain task, no shared-state race.
+        """
+        loop = self._loop
+        if loop is None:
+            # Never started under a persistent loop -- sync one-shot path.
+            self._enqueue(blob)
+            return
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is loop:
+            assert self._tx_queue is not None
+            self._tx_queue.put_nowait(blob)
+        else:
+            # Off-loop caller (operator thread). Marshal onto the loop.
+            loop.call_soon_threadsafe(self._enqueue_on_loop, blob)
+
+    def _enqueue_on_loop(self, blob: bytes) -> None:
+        """Put ``blob`` on the queue; runs on the loop thread only."""
+        if self._tx_queue is not None:
+            self._tx_queue.put_nowait(blob)
+
     async def _ensure_started(self) -> None:
         """Open the writer and start the TX task. Idempotent."""
         if self._closed:
@@ -245,6 +347,9 @@ class PyTAKCotPublisher:
         self._writer = writer
         self._tx_queue = asyncio.Queue()
         self._tx_task = asyncio.create_task(self._tx_loop())
+        # Capture the loop so off-thread operator callers can marshal
+        # onto it via ``_enqueue_threadsafe``.
+        self._loop = asyncio.get_running_loop()
 
     def _build_pytak_config(self) -> configparser.SectionProxy:
         """Build the configparser section PyTAK's protocol_factory wants."""
