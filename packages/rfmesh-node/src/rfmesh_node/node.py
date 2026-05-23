@@ -49,6 +49,8 @@ from .capabilities import build_estimators, detect_active_capabilities
 if TYPE_CHECKING:
     from rfmesh_contracts import BearingEstimator
 
+    from .l1_sweep import L1SweepLoop
+
 
 _LOG = logging.getLogger(__name__)
 
@@ -70,6 +72,7 @@ class Node:
         *,
         receiver: Receiver,
         bearer: Bearer | None = None,
+        sweep_loop: L1SweepLoop | None = None,
     ) -> None:
         """Bind the node config and the receiver (and optionally the bearer).
 
@@ -85,6 +88,7 @@ class Node:
         self._config = config
         self._receiver = receiver
         self._bearer = bearer
+        self._sweep_loop = sweep_loop
         self._estimators: tuple[BearingEstimator, ...] = ()
         self._active_capabilities: tuple[Capability, ...] = ()
         self._tasks: list[asyncio.Task[None]] = []
@@ -104,6 +108,15 @@ class Node:
             self._tasks = [
                 asyncio.create_task(self._heartbeat_loop(), name="node-heartbeat"),
             ]
+            # L1 sweep loop: only when an L1 sweep was wired (servo present
+            # and L1_RSSI active). It drives the receiver -> servo ->
+            # estimator -> bearer cycle the v1.0 container otherwise omits.
+            if self._sweep_loop is not None:
+                self._tasks.append(
+                    asyncio.create_task(
+                        self._sweep_loop.run(self._stopping), name="node-l1-sweep"
+                    )
+                )
             await self._stopping.wait()
         finally:
             await self._teardown()

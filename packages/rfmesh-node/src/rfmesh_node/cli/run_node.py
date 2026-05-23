@@ -3,14 +3,23 @@
 Loads a ``NodeConfig`` from YAML, constructs the appropriate receiver,
 wires up a bearer, and runs ``Node.run()`` until SIGINT.
 
-The receiver factory is intentionally simple in v1.0: ``driver="sim"``
-gets a trivial simulator (the full ``SyntheticReceiver`` requires a
-hand-built scenario, which the CLI does not load -- a follow-up
-ticket wires the scenario YAML); real-hardware drivers raise
-``NotImplementedError`` so the operator sees a loud, specific
-message rather than a silent down-fall to the simulator. The
-``rfmesh-demo-replay`` app is the path for real / replayed
-end-to-end runs.
+Receiver factory (``--config`` ``sdr.driver``):
+  * ``"rtlsdr"`` -- real RTL-SDR V4 via the salvaged ``RTLSDRDevice``
+    (single-channel; the L1 servo-sweep path). This is the field node.
+  * ``"sim"`` -- still raises: the bare ``SyntheticReceiver`` needs a
+    ``SimulationScenario``; use ``rfmesh-demo-replay`` for sim runs.
+  * any other driver -- raises ``NotImplementedError`` with a loud,
+    specific message (no silent down-fall, Invariant B3).
+
+Bearer is chosen by the ``fusion_endpoint`` URL scheme, *not* by a
+contract change: ``http(s)://`` -> ``HttpBearer`` (POSTs JSON straight to
+the both3 backend ``/bearings``), ``udp://`` -> the salvaged ``WifiBearer``
+(/ ``LoraBearer`` / ``BothBearer`` per ``bearer.kind``).
+
+When a ``--servo-port`` is given and ``L1_RSSI`` is an active capability,
+an ``L1SweepLoop`` is wired in -- servo + RTL-SDR + L1 estimator + bearer
+-- so the node actually produces and ships bearings (the v1.0 ``Node``
+container otherwise only runs the heartbeat).
 """
 
 from __future__ import annotations
@@ -22,12 +31,14 @@ import logging
 import signal
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
 import yaml
 from pydantic import ValidationError
-from rfmesh_contracts import BearerKind, NodeConfig
+from rfmesh_contracts import BearerKind, Capability, NodeConfig
 
-from ..bearer import BothBearer, LoraBearer, WifiBearer
+from ..bearer import BothBearer, HttpBearer, LoraBearer, WifiBearer
+from ..l1_sweep import L1SweepConfig, L1SweepLoop
 from ..node import Node
 from ..runtime import CapabilityMismatchError
 
@@ -41,40 +52,49 @@ _LOG = logging.getLogger(__name__)
 def _build_receiver(config: NodeConfig) -> Receiver:
     """Build a receiver for the given config.
 
-    v1.0 supports only ``driver="sim"`` from the CLI; real-hardware
-    receivers are constructed via ``apps/demo-replay`` (which knows
-    how to load a scenario YAML). The simulator path here is the
-    minimal smoke-test plumbing; the real demo path is
-    ``rfmesh-demo-replay``.
+    ``rtlsdr`` -> real RTL-SDR (the field L1 path). ``sim`` and other
+    drivers raise a loud, specific error (Invariant B3: no silent
+    fallback to the wrong receiver).
     """
-    if config.sdr.driver != "sim":
+    driver = config.sdr.driver
+    if driver == "rtlsdr":
+        # Imported lazily so a sim/bench host without rfmesh-sdr's runtime
+        # deps can still import this module; the field node has it.
+        from rfmesh_sdr.devices.rtlsdr import RTLSDRDevice  # noqa: PLC0415
+
+        return RTLSDRDevice(serial=config.sdr.serial)
+    if driver == "sim":
         msg = (
-            f"run_node: SDR driver {config.sdr.driver!r} is not supported by "
-            "the rfmesh-node CLI in v1.0. Use rfmesh-demo-replay for a full "
-            "scenario-driven run, or write a custom entrypoint that "
-            "instantiates the desired Receiver."
+            "run_node: scenario-less simulator receivers are not constructible "
+            "from a bare NodeConfig (the simulator requires a SimulationScenario). "
+            "Use rfmesh-demo-replay to run with a scenario; for bench tests, "
+            "construct Node(...) with an explicit Receiver."
         )
         raise NotImplementedError(msg)
     msg = (
-        "run_node: scenario-less simulator receivers are not constructible "
-        "from a bare NodeConfig (the simulator requires a SimulationScenario). "
-        "Use rfmesh-demo-replay to run with a scenario; for bench tests, "
-        "construct Node(...) with an explicit Receiver."
+        f"run_node: SDR driver {driver!r} is not yet wired into the rfmesh-node "
+        "CLI. Supported: 'rtlsdr'. Use rfmesh-demo-replay for scenario-driven "
+        "runs, or construct Node(...) with an explicit Receiver."
     )
     raise NotImplementedError(msg)
 
 
 def _build_bearer(config: NodeConfig) -> Bearer:
-    """Build a bearer that matches ``config.bearer.kind``.
+    """Build a bearer chosen by the ``fusion_endpoint`` URL scheme.
 
-    ``BearerConfig._lora_needs_port`` enforces that ``lora_serial_port``
-    is set whenever ``kind`` is ``LORA`` or ``BOTH``, so the ``None``
-    branches below are unreachable when this function is called with a
-    validated ``NodeConfig``. The explicit ``if port is None`` guards
-    are mypy type-narrowers + defence against a future refactor that
-    drops the model validator.
+    ``http(s)://`` -> ``HttpBearer`` (POSTs JSON to the both3 backend).
+    ``udp://`` -> ``WifiBearer`` / ``LoraBearer`` / ``BothBearer`` per
+    ``bearer.kind`` (the salvaged UDP path).
+
+    ``BearerConfig._lora_needs_port`` guarantees ``lora_serial_port`` is
+    set for LoRa/Both; the ``None`` guard is a mypy narrower + defence
+    against a future refactor dropping that validator.
     """
     endpoint = str(config.fusion_endpoint)
+    scheme = urlparse(endpoint).scheme
+    if scheme in ("http", "https"):
+        return HttpBearer(endpoint)
+
     bearer_cfg = config.bearer
     if bearer_cfg.kind is BearerKind.WIFI:
         return WifiBearer(endpoint)
@@ -91,11 +111,59 @@ def _build_bearer(config: NodeConfig) -> Bearer:
     return BothBearer(WifiBearer(endpoint), LoraBearer(port))
 
 
-async def _run(config: NodeConfig) -> None:
+def _build_sweep_loop(
+    config: NodeConfig,
+    receiver: Receiver,
+    bearer: Bearer,
+    args: argparse.Namespace,
+) -> L1SweepLoop | None:
+    """Build the L1 sweep loop, or ``None`` if not applicable.
+
+    Returns ``None`` (heartbeat-only node) unless ``--servo-port`` is set
+    AND ``L1_RSSI`` is declared. ``heading_deg`` is required for the L1
+    sweep (the boresight the servo angle is relative to); a missing one is
+    a loud config error rather than a silent zero.
+    """
+    if args.servo_port is None:
+        return None
+    if Capability.L1_RSSI not in config.capabilities:
+        return None
+    if config.heading_deg is None:
+        msg = (
+            "run_node: L1 sweep requires NodeConfig.heading_deg (antenna "
+            "boresight azimuth, set by survey-and-align); it is None."
+        )
+        raise ValueError(msg)
+
+    from rfmesh_servo.driver import ServoDriver  # noqa: PLC0415
+    from rfmesh_servo.transport import SerialTransport  # noqa: PLC0415
+
+    servo = ServoDriver(SerialTransport(args.servo_port), own_transport=True)
+    sweep_cfg = L1SweepConfig(
+        min_deg=args.sweep_min_deg,
+        max_deg=args.sweep_max_deg,
+        step_deg=args.sweep_step_deg,
+        settle_s=args.settle_ms / 1000.0,
+        dwell_samples=args.dwell_samples,
+        inter_sweep_s=args.inter_sweep_s,
+    )
+    return L1SweepLoop(
+        receiver=receiver,
+        bearer=bearer,
+        servo=servo,
+        node_id=config.node_id,
+        node_position=config.position,
+        boresight_heading_deg=config.heading_deg,
+        config=sweep_cfg,
+    )
+
+
+async def _run(config: NodeConfig, args: argparse.Namespace) -> None:
     """Bring the node up; wait for SIGINT; tear down."""
     receiver = _build_receiver(config)
     bearer = _build_bearer(config)
-    node = Node(config, receiver=receiver, bearer=bearer)
+    sweep_loop = _build_sweep_loop(config, receiver, bearer, args)
+    node = Node(config, receiver=receiver, bearer=bearer, sweep_loop=sweep_loop)
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -127,6 +195,54 @@ def run_node_main(argv: list[str] | None = None) -> int:  # noqa: PLR0911
         default="INFO",
         help="logging level (DEBUG/INFO/WARNING/ERROR)",
     )
+    parser.add_argument(
+        "--servo-port",
+        type=str,
+        default=None,
+        help=(
+            "serial port of the ESP32 servo controller (e.g. /dev/ttyACM0 or "
+            "COM5). Enables the L1 sweep when set and L1_RSSI is declared."
+        ),
+    )
+    parser.add_argument(
+        "--sweep-min-deg",
+        type=float,
+        default=-90.0,
+        help="servo sweep arc start, degrees relative to boresight (default -90)",
+    )
+    parser.add_argument(
+        "--sweep-max-deg",
+        type=float,
+        default=90.0,
+        help=(
+            "servo sweep arc end, degrees relative to boresight (default +90). "
+            "Arc must exceed the antenna HPBW so the off-axis floor is real."
+        ),
+    )
+    parser.add_argument(
+        "--sweep-step-deg",
+        type=float,
+        default=2.0,
+        help="servo sweep step, degrees (default 2.0)",
+    )
+    parser.add_argument(
+        "--settle-ms",
+        type=float,
+        default=200.0,
+        help="dwell after each servo move before sampling, ms (default 200)",
+    )
+    parser.add_argument(
+        "--dwell-samples",
+        type=int,
+        default=1024,
+        help="IQ samples read per heading (default 1024)",
+    )
+    parser.add_argument(
+        "--inter-sweep-s",
+        type=float,
+        default=1.0,
+        help="pause between sweeps, seconds (default 1.0)",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=args.log_level.upper())
@@ -151,7 +267,7 @@ def run_node_main(argv: list[str] | None = None) -> int:  # noqa: PLR0911
         return 2
 
     try:
-        asyncio.run(_run(config))
+        asyncio.run(_run(config, args))
     except CapabilityMismatchError as exc:
         _LOG.error("rfmesh-node: capability mismatch: %s", exc)
         return 2

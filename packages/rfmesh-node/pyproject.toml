@@ -13,6 +13,13 @@ dependencies = [
     "msgpack>=1.0",
     "pyyaml>=6.0",
     "rfmesh-contracts",
+    # Composition root (ADR-011 D1): the node wires concrete siblings.
+    # rfmesh-dsp = L1/L2 estimators; rfmesh-sdr = RTLSDRDevice (field L1);
+    # rfmesh-servo = ServoDriver for the L1 sweep. import-linter exempts
+    # rfmesh_node from the star-independence contract for exactly this.
+    "rfmesh-dsp",
+    "rfmesh-sdr",
+    "rfmesh-servo",
 ]
 
 [project.scripts]

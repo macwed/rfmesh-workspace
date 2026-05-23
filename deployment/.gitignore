@@ -1,0 +1,11 @@
+.env
+.env.prod
+__pycache__/
+*.py[cod]
+
+# Enhance runtime cache + any staged LiDAR (the real COG lives on F:, bind-mounted)
+backend/data/cache/
+backend/data/_staging/
+backend/data/lidar_aoi.tif
+backend/data/*.zip
+backend/data/*.laz

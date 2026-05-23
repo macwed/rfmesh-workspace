@@ -1,0 +1,29 @@
+# Prod overlay: nginx on :80, backend internal only, code baked (no bind mounts).
+# Deploy to the VPS via a remote Docker context, from the WORKSPACE ROOT:
+#   docker context create both3-vps --docker "host=ssh://USER@VPS_HOST"
+#   docker --context both3-vps compose \
+#     -f deployment/docker-compose.yml -f deployment/docker-compose.prod.yml \
+#     --env-file deployment/.env.prod up -d --build
+#
+# Cloudflare terminates TLS (orange-cloud the both3 DNS record -> VPS IP);
+# nginx stays plain :80; only :80 is published on the VPS.
+
+services:
+  backend:
+    build:
+      target: runtime
+    environment:
+      SEED_DEMO: ${SEED_DEMO:-false}
+      SEED_AS_FRESH: ${SEED_AS_FRESH:-false}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-https://both3.huplo.cc}
+    expose:
+      - "8000"
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on: [backend]
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/both3.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [both3]

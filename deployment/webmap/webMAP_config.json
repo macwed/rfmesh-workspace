@@ -1,0 +1,8 @@
+{
+  "BOT_TOKEN": "unused",
+  "FTH_FTS_URL": "freetakserver",
+  "ChatId": "unused",
+  "FTH_FTS_API_Auth": "token",
+  "FTH_FTS_API_Port": 19023,
+  "FTH_FTS_TCP_Port": 8087
+}

@@ -1,0 +1,31 @@
+# systemd unit template: auto-start the field node at boot.
+#
+# Do NOT install this by hand -- the @PLACEHOLDERS@ are filled in by
+# `sudo bash deployment/node/setup-node.sh --enable-autostart`, which writes
+# the resolved unit to /etc/systemd/system/rfmesh-node.service and enables it.
+#
+# Only enable auto-start AFTER configs/node-pi-01.yaml has real position,
+# heading, frequency and backend host -- otherwise the node boots streaming
+# bearings from placeholder values.
+#
+# Manage:  systemctl status rfmesh-node
+#          journalctl -u rfmesh-node -f      # live sweep / bearing log
+#          systemctl restart rfmesh-node
+
+[Unit]
+Description=rfmesh field L1 node (RTL-SDR + servo sweep -> bearing)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@REPO_ROOT@
+ExecStart=/usr/bin/env bash @REPO_ROOT@/deployment/node/node-up.sh
+Restart=on-failure
+RestartSec=5
+# Give USB device nodes time to enumerate after a cold boot before pre-flight.
+ExecStartPre=/bin/sleep 8
+
+[Install]
+WantedBy=multi-user.target

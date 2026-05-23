@@ -32,6 +32,7 @@ dmypy.json
 
 # Claude Code
 .claude/worktrees/
+.claude/agents/study-*.yaml
 
 # IDEs
 .idea/
@@ -59,8 +60,13 @@ packages/*/vendor/
 
 recordings/
 
+# Scratch / work-in-progress (output discipline — never committed)
+_work/
+**/_work/
+
 HANDOFF_TO_CLAUDE_CODE_LEAD.md
 
 phase-c-tutorial*
 NOTES_mast_recapture_2026-05-19.md
 NOTES_*.md
+.gstack/

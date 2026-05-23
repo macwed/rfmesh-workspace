@@ -1761,6 +1761,9 @@ dependencies = [
     { name = "msgpack" },
     { name = "pyyaml" },
     { name = "rfmesh-contracts" },
+    { name = "rfmesh-dsp" },
+    { name = "rfmesh-sdr" },
+    { name = "rfmesh-servo" },
 ]
 
 [package.metadata]
@@ -1769,6 +1772,9 @@ requires-dist = [
     { name = "msgpack", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rfmesh-contracts", editable = "packages/rfmesh-contracts" },
+    { name = "rfmesh-dsp", editable = "packages/rfmesh-dsp" },
+    { name = "rfmesh-sdr", editable = "packages/rfmesh-sdr" },
+    { name = "rfmesh-servo", editable = "packages/rfmesh-servo" },
 ]
 
 [[package]]

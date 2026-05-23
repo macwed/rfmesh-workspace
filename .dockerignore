@@ -1,0 +1,25 @@
+# Workspace-root .dockerignore — REQUIRED here (Docker reads it from the build
+# context root, not deployment/). The both3-poc build context IS the workspace
+# root, so this trims the upload streamed to the (possibly remote) daemon.
+# This is the one accepted exception to "everything lives in deployment/":
+# it is build infra, and it touches no governed package source.
+#
+# Strategy: blacklist the heavy/irrelevant. We keep packages/* and the seed
+# artifact (docs/demo/artifacts/trench_demo_fixes.json) in context.
+
+.git
+.github
+.claude
+**/.venv
+.venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.coverage
+firmware/build
+**/node_modules
+**/*.log
+deployment/.env
+deployment/.env.prod

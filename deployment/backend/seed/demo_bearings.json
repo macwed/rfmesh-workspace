@@ -1,0 +1,50 @@
+[
+  {
+    "node_id": "node-l1-north",
+    "t_unix_ns": 1779058164250000000,
+    "node_position": {"lat_deg": 50.3700, "lon_deg": 5.0000},
+    "azimuth_deg": 181.3,
+    "azimuth_sigma_deg": 4.0,
+    "method": "l1_rssi"
+  },
+  {
+    "node_id": "node-l1-east",
+    "t_unix_ns": 1779058164250000000,
+    "node_position": {"lat_deg": 50.3550, "lon_deg": 5.0250},
+    "azimuth_deg": 268.7,
+    "azimuth_sigma_deg": 5.0,
+    "method": "l1_rssi"
+  },
+  {
+    "node_id": "node-l1-south",
+    "t_unix_ns": 1779058164250000000,
+    "node_position": {"lat_deg": 50.3400, "lon_deg": 5.0000},
+    "azimuth_deg": 359.4,
+    "azimuth_sigma_deg": 3.5,
+    "method": "l1_rssi"
+  },
+  {
+    "node_id": "node-l1-west",
+    "t_unix_ns": 1779058164250000000,
+    "node_position": {"lat_deg": 50.3550, "lon_deg": 4.9750},
+    "azimuth_deg": 91.1,
+    "azimuth_sigma_deg": 6.0,
+    "method": "l1_rssi"
+  },
+  {
+    "node_id": "node-ridge-s1",
+    "t_unix_ns": 1779058164370000000,
+    "node_position": {"lat_deg": 50.3337, "lon_deg": 4.9286},
+    "azimuth_deg": 17.4,
+    "azimuth_sigma_deg": 6.0,
+    "method": "l1_rssi"
+  },
+  {
+    "node_id": "node-ridge-s2",
+    "t_unix_ns": 1779058164370000000,
+    "node_position": {"lat_deg": 50.3337, "lon_deg": 4.9343},
+    "azimuth_deg": 343.2,
+    "azimuth_sigma_deg": 6.0,
+    "method": "l1_rssi"
+  }
+]
