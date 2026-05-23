@@ -115,9 +115,7 @@ class CommandChannel:
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
-                    _LOG.warning(
-                        "CommandChannel %s: connection error: %s", self._node_id, exc
-                    )
+                    _LOG.warning("CommandChannel %s: connection error: %s", self._node_id, exc)
                 if stopping.is_set():
                     break
                 delay = self._reconnect_delay()
@@ -163,16 +161,13 @@ class CommandChannel:
         try:
             command = parse_command(frame)
         except ValueError as exc:
-            _LOG.warning(
-                "CommandChannel %s: dropping bad frame: %s", self._node_id, exc
-            )
+            _LOG.warning("CommandChannel %s: dropping bad frame: %s", self._node_id, exc)
             return
         try:
             await self._handler(command)
         except Exception:
             _LOG.exception(
-                "CommandChannel %s: handler raised on %s; "
-                "channel stays open",
+                "CommandChannel %s: handler raised on %s; channel stays open",
                 self._node_id,
                 command.kind,
             )
@@ -188,7 +183,7 @@ class CommandChannel:
         delay = min(_RECONNECT_BASE_S * (2**self._attempt), _RECONNECT_MAX_S)
         jitter = delay * _RECONNECT_JITTER * (2.0 * random.random() - 1.0)  # noqa: S311
         self._attempt += 1
-        return max(0.1, delay + jitter)
+        return float(max(0.1, delay + jitter))
 
 
 __all__ = ["CommandChannel", "CommandHandler"]
