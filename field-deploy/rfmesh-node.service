@@ -1,0 +1,30 @@
+[Unit]
+Description=rfmesh field node (L1 bearing sweep)
+# Wait for the mesh network so the backend reachability check and bearer
+# connection have a chance before the node starts.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@REPO_ROOT@
+
+# Per-node overrides.  Copy field-deploy/rfmesh-node.env.example to
+# /etc/rfmesh-node.env and set CONFIG for this Pi.
+EnvironmentFile=-/etc/rfmesh-node.env
+
+ExecStart=@REPO_ROOT@/field-deploy/rfmesh-node.sh
+
+# Restart on any failure (RTL-SDR yanked, backend down, bearer drop).
+# 15 s back-off keeps the journal readable and avoids hammering the USB bus.
+Restart=on-failure
+RestartSec=15
+
+# All output lands in:  journalctl -u rfmesh-node -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rfmesh-node
+
+[Install]
+WantedBy=multi-user.target
