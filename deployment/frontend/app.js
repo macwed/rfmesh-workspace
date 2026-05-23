@@ -125,11 +125,12 @@ const ellipseLayer = L.layerGroup().addTo(map);
 const centerLayer = L.layerGroup().addTo(map);
 const bearingLayer = L.layerGroup().addTo(map);
 
-// RF-plausibility heat: inner (higher mass) = more opaque cyan.
+// RF-plausibility heat: the emitter is RED TEAM, so likelihood reads RED
+// (inner/higher mass = more opaque). Friendly sensors are drawn green elsewhere.
 const POSTERIOR_STYLE = {
-  0.5: { fillOpacity: 0.45, color: "#00e5ff", weight: 1 },
-  0.8: { fillOpacity: 0.24, color: "#00e5ff", weight: 0.8 },
-  0.95: { fillOpacity: 0.10, color: "#00e5ff", weight: 0.6 },
+  0.5: { fillOpacity: 0.45, color: "#ff4d4f", weight: 1 },
+  0.8: { fillOpacity: 0.24, color: "#ff4d4f", weight: 0.8 },
+  0.95: { fillOpacity: 0.10, color: "#ff4d4f", weight: 0.6 },
 };
 
 // Map legend: an accordion of expandable "how to read it" rows. Each symbol
@@ -157,8 +158,8 @@ const LEGEND_ROWS = [
   },
   {
     k: "node",
-    swatch: '<span class="lg-dot"></span><span class="lg-line" style="border-top:2px dashed #4aa8ff"></span>',
-    label: "sensor node · bearing",
+    swatch: '<span class="lg-dot lg-dot-friendly"></span><span class="lg-line" style="border-top:2px dashed #2ecc71"></span>',
+    label: "sensor node · bearing (friendly)",
     means: "A sensor (dot) and the direction it heard the signal (dashed line).",
     read: "Lines cross at the fix. A red line = outlier — suspect that node.",
     act: "2 lines = a guess, 3+ = a fix.",
@@ -285,9 +286,17 @@ function fmtAge(props) {
   return `${Math.round(s / 3600)}h`;
 }
 
+// The emitter is RED TEAM — always red (stale = grey). Confidence is conveyed by
+// ellipse size + the HIGH/MED/LOW label, not hue (user: red=threat, green=friendly).
+const THREAT = "#ff4d4f";
 function confColor(props) {
   if (props.stale) return STALE_COLOR;
-  return COLORS[props.confidence_level] || STALE_COLOR;
+  return THREAT;
+}
+// Confidence → fill opacity (stronger = more certain) so the red emitter still
+// shows certainty without changing hue.
+function confOpacity(props) {
+  return { high: 0.32, medium: 0.20, low: 0.12 }[props.confidence_level] || 0.15;
 }
 
 function activeFilters() {
@@ -1001,7 +1010,7 @@ function render() {
       L.polygon(ring, {
         color, weight: sel ? 3 : 1.5, opacity: sel ? 1 : 0.85,
         fillColor: color,
-        fillOpacity: props.stale ? 0.04 : (outline ? 0.0 : (sel ? 0.25 : 0.18)),
+        fillOpacity: props.stale ? 0.04 : (outline ? 0.0 : (sel ? confOpacity(props) + 0.06 : confOpacity(props))),
         dashArray: outline ? "7 5" : (props.stale ? "4 4" : null),
       })
         .bindTooltip(`Bearing 95% ellipse · ${props.confidence_level.toUpperCase()}`, { sticky: true })
@@ -1024,7 +1033,9 @@ function render() {
     for (const feat of state.bearings) {
       const p = feat.properties;
       const isOut = outliers.has(p.node_id);
-      const col = isOut ? COLORS.low : "#4aa8ff";
+      // Friendly sensors = GREEN; a residual outlier = amber (suspect), never red
+      // (red is reserved for the threat/emitter).
+      const col = isOut ? "#f1c40f" : "#2ecc71";
       if (p.feature_kind === "node") {
         const [lon, lat] = feat.geometry.coordinates;
         L.circleMarker([lat, lon], {

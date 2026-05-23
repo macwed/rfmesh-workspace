@@ -11,7 +11,8 @@ layer can treat them as fresh when SEED_AS_FRESH is set.
 
 from __future__ import annotations
 
-from uuid import UUID
+from typing import Any
+from uuid import UUID, uuid4
 
 from rfmesh_contracts import BearingReport, FixEvent
 
@@ -22,6 +23,11 @@ class Store:
         self._bearings: dict[tuple[str, int], BearingReport] = {}
         self._fix_freq: dict[UUID, float | None] = {}
         self.seeded_fix_ids: set[UUID] = set()
+        # Operator-placed red nodes (sensors/jammers) for the exposure lenses.
+        # Plain dicts (lat, lon, h_m, role, erp_class, node_id, bands_hz). Kept
+        # here so they survive across requests; mesh-derived jammers are computed
+        # on demand from the fixes, not stored.
+        self._reds: dict[str, dict[str, Any]] = {}
 
     # ----- fixes -----
     def upsert_fix(
@@ -69,3 +75,20 @@ class Store:
 
     def counts(self) -> tuple[int, int]:
         return len(self._fixes), len(self._bearings)
+
+    # ----- operator-placed red nodes (exposure lenses) -----
+    def add_red(self, red: dict[str, Any]) -> str:
+        """Store a red marker; returns its id (generated if not supplied)."""
+        red_id = str(red.get("id") or uuid4().hex[:12])
+        red["id"] = red_id
+        self._reds[red_id] = red
+        return red_id
+
+    def list_reds(self) -> list[dict[str, Any]]:
+        return list(self._reds.values())
+
+    def delete_red(self, red_id: str) -> bool:
+        return self._reds.pop(red_id, None) is not None
+
+    def clear_reds(self) -> None:
+        self._reds.clear()

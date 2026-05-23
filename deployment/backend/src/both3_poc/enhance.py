@@ -50,6 +50,37 @@ RES_GRID: dict[int, dict[str, Any]] = {
 
 _TERMINAL = {"done", "cancelled", "error"}
 
+# Band -> LiDAR surface + scan density, from the Fresnel-fidelity argument
+# (ADR-016 §3): the first Fresnel-zone radius shrinks with frequency, so only
+# large features block low bands (bare-earth DTM, coarse is honest) while small
+# features (walls/vehicles/canopy) block high bands (surface DSM, fine). Each row
+# is (max_freq_hz_exclusive, surface_key, res). ``needs_dsm`` high bands rendered
+# on the 30 m Copernicus DEM must be stamped degraded (B3) — never a 1 m claim.
+BAND_SURFACE: list[tuple[float, str, int]] = [
+    (1.0e9, "dtm", 4),   # <1 GHz: hills/ridgelines only
+    (2.0e9, "dsm", 3),   # 1-2 GHz: + large buildings
+    (4.0e9, "dsm", 2),   # 2-4 GHz: + treelines/rooftops
+    (float("inf"), "dsm", 1),  # >=4 GHz: walls/vehicles, finest
+]
+
+
+def surface_res_for_band(freq_hz: float) -> dict[str, Any]:
+    """The recommended LiDAR surface + scan density for a band, with the
+    ``needs_dsm`` honesty flag (high bands are meaningless on the 30 m DEM)."""
+    for hi, surface, res in BAND_SURFACE:
+        if freq_hz < hi:
+            return {"surface": surface, "res": res, "needs_dsm": surface == "dsm"}
+    return {"surface": "dsm", "res": 1, "needs_dsm": True}  # unreachable; keeps mypy happy
+
+
+def finest_band_surface(bands_hz: list[float]) -> dict[str, Any]:
+    """One AOI raster must serve all selected bands; pick the finest (highest
+    band) so high-band fidelity is honoured. Returns the surface/res for the
+    max frequency."""
+    if not bands_hz:
+        return {"surface": "dtm", "res": 4, "needs_dsm": False}
+    return surface_res_for_band(max(bands_hz))
+
 
 class _Canceller:
     """``is_set()`` trips on explicit cancel OR on the per-job deadline."""

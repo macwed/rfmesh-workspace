@@ -60,6 +60,10 @@ packages/*/vendor/
 
 recordings/
 
+# Scratch / work-in-progress (output discipline — never committed)
+_work/
+**/_work/
+
 HANDOFF_TO_CLAUDE_CODE_LEAD.md
 
 phase-c-tutorial*

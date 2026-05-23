@@ -32,10 +32,16 @@ from rfmesh_cot import CotError
 
 from .config import Settings
 from .cot_send import CotSender
-from .enhance import RES_GRID, EnhanceManager, LidarSource
+from .enhance import (
+    RES_GRID,
+    EnhanceManager,
+    LidarSource,
+    finest_band_surface,
+    surface_res_for_band,
+)
 from .geojson import bearings_feature_collection, fixes_feature_collection
 from .inference import investigate, load_catalog
-from .posterior import PosteriorEngine, nodes_for_fix
+from .posterior import LENS_CONFIG, PosteriorEngine, _Red, nodes_for_fix
 from .seed import load_seed_bearings, load_seed_fixes_with_freq, parse_fix_and_freq
 from .store import Store
 
@@ -346,6 +352,316 @@ async def get_investigate(fix_id: UUID) -> JSONResponse:
         catalog=catalog,
     )
     return JSONResponse(result.as_dict())
+
+
+# --------------------------------------------------------------------------- #
+# Exposure lenses (concealment / leakage / jam-shadow) — ADR-016/017.
+# Deployment-layer only; no contract change. Red nodes come in the request body
+# (operator-placed or, from S2, the mesh's own jammer fixes).
+# --------------------------------------------------------------------------- #
+
+
+def _exposure_reds(mode: str, payload: dict[str, Any]) -> list[_Red]:
+    """Parse the request's red nodes into ``_Red``. A node with no ``role``
+    defaults to the lens's canonical role (jammer for jam-shadow, sensor else),
+    so a bare {lat,lon} is eligible without the caller knowing the role gate."""
+    default_role = "jammer" if mode == "jamshadow" else "recon"
+    reds: list[_Red] = []
+    for r in payload.get("reds", []) or []:
+        reds.append(
+            _Red(
+                lat=float(r["lat"]),
+                lon=float(r["lon"]),
+                h_m=float(r.get("h_m", 3.0)),
+                role=str(r.get("role", default_role)),
+                erp_class=str(r.get("erp_class", "medium")),
+                node_id=str(r.get("node_id", "")),
+            )
+        )
+    return reds
+
+
+def _marker_to_red(m: dict[str, Any]) -> _Red:
+    return _Red(
+        lat=float(m["lat"]), lon=float(m["lon"]), h_m=float(m.get("h_m", 3.0)),
+        role=str(m.get("role", "jammer")), erp_class=str(m.get("erp_class", "medium")),
+        node_id=str(m.get("node_id") or m.get("id", "")),
+    )
+
+
+def _auto_jammer_reds() -> list[_Red]:
+    """Red jammers derived from the mesh's own fixes: each fix whose top catalog
+    candidate is ``role=jammer`` becomes a jam-shadow source at the fix position,
+    inheriting the candidate's ERP class. Only *emitting* red is detectable this
+    way — passive collectors must be operator-placed (you can't detect a receiver)."""
+    settings = _settings(app)
+    store = _store(app)
+    catalog = load_catalog(settings.equipment_catalog_file)
+    out: list[_Red] = []
+    for fix in store.list_fixes():
+        ec = fix.emitter_class.value if fix.emitter_class else None
+        res = investigate(store.freq_for(fix.fix_id), None, ec, catalog=catalog)
+        top = next((c for c in res.candidates if not c.is_unknown), None)
+        if top is None or top.role != "jammer":
+            continue
+        h = float(top.antenna_height_class_m.get("typ", 3.0)) if top.antenna_height_class_m else 3.0
+        out.append(_Red(
+            lat=fix.position.lat_deg, lon=fix.position.lon_deg, h_m=h, role="jammer",
+            erp_class=top.erp_class or "medium", node_id=f"fix:{str(fix.fix_id)[:8]}",
+        ))
+    return out
+
+
+def _gather_reds(mode: str, payload: dict[str, Any]) -> list[_Red]:
+    """Body reds + (optional) operator-placed markers + (optional, jam-shadow)
+    mesh-derived jammers. The lens role gate drops anything ineligible."""
+    reds = _exposure_reds(mode, payload)
+    if payload.get("include_stored"):
+        reds += [_marker_to_red(m) for m in _store(app).list_reds()]
+    if payload.get("include_auto") and mode == "jamshadow":
+        reds += _auto_jammer_reds()
+    return reds
+
+
+def _red_as_dict(r: _Red) -> dict[str, Any]:
+    return {
+        "lat": r.lat, "lon": r.lon, "h_m": r.h_m, "role": r.role,
+        "erp_class": r.erp_class, "node_id": r.node_id,
+    }
+
+
+def _clamp(v: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, v))
+
+
+async def _pick_exposure_raster(
+    payload: dict[str, Any], bands: list[float], center_lat: float, center_lon: float,
+    reach_m: float,
+) -> tuple[Any, dict[str, Any]]:
+    """Choose the AOI raster: Copernicus by default, or a synchronously-read
+    LiDAR window (in an executor) when ``use_lidar`` and the finest band's
+    surface is staged. Returns (raster, fidelity-dict). Honest degrade on miss."""
+    engine: PosteriorEngine = app.state.posterior
+    mgr: EnhanceManager = app.state.enhance
+    requested = finest_band_surface(bands)
+    fidelity: dict[str, Any] = {
+        "requested_surface": requested["surface"],
+        "requested_res_m": requested["res"],
+        "needs_dsm": requested["needs_dsm"],
+        "lidar": False,
+    }
+    raster = engine.base
+    if bool(payload.get("use_lidar", False)):
+        surf = str(payload.get("surface") or requested["surface"])
+        src = mgr.sources.get(surf)
+        if src is not None and src.available:
+            loop = asyncio.get_running_loop()
+            lid = await loop.run_in_executor(
+                None, src.window, center_lat, center_lon, reach_m,
+                float(requested["res"]), engine.base,
+            )
+            if lid is not None:
+                raster, fidelity["lidar"], fidelity["surface_used"] = lid, True, surf
+            else:
+                fidelity["lidar_note"] = "LiDAR window empty/outside coverage; using Copernicus"
+        else:
+            fidelity["lidar_note"] = f"surface {surf!r} not staged; using Copernicus"
+    return raster, fidelity
+
+
+@app.post("/exposure")
+async def exposure(payload: Any = Body(...)) -> JSONResponse:
+    """Concealment / leakage / jam-shadow heatmap for an AOI given a set of red
+    nodes + bands. Relative terrain cover only — never a detectability/safe claim
+    (see posterior.py). Use ``use_lidar`` for the staged 1 m surface."""
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail="body must be a JSON object")
+    settings = _settings(app)
+    engine: PosteriorEngine = app.state.posterior
+    mode = str(payload.get("mode", "jamshadow"))
+    if mode not in LENS_CONFIG:
+        raise HTTPException(status_code=422, detail=f"mode must be one of {sorted(LENS_CONFIG)}")
+    bands = [float(b) for b in (payload.get("bands_hz") or [])]
+    if not bands:
+        raise HTTPException(status_code=422, detail="bands_hz required (non-empty list)")
+    if "center_lat" not in payload or "center_lon" not in payload:
+        raise HTTPException(status_code=422, detail="center_lat and center_lon required")
+    center_lat = float(payload["center_lat"])
+    center_lon = float(payload["center_lon"])
+    reach_m = _clamp(float(payload.get("reach_m", 3000.0)), 200.0, 6000.0)
+    cell_m = max(20.0, float(payload.get("cell_m", settings.posterior_cell_m)))
+    asset_h = float(payload.get("asset_h_m", settings.emitter_antenna_h_m))
+    reds = _gather_reds(mode, payload)
+
+    raster, fidelity = await _pick_exposure_raster(payload, bands, center_lat, center_lon, reach_m)
+    loop = asyncio.get_running_loop()
+    fn = partial(
+        engine.exposure_geojson, mode, reds, bands,
+        center_lat=center_lat, center_lon=center_lon, reach_m=reach_m, cell_m=cell_m,
+        floor=settings.rf_shadow_floor, scale_db=settings.diffraction_loss_scale_db,
+        asset_h_m=asset_h, n_path_samples=24, band_reduce=payload.get("band_reduce"),
+        polarity=str(payload.get("polarity", "safe")), raster=raster,
+    )
+    fc = await loop.run_in_executor(None, fn)
+    active_res = float(getattr(raster, "res_m", 0.0)) if raster is not None else 0.0
+    if fidelity["needs_dsm"] and active_res > 5.0:
+        fc["properties"]["fidelity_warning"] = (
+            f"high band needs ~{fidelity['requested_res_m']} m DSM but rendered on "
+            f"{active_res:.0f} m {fc['properties'].get('dem_source', 'coarse DEM')} — "
+            "treat as coarse/degraded (B3)"
+        )
+    fc["properties"]["fidelity"] = fidelity
+    return JSONResponse(fc)
+
+
+@app.post("/exposure/probe")
+async def exposure_probe_ep(payload: Any = Body(...)) -> JSONResponse:
+    """Hover inspector: per-red-node distance/clearance/Fresnel-v/loss/transmission
+    at one cell, the unioned exposure, and the signed survival."""
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail="body must be a JSON object")
+    settings = _settings(app)
+    engine: PosteriorEngine = app.state.posterior
+    mode = str(payload.get("mode", "jamshadow"))
+    if mode not in LENS_CONFIG:
+        raise HTTPException(status_code=422, detail=f"mode must be one of {sorted(LENS_CONFIG)}")
+    bands = [float(b) for b in (payload.get("bands_hz") or [])]
+    if not bands or "lat" not in payload or "lon" not in payload:
+        raise HTTPException(status_code=422, detail="bands_hz, lat, lon required")
+    reds = _gather_reds(mode, payload)
+    asset_h = float(payload.get("asset_h_m", settings.emitter_antenna_h_m))
+    reach_m = _clamp(float(payload.get("reach_m", 3000.0)), 200.0, 6000.0)
+    raster, _ = await _pick_exposure_raster(
+        payload, bands, float(payload["lat"]), float(payload["lon"]), reach_m
+    )
+    result = engine.exposure_probe(
+        mode, reds, bands, float(payload["lat"]), float(payload["lon"]),
+        floor=settings.rf_shadow_floor, scale_db=settings.diffraction_loss_scale_db,
+        asset_h_m=asset_h, raster=raster,
+    )
+    return JSONResponse(result)
+
+
+@app.post("/exposure/combined")
+async def exposure_combined(payload: Any = Body(...)) -> JSONResponse:
+    """The 'ideal site' lens: concealed from red sensors AND in a jammer's terrain
+    shadow for our links (intersection). Red set must contain both sensors
+    (role df/recon) and jammers (role jammer)."""
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail="body must be a JSON object")
+    if "center_lat" not in payload or "center_lon" not in payload:
+        raise HTTPException(status_code=422, detail="center_lat and center_lon required")
+    settings = _settings(app)
+    engine: PosteriorEngine = app.state.posterior
+    bands = [float(b) for b in (payload.get("bands_hz") or [])]
+    conceal_bands = [float(b) for b in (payload.get("conceal_bands_hz") or bands)]
+    jam_bands = [float(b) for b in (payload.get("jam_bands_hz") or bands)]
+    if not conceal_bands or not jam_bands:
+        raise HTTPException(
+            status_code=422,
+            detail="provide bands_hz, or both conceal_bands_hz and jam_bands_hz",
+        )
+    center_lat = float(payload["center_lat"])
+    center_lon = float(payload["center_lon"])
+    reach_m = _clamp(float(payload.get("reach_m", 3000.0)), 200.0, 6000.0)
+    cell_m = max(20.0, float(payload.get("cell_m", settings.posterior_cell_m)))
+    asset_h = float(payload.get("asset_h_m", settings.emitter_antenna_h_m))
+    # combined needs both roles; gather body reds (roles preserved), markers, and
+    # mesh-derived jammers, then let combined_geojson split them by role.
+    reds = _gather_reds("jamshadow", payload)
+    raster, fidelity = await _pick_exposure_raster(
+        payload, conceal_bands + jam_bands, center_lat, center_lon, reach_m
+    )
+    loop = asyncio.get_running_loop()
+    fn = partial(
+        engine.combined_geojson, reds,
+        conceal_bands_hz=conceal_bands, jam_bands_hz=jam_bands,
+        center_lat=center_lat, center_lon=center_lon, reach_m=reach_m, cell_m=cell_m,
+        floor=settings.rf_shadow_floor, scale_db=settings.diffraction_loss_scale_db,
+        asset_h_m=asset_h, n_path_samples=24,
+        polarity=str(payload.get("polarity", "safe")), raster=raster,
+    )
+    fc = await loop.run_in_executor(None, fn)
+    fc["properties"]["fidelity"] = fidelity
+    return JSONResponse(fc)
+
+
+@app.get("/exposure/options")
+async def exposure_options() -> dict[str, Any]:
+    """Lens modes, the catalog's bands (with the recommended per-band LiDAR
+    surface/res + ``needs_dsm`` honesty flag), and which surfaces are staged."""
+    settings = _settings(app)
+    mgr: EnhanceManager = app.state.enhance
+    catalog = load_catalog(settings.equipment_catalog_file)
+    bands: list[dict[str, Any]] = []
+    for key, gate in catalog.band_gate.items():
+        hz = gate.get("hz", [])
+        if not hz:
+            continue
+        lo, hi = float(hz[0][0]), float(hz[-1][1])
+        center = (float(hz[0][0]) + float(hz[0][1])) / 2.0
+        bands.append({
+            "key": key, "label": key, "lo_hz": lo, "hi_hz": hi, "center_hz": center,
+            "multi_use": bool(gate.get("multi_use", False)),
+            **surface_res_for_band(center),
+        })
+    surfaces = []
+    for skey in ("dsm", "dtm"):
+        src = mgr.sources.get(skey)
+        if src is None:
+            continue
+        surfaces.append({"surface": skey, "label": src.label, "available": src.available})
+    return {
+        "modes": list(LENS_CONFIG),
+        "bands": bands,
+        "lidar": {
+            "available": bool(mgr.available_surfaces()),
+            "default_surface": mgr.default_surface(),
+            "surfaces": surfaces,
+        },
+    }
+
+
+@app.get("/exposure/reds")
+async def list_exposure_reds() -> dict[str, Any]:
+    """Operator-placed red markers + the mesh-derived jammers (read-only) so the
+    UI can show both source kinds and let the operator toggle each."""
+    return {
+        "manual": _store(app).list_reds(),
+        "auto": [_red_as_dict(r) for r in _auto_jammer_reds()],
+    }
+
+
+@app.post("/exposure/reds")
+async def add_exposure_red(payload: Any = Body(...)) -> dict[str, Any]:
+    """Place a red node (sensor or jammer) for what-if siting."""
+    if not isinstance(payload, dict) or "lat" not in payload or "lon" not in payload:
+        raise HTTPException(status_code=422, detail="lat and lon required")
+    store = _store(app)
+    red = {
+        "lat": float(payload["lat"]),
+        "lon": float(payload["lon"]),
+        "h_m": float(payload.get("h_m", 3.0)),
+        "role": str(payload.get("role", "jammer")),
+        "erp_class": str(payload.get("erp_class", "medium")),
+        "node_id": str(payload.get("node_id", "")),
+        "bands_hz": [float(b) for b in (payload.get("bands_hz") or [])],
+    }
+    red_id = store.add_red(red)
+    return {"id": red_id, "reds": store.list_reds()}
+
+
+@app.delete("/exposure/reds/{red_id}")
+async def delete_exposure_red(red_id: str) -> dict[str, Any]:
+    if not _store(app).delete_red(red_id):
+        raise HTTPException(status_code=404, detail=f"no red marker {red_id}")
+    return {"deleted": True, "reds": _store(app).list_reds()}
+
+
+@app.delete("/exposure/reds")
+async def clear_exposure_reds() -> dict[str, Any]:
+    _store(app).clear_reds()
+    return {"cleared": True}
 
 
 # Static frontend last so it does not shadow the API routes above.

@@ -64,6 +64,82 @@ class _Node:
     node_id: str = ""
 
 
+# --------------------------------------------------------------------------- #
+# Exposure-lens family (concealment / leakage / jam-shadow) — ADR-016/017.
+#
+# All three are the *same* reciprocal knife-edge kernel as the RF-plausibility
+# posterior, read inside-out: instead of "where is the red emitter", they answer
+# "where is a friendly cell shadowed from red". One per-(node, band) transmission
+# grid ``T = max(floor, 1 - J(v)/scale_db_eff)`` (the same ``w`` the posterior
+# uses), unioned over red nodes into an *exposure* ``E = 1 - Π(1 - T)``, reduced
+# over a band set, then signed to *survival* ``S = 1 - E`` (high = dark = good).
+#
+# Honesty (B2/B3/B4 + no-dBm, INHERITED_CONTEXT §1.3): there is no calibrated
+# power here. ``S`` is a *relative terrain-cover ranking*, never a detectability
+# or "safe" claim. The floor is kept (a cell is never fully dark); high-ERP
+# jammers trip ``burnthrough`` (terrain shadow does not hold against them).
+# --------------------------------------------------------------------------- #
+
+# ERP class -> diffraction-scale multiplier. Higher ERP needs *more* terrain dB
+# to earn the same shadow, so it stretches scale_db. Ordinal ratio on a
+# dimensionless scale — NEVER dBm. ``medium`` is 1.0 so an all-medium jam-shadow
+# is numerically a sign-flipped concealment map (the regression anchor).
+ERP_K: dict[str, float] = {
+    "very_high": 1.5,
+    "high": 1.25,
+    "medium": 1.0,
+    "low": 0.85,
+    "": 1.0,
+}
+ERP_K_CAP = 1.5
+# ERP classes against which terrain shadow is unreliable (burnthrough). The lens
+# still draws the relative field but caps optimism and flags it loudly.
+BURNTHROUGH_ERP = frozenset({"high", "very_high"})
+
+# Catalog ``role`` values that may participate as an active *reach* source
+# (jam-shadow). Passive collectors (df/recon) and spoofers never get a
+# reach-shadow — a spoofer's effect is deception, not noise reach.
+REACH_ROLES = frozenset({"jammer"})
+SENSOR_ROLES = frozenset({"df", "recon"})
+
+# Per-lens configuration. ``roles`` filters which red nodes are eligible;
+# ``erp_gate`` turns on the burnthrough scaling/flag; ``band_reduce`` is the
+# default reducer over the band set. All lenses sign to survival (1 - E).
+LENS_CONFIG: dict[str, dict[str, Any]] = {
+    # hide a quiet asset from red sensors: bands are *threat* bands, hide in all.
+    "concealment": {"roles": SENSOR_ROLES, "band_reduce": "max", "erp_gate": False},
+    # site an emitter with minimal spill to red sensors: one band at a time.
+    "leakage": {"roles": SENSOR_ROLES, "band_reduce": "per_band", "erp_gate": False},
+    # keep our links alive in a jammer's terrain shadow: bands are *our* links.
+    "jamshadow": {"roles": REACH_ROLES, "band_reduce": "max", "erp_gate": True},
+}
+
+
+@dataclass
+class _Red:
+    """A red node (sensor or jammer) for the exposure lenses.
+
+    ``h_m`` is the red end's antenna height (sensor mast or jammer mast). ``role``
+    and ``erp_class`` come from the equipment catalog (or operator input). Unlike
+    ``_Node`` there is no bearing — siting has no AoA geometry.
+    """
+
+    lat: float
+    lon: float
+    h_m: float
+    role: str = "jammer"
+    erp_class: str = "medium"
+    node_id: str = ""
+
+    @property
+    def scale_k(self) -> float:
+        return min(ERP_K_CAP, ERP_K.get(self.erp_class, 1.0))
+
+    @property
+    def burnthrough(self) -> bool:
+        return self.erp_class in BURNTHROUGH_ERP
+
+
 @dataclass
 class Raster:
     """A terrain-height grid sampled in lon/lat with a north-up affine.
@@ -112,6 +188,59 @@ def _j_v(v_max: np.ndarray) -> np.ndarray:
     return np.maximum(loss, 0.0)
 
 
+def _path_weight_chunk(
+    raster: Raster,
+    sub_lat: np.ndarray,
+    sub_lon: np.ndarray,
+    nd_lat: float,
+    nd_lon: float,
+    fr: np.ndarray,
+    wavelength_m: float,
+    cell_h: float,
+    node_h: float,
+    floor: float,
+    scale_db: float,
+    near: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Single-knife-edge transmission weight for one red node over a row-chunk.
+
+    Shared kernel for both the RF-plausibility posterior (``_rf_grid``, product
+    over nodes) and the exposure lenses (``_exposure_grid``, union over nodes).
+    Returns ``(w, loss, far)`` each ``(rc, nlon)`` where ``w = max(floor,
+    1 - J(v)/scale_db)`` on far cells and ``1.0`` on the self-cell, ``loss`` is
+    the diffraction loss in dB (0 on self-cell), and ``far`` is the
+    beyond-one-cell mask. ``cell_h`` is the antenna height at the candidate-cell
+    end (fr=0), ``node_h`` at the red-node end (fr=1) — knife-edge geometry is
+    reciprocal, so the only thing direction changes is which physical height
+    sits on which end.
+    """
+    lat_s = sub_lat[..., None] + (nd_lat - sub_lat[..., None]) * fr
+    lon_s = sub_lon[..., None] + (nd_lon - sub_lon[..., None]) * fr
+    rc, nlon = sub_lat.shape
+    n_samples = fr.shape[0]
+    terr = raster.terrain(lat_s.ravel(), lon_s.ravel()).reshape(rc, nlon, n_samples)
+    d_e = (nd_lon - sub_lon) * _m_per_deg_lon(nd_lat)
+    d_n = (nd_lat - sub_lat) * _M_PER_DEG_LAT
+    dist = np.hypot(d_e, d_n)  # (rc, nlon)
+    h_tx = terr[..., 0] + cell_h
+    h_rx = terr[..., -1] + node_h
+    los = h_tx[..., None] + (h_rx - h_tx)[..., None] * fr
+    clr = terr - los  # (rc, nlon, ns)
+    d_path = dist[..., None] * fr
+    d1 = d_path[..., 1:-1]
+    d2 = dist[..., None] - d1
+    hh = clr[..., 1:-1]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        vv = hh * np.sqrt(2.0 * dist[..., None] / (wavelength_m * d1 * d2))
+    vv = np.where(np.isfinite(vv), vv, -np.inf)
+    v_max = np.max(vv, axis=-1)  # (rc, nlon)
+    v_max = np.where(np.isfinite(v_max), v_max, -1.0)
+    loss = _j_v(v_max)
+    far = dist >= near
+    w = np.where(far, np.maximum(floor, 1.0 - loss / scale_db), 1.0)
+    return w, np.where(far, loss, 0.0), far
+
+
 class PosteriorEngine:
     """Loads the default DEM once; computes a per-fix posterior on demand."""
 
@@ -149,7 +278,7 @@ class PosteriorEngine:
         raster: Raster,
         clat: float,
         clon: float,
-        nodes: list[_Node],
+        nodes: list[_Node] | list[_Red],
         emitter_h: float,
         node_h: float,
         n: int = 48,
@@ -219,33 +348,12 @@ class PosteriorEngine:
                 raise PosteriorCancelled
             for r0 in range(0, nlat, chunk):
                 r1 = min(nlat, r0 + chunk)
-                sub_lat = latg[r0:r1]  # (rc, nlon)
-                sub_lon = long[r0:r1]
-                rc = r1 - r0
-                lat_s = sub_lat[..., None] + (nd.lat - sub_lat[..., None]) * fr
-                lon_s = sub_lon[..., None] + (nd.lon - sub_lon[..., None]) * fr
-                terr = raster.terrain(lat_s.ravel(), lon_s.ravel()).reshape(rc, nlon, n_samples)
-                d_e = (nd.lon - sub_lon) * _m_per_deg_lon(nd.lat)
-                d_n = (nd.lat - sub_lat) * _M_PER_DEG_LAT
-                dist = np.hypot(d_e, d_n)  # (rc, nlon)
-                h_tx = terr[..., 0] + emitter_h
-                h_rx = terr[..., -1] + node_h
-                los = h_tx[..., None] + (h_rx - h_tx)[..., None] * fr
-                clr = terr - los  # (rc, nlon, ns)
-                d_path = dist[..., None] * fr
-                d1 = d_path[..., 1:-1]
-                d2 = dist[..., None] - d1
-                hh = clr[..., 1:-1]
-                with np.errstate(divide="ignore", invalid="ignore"):
-                    vv = hh * np.sqrt(2.0 * dist[..., None] / (wavelength_m * d1 * d2))
-                vv = np.where(np.isfinite(vv), vv, -np.inf)
-                v_max = np.max(vv, axis=-1)  # (rc, nlon)
-                v_max = np.where(np.isfinite(v_max), v_max, -1.0)
-                loss = _j_v(v_max)
-                far = dist >= near
-                w = np.where(far, np.maximum(floor, 1.0 - loss / scale_db), 1.0)
+                w, loss, _ = _path_weight_chunk(
+                    raster, latg[r0:r1], long[r0:r1], nd.lat, nd.lon, fr,
+                    wavelength_m, emitter_h, node_h, floor, scale_db, near,
+                )
                 rf[r0:r1] *= w
-                loss_grid[r0:r1] = np.maximum(loss_grid[r0:r1], np.where(far, loss, 0.0))
+                loss_grid[r0:r1] = np.maximum(loss_grid[r0:r1], loss)
             if progress_cb is not None:
                 progress_cb((ni + 1) / total)
         return rf, terr_cell, loss_grid
@@ -450,7 +558,7 @@ class PosteriorEngine:
         raster: Raster,
         clat: float,
         clon: float,
-        node: _Node,
+        node: _Node | _Red,
         wavelength_m: float,
         emitter_h: float,
         node_h: float,
@@ -641,6 +749,376 @@ class PosteriorEngine:
                 }
             )
         return feats
+
+    # ----------------------------------------------------------------- #
+    # Exposure lenses (concealment / leakage / jam-shadow) — ADR-016/017.
+    # ----------------------------------------------------------------- #
+
+    def _exposure_band_grid(
+        self,
+        raster: Raster,
+        cell_lat: np.ndarray,
+        cell_lon: np.ndarray,
+        reds: list[_Red],
+        wavelength_m: float,
+        cell_h: float,
+        floor: float,
+        scale_db_base: float,
+        n_samples: int,
+        *,
+        erp_gate: bool,
+        cancel: _Cancellable | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """One band's exposure ``E = 1 - Π_n (1 - T_n)`` (detection-union over red
+        nodes) plus the per-cell max diffraction loss. Reuses the shared
+        ``_path_weight_chunk`` kernel; ``scale_db`` is stretched per node by ERP
+        class when ``erp_gate`` is on (higher ERP earns less shadow)."""
+        nlat = cell_lat.shape[0]
+        nlon = cell_lon.shape[0]
+        latg, long = np.meshgrid(cell_lat, cell_lon, indexing="ij")
+        miss = np.ones((nlat, nlon), dtype=np.float64)  # Π (1 - T)
+        loss_grid = np.zeros((nlat, nlon), dtype=np.float64)
+        near = raster.cell_deg_lat * _M_PER_DEG_LAT
+        fr = np.linspace(0.0, 1.0, n_samples)
+        chunk = max(1, min(nlat, int(2_000_000 / max(1, nlon * n_samples))))
+        for rd in reds:
+            if cancel is not None and cancel.is_set():
+                raise PosteriorCancelled
+            sdb = scale_db_base * (rd.scale_k if erp_gate else 1.0)
+            for r0 in range(0, nlat, chunk):
+                r1 = min(nlat, r0 + chunk)
+                w, loss, _ = _path_weight_chunk(
+                    raster, latg[r0:r1], long[r0:r1], rd.lat, rd.lon, fr,
+                    wavelength_m, cell_h, rd.h_m, floor, sdb, near,
+                )
+                miss[r0:r1] *= 1.0 - w  # w is the transmission T_n
+                loss_grid[r0:r1] = np.maximum(loss_grid[r0:r1], loss)
+        return 1.0 - miss, loss_grid
+
+    def _exposure_surface(
+        self,
+        eligible: list[_Red],
+        bands_hz: list[float],
+        raster: Raster,
+        *,
+        center_lat: float,
+        center_lon: float,
+        reach_m: float,
+        cell_m: float,
+        floor: float,
+        scale_db: float,
+        asset_h_m: float,
+        n_path_samples: int,
+        band_reduce: str,
+        erp_gate: bool,
+        cancel: _Cancellable | None = None,
+    ) -> dict[str, Any]:
+        """The normalized survival grid + geometry for one lens, shared by
+        ``exposure_geojson`` (polygonize one surface) and ``combined_geojson``
+        (intersect two). Assumes ``eligible`` non-empty and ``raster`` present."""
+        dlat = cell_m / _M_PER_DEG_LAT
+        dlon = cell_m / _m_per_deg_lon(center_lat)
+        nlat = max(8, int(2 * reach_m / cell_m))
+        nlon = nlat
+        north = center_lat + reach_m / _M_PER_DEG_LAT
+        west = center_lon - reach_m / _m_per_deg_lon(center_lat)
+        rows = np.arange(nlat)
+        cols = np.arange(nlon)
+        cell_lat = north - (rows + 0.5) * dlat
+        cell_lon = west + (cols + 0.5) * dlon
+        latg, long = np.meshgrid(cell_lat, cell_lon, indexing="ij")
+        terr_cell = raster.terrain(latg.ravel(), long.ravel()).reshape(nlat, nlon)
+
+        e_stack: list[np.ndarray] = []
+        loss_acc = np.zeros((nlat, nlon), dtype=np.float64)
+        for f in bands_hz:
+            e_b, loss_b = self._exposure_band_grid(
+                raster, cell_lat, cell_lon, eligible, _C / f, asset_h_m,
+                floor, scale_db, n_path_samples, erp_gate=erp_gate, cancel=cancel,
+            )
+            e_stack.append(e_b)
+            loss_acc = np.maximum(loss_acc, loss_b)
+
+        stack = np.stack(e_stack, axis=0)
+        if band_reduce in ("max", "per_band"):  # survive/hide in ALL bands (worst band)
+            exposure = stack.max(axis=0)
+        elif band_reduce == "min":  # OR — best band only (advanced)
+            exposure = stack.min(axis=0)
+        elif band_reduce == "mean":
+            exposure = stack.mean(axis=0)
+        else:
+            raise ValueError(f"unknown band_reduce {band_reduce!r}")
+        survival = 1.0 - exposure
+        smax = float(survival.max())
+        s_norm = survival / smax if smax > 0 else survival
+        # Exposure (danger) field, normalized to its own peak — drives the red
+        # "exposed / jammable" bands when a lens asks for polarity != "safe".
+        emax = float(exposure.max())
+        e_norm = exposure / emax if emax > 0 else exposure
+        return {
+            "s_norm": s_norm, "e_norm": e_norm, "terr_cell": terr_cell,
+            "loss_acc": loss_acc, "north": north, "west": west,
+            "dlat": dlat, "dlon": dlon,
+            "burnthrough": erp_gate and any(r.burnthrough for r in eligible),
+        }
+
+    def exposure_geojson(
+        self,
+        mode: str,
+        reds: list[_Red],
+        bands_hz: list[float],
+        *,
+        center_lat: float,
+        center_lon: float,
+        reach_m: float,
+        cell_m: float,
+        floor: float,
+        scale_db: float,
+        asset_h_m: float,
+        n_path_samples: int = 24,
+        band_reduce: str | None = None,
+        polarity: str = "safe",
+        raster: Raster | None = None,
+        progress_cb: Callable[[float], None] | None = None,
+        cancel: _Cancellable | None = None,
+    ) -> dict[str, Any]:
+        """Survival/cover heatmap for one exposure lens.
+
+        ``polarity`` selects which HDR bands to draw: ``"safe"`` (survival — the
+        green friendly/lower-exposure zones, default), ``"danger"`` (exposure — the
+        red exposed/jammable zones), or ``"both"`` (a diverging green+red map). Both
+        ride the same FeatureCollection; danger features are tagged
+        ``feature_kind="<mode>_danger"`` so the UI colours them separately.
+
+        ``S = 1 - reduce_b(E_b)`` (high = dark = relatively well-covered),
+        normalized to its own peak and polygonized into 50/80/95 % HDR bands by
+        the existing ``_bands``. Honest by construction: relative terrain cover
+        only, floor kept, burnthrough flagged for high-ERP reach sources.
+        """
+        cfg = LENS_CONFIG.get(mode)
+        if cfg is None:
+            raise ValueError(f"unknown exposure mode {mode!r}")
+        active = raster if raster is not None else self._base
+        eligible = [r for r in reds if r.role in cfg["roles"]]
+        reduce = band_reduce or cfg["band_reduce"]
+        erp_gate = bool(cfg["erp_gate"])
+
+        def _empty(note: str) -> dict[str, Any]:
+            return {
+                "type": "FeatureCollection",
+                "features": [],
+                "properties": {"mode": mode, "note": note, "reliable": False},
+            }
+
+        if not bands_hz:
+            return _empty("no bands selected")
+        if not eligible:
+            return _empty(f"no red nodes match this lens (need role in {sorted(cfg['roles'])})")
+        if active is None:
+            return _empty("no terrain raster: exposure needs a DEM/LiDAR surface")
+
+        surf = self._exposure_surface(
+            eligible, bands_hz, active,
+            center_lat=center_lat, center_lon=center_lon, reach_m=reach_m, cell_m=cell_m,
+            floor=floor, scale_db=scale_db, asset_h_m=asset_h_m,
+            n_path_samples=n_path_samples, band_reduce=reduce, erp_gate=erp_gate, cancel=cancel,
+        )
+        if progress_cb is not None:
+            progress_cb(1.0)
+        geom = (surf["terr_cell"], surf["loss_acc"], surf["north"], surf["west"],
+                surf["dlat"], surf["dlon"], bands_hz[0])
+        feats: list[dict[str, Any]] = []
+        if polarity in ("safe", "both"):
+            safe = self._bands(surf["s_norm"], *geom)
+            for ft in safe:
+                ft["properties"]["feature_kind"] = mode
+            feats += safe
+        if polarity in ("danger", "both"):
+            danger = self._bands(surf["e_norm"], *geom)
+            for ft in danger:
+                ft["properties"]["feature_kind"] = f"{mode}_danger"
+            feats += danger
+        obstruction = self._dominant_obstruction(
+            active, center_lat, center_lon, eligible, asset_h_m,
+            float(np.median([r.h_m for r in eligible])),
+        )
+        burnthrough = surf["burnthrough"]
+        src = active.source
+        return {
+            "type": "FeatureCollection",
+            "features": feats,
+            "properties": {
+                "mode": mode,
+                "polarity": polarity,
+                "band_reduce": reduce,
+                "bands_hz": list(bands_hz),
+                "red_node_count": len(eligible),
+                "rf_model": "knife-edge ITU-R P.526",
+                "dominant_obstruction": obstruction,
+                "burnthrough": burnthrough,
+                "reliable": not burnthrough,
+                "dem_source": src,
+                "dem_res_m": active.res_m,
+                "cell_m": cell_m,
+                "n_path_samples": n_path_samples,
+                "note": (
+                    "relative terrain cover (diffraction); soft, floor-clamped — "
+                    "never total. NOT a detectability/safe claim; no power modeled."
+                    + (
+                        " HIGH/VERY-HIGH ERP source: terrain shadow unreliable "
+                        "(burnthrough likely)." if burnthrough else ""
+                    )
+                ),
+            },
+        }
+
+    def combined_geojson(
+        self,
+        reds: list[_Red],
+        *,
+        conceal_bands_hz: list[float],
+        jam_bands_hz: list[float],
+        center_lat: float,
+        center_lon: float,
+        reach_m: float,
+        cell_m: float,
+        floor: float,
+        scale_db: float,
+        asset_h_m: float,
+        n_path_samples: int = 24,
+        polarity: str = "safe",
+        raster: Raster | None = None,
+        cancel: _Cancellable | None = None,
+    ) -> dict[str, Any]:
+        """The 'ideal site' lens: cells that are BOTH concealed from red sensors
+        AND in a jammer's terrain shadow for our links. One survival surface per
+        sub-lens over a shared AOI, intersected by element-wise min (good only if
+        good in both), then the same HDR polygonizer. Honest: still relative cover,
+        floor kept, burnthrough flagged from the jam side."""
+        active = raster if raster is not None else self._base
+        sensors = [r for r in reds if r.role in SENSOR_ROLES]
+        jammers = [r for r in reds if r.role in REACH_ROLES]
+
+        def _empty(note: str) -> dict[str, Any]:
+            return {"type": "FeatureCollection", "features": [],
+                    "properties": {"mode": "combined", "note": note, "reliable": False}}
+
+        if active is None:
+            return _empty("no terrain raster")
+        if not sensors or not jammers:
+            return _empty("combined needs >=1 sensor (df/recon) AND >=1 jammer")
+        if not conceal_bands_hz or not jam_bands_hz:
+            return _empty("combined needs both conceal and jam band sets")
+
+        geom = dict(
+            center_lat=center_lat, center_lon=center_lon, reach_m=reach_m, cell_m=cell_m,
+            floor=floor, scale_db=scale_db, asset_h_m=asset_h_m,
+            n_path_samples=n_path_samples, cancel=cancel,
+        )
+        s1 = self._exposure_surface(sensors, conceal_bands_hz, active,
+                                    band_reduce="max", erp_gate=False, **geom)
+        s2 = self._exposure_surface(jammers, jam_bands_hz, active,
+                                    band_reduce="max", erp_gate=True, **geom)
+        s = np.minimum(s1["s_norm"], s2["s_norm"])  # good only where good in BOTH
+        smax = float(s.max())
+        s_norm = s / smax if smax > 0 else s
+        loss_acc = np.maximum(s1["loss_acc"], s2["loss_acc"])
+        geom = (s1["terr_cell"], loss_acc, s1["north"], s1["west"],
+                s1["dlat"], s1["dlon"], jam_bands_hz[0])
+        feats: list[dict[str, Any]] = []
+        if polarity in ("safe", "both"):
+            safe = self._bands(s_norm, *geom)
+            for ft in safe:
+                ft["properties"]["feature_kind"] = "combined"
+            feats += safe
+        if polarity in ("danger", "both"):
+            d = 1.0 - s  # low "good-in-both" = exposed on either side
+            dmax = float(d.max())
+            d_norm = d / dmax if dmax > 0 else d
+            danger = self._bands(d_norm, *geom)
+            for ft in danger:
+                ft["properties"]["feature_kind"] = "combined_danger"
+            feats += danger
+        return {
+            "type": "FeatureCollection",
+            "features": feats,
+            "properties": {
+                "mode": "combined",
+                "polarity": polarity,
+                "conceal_bands_hz": list(conceal_bands_hz),
+                "jam_bands_hz": list(jam_bands_hz),
+                "sensor_count": len(sensors),
+                "jammer_count": len(jammers),
+                "rf_model": "knife-edge ITU-R P.526",
+                "burnthrough": s2["burnthrough"],
+                "reliable": not s2["burnthrough"],
+                "dem_source": active.source,
+                "dem_res_m": active.res_m,
+                "cell_m": cell_m,
+                "note": "ideal-site = concealed from sensors AND in the jammer's "
+                        "shadow for our links (intersection). Relative cover only; "
+                        "floor kept; not a safe claim."
+                        + (" Burnthrough likely (high-ERP jammer)." if s2["burnthrough"] else ""),
+            },
+        }
+
+    def exposure_probe(
+        self,
+        mode: str,
+        reds: list[_Red],
+        bands_hz: list[float],
+        lat: float,
+        lon: float,
+        *,
+        floor: float,
+        scale_db: float,
+        asset_h_m: float,
+        raster: Raster | None = None,
+        n_path_samples: int = 24,
+    ) -> dict[str, Any]:
+        """Per-red-node breakdown at one cell (hover inspector): for the worst
+        band, each node's distance / clearance / Fresnel v / diffraction loss /
+        transmission, the unioned exposure, and the signed survival."""
+        cfg = LENS_CONFIG.get(mode)
+        if cfg is None:
+            raise ValueError(f"unknown exposure mode {mode!r}")
+        active = raster if raster is not None else self._base
+        eligible = [r for r in reds if r.role in cfg["roles"]]
+        erp_gate = bool(cfg["erp_gate"])
+        if not eligible or active is None or not bands_hz:
+            return {"lat": lat, "lon": lon, "mode": mode, "nodes": [],
+                    "survival": None, "note": "no eligible red nodes / terrain / bands"}
+
+        best: dict[str, Any] | None = None
+        for f in bands_hz:
+            wl = _C / f
+            rows: list[dict[str, Any]] = []
+            miss = 1.0
+            for rd in eligible:
+                sdb = scale_db * (rd.scale_k if erp_gate else 1.0)
+                pb = self._path_breakdown(
+                    active, lat, lon, rd, wl, asset_h_m, rd.h_m, floor, sdb, n_path_samples,
+                )
+                miss *= 1.0 - pb["weight"]
+                rows.append({"node_id": rd.node_id, "erp_class": rd.erp_class, **pb})
+            exposure = 1.0 - miss
+            if best is None or exposure > best["exposure"]:
+                best = {"band_hz": f, "rows": rows, "exposure": exposure}
+
+        assert best is not None
+        burnthrough = erp_gate and any(r.burnthrough for r in eligible)
+        return {
+            "lat": lat, "lon": lon, "mode": mode,
+            "band_hz": best["band_hz"], "wavelength_m": round(_C / best["band_hz"], 4),
+            "dem_source": active.source, "dem_res_m": active.res_m,
+            "nodes": best["rows"],
+            "exposure": round(best["exposure"], 4),
+            "survival": round(1.0 - best["exposure"], 4),
+            "burnthrough": burnthrough,
+            "reliable": not burnthrough,
+            "note": "survival = 1 - Π(1 - transmission) over red nodes, worst band. "
+                    "Relative terrain cover only — no power, not a safe claim.",
+        }
 
 
 def nodes_for_fix(fix: Any, bearings: list[Any]) -> list[_Node]:

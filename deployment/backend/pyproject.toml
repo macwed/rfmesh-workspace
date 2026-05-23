@@ -15,10 +15,16 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "mgrs>=1.5",
-    # rfmesh-cot + rfmesh-contracts are installed by the Dockerfile from the
-    # build context (path installs), not resolved from PyPI. Listed here only
-    # for documentation; do not rely on PyPI resolution for them.
+    "numpy>=1.26",
+    # rasterio + shapely power the LiDAR/DEM read and the HDR polygonizer; they
+    # are imported lazily (try/except) so the package degrades without them, but
+    # the deployed image installs them. rfmesh-cot + rfmesh-contracts are
+    # installed by the Dockerfile from the build context (path installs), not
+    # resolved from PyPI. Listed here only for documentation.
 ]
+
+[dependency-groups]
+dev = ["pytest>=8", "numpy>=1.26"]
 
 [build-system]
 requires = ["hatchling"]
@@ -26,3 +32,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/both3_poc"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

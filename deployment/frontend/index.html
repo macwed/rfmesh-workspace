@@ -3,81 +3,49 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>both3 — RF emitter ops map</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <link rel="stylesheet" href="style.css?v=20260522d" />
+  <title>both3 — RF ops</title>
+  <link rel="stylesheet" href="style.css?v=20260523b" />
 </head>
-<body>
-  <div id="app">
-    <aside id="sidebar">
-      <header id="brand">
-        <span class="dot"></span>
-        <div>
-          <h1>both3</h1>
-          <p class="sub">RF emitter ops — <span id="status-line">connecting…</span></p>
-        </div>
-      </header>
-
-      <section class="panel" id="filters">
-        <h2>Filters</h2>
-        <div class="row" id="conf-filter">
-          <label class="chip high"><input type="checkbox" value="high" checked> HIGH</label>
-          <label class="chip medium"><input type="checkbox" value="medium" checked> MED</label>
-          <label class="chip low"><input type="checkbox" value="low" checked> LOW</label>
-        </div>
-        <div class="row">
-          <label>Emitter
-            <select id="class-filter"><option value="">any</option></select>
-          </label>
-          <label>Min nodes
-            <input id="min-nodes" type="number" min="2" value="2" />
-          </label>
-        </div>
-        <div class="row">
-          <label class="toggle"><input id="show-stale" type="checkbox" checked> show stale</label>
-          <label class="toggle"><input id="show-bearings" type="checkbox" checked> nodes/LOBs</label>
-        </div>
-        <div class="row">
-          <label class="toggle"><input id="show-posterior" type="checkbox" checked> RF-plausibility</label>
-          <span class="info-i" data-tip="Bearing area refined by terrain (knife-edge diffraction). Brightest inner band = most likely. A soft cue, not a target — confirm before acting." tabindex="0" role="button" aria-label="explain">ⓘ</span>
-          <span class="legend"><span class="swatch-cyan"></span>terrain-aware heat</span>
-        </div>
-        <p class="muted small" style="margin:2px 0 0">Soft cue (knife-edge diffraction) — sharpens the ellipse; not a target point.</p>
-      </section>
-
-      <section class="panel grow" id="list-panel">
-        <h2>Fixes <span id="fix-count" class="count">0</span></h2>
-        <ul id="fix-list"></ul>
-      </section>
-
-      <section class="panel" id="detail-panel">
-        <h2>Selected fix</h2>
-        <div id="detail-empty" class="muted">Click a fix on the map or list.</div>
-        <dl id="detail" hidden></dl>
-        <div id="investigation" hidden></div>
-        <div id="engage-wall" class="wall" hidden>— investigate ↑ · disseminate ↓ —</div>
-        <button id="send-btn" hidden>Send to troops →</button>
-        <div id="send-confirm" hidden role="group" aria-label="Confirm send to troops">
-          <p class="confirm-note">Disseminates a CoT/TAK hostile-emitter marker
-            (sensor cue, self-expiring). Deliberate action — or just pick another
-            fix / press Esc to defer.</p>
-          <p class="confirm-note small" id="confirm-target"></p>
-          <div class="confirm-actions">
-            <button id="confirm-cancel" class="ghost">Cancel</button>
-            <button id="confirm-send">Confirm send</button>
-          </div>
-        </div>
-      </section>
-    </aside>
-
-    <main id="map"></main>
+<body data-page="hub">
+  <div id="hub">
+    <header id="hub-head">
+      <span class="dot"></span>
+      <div><h1>both3 — RF ops</h1>
+        <p class="sub">pick a context · <span class="muted">red = red team / threat · green = friendly / lower-exposure</span></p></div>
+    </header>
+    <div class="hub-grid">
+      <a class="hub-card c-locate" href="locate.html">
+        <div class="hc-icon">🎯</div>
+        <h2>Locate emitter</h2>
+        <p>Find a red jammer/emitter from the live mesh bearings + terrain. Red = the threat, green = your sensors.</p>
+        <span class="hc-go">open →</span>
+      </a>
+      <a class="hub-card c-jam" href="jam.html">
+        <div class="hc-icon">📡</div>
+        <h2>Avoid jamming</h2>
+        <p>Place red jammers, pick your links — see where they survive (green) vs get jammed (red).</p>
+        <span class="hc-go">open →</span>
+      </a>
+      <a class="hub-card c-hide" href="hide.html">
+        <div class="hc-icon">👁</div>
+        <h2>Hide from sensors</h2>
+        <p>Place red DF/ESM sensors, pick threat bands — terrain cover (green) vs exposed (red).</p>
+        <span class="hc-go">open →</span>
+      </a>
+      <a class="hub-card c-emit" href="emit.html">
+        <div class="hc-icon">📶</div>
+        <h2>Site an emitter</h2>
+        <p>Where your transmitter stays quiet toward red (green) vs leaks (red).</p>
+        <span class="hc-go">open →</span>
+      </a>
+      <a class="hub-card c-ideal" href="ideal.html">
+        <div class="hc-icon">✦</div>
+        <h2>Ideal site</h2>
+        <p>Hidden from sensors AND links survive — the intersection (green = good on both).</p>
+        <span class="hc-go">open →</span>
+      </a>
+    </div>
+    <p class="hub-foot muted small">Relative terrain-diffraction cues — not calibrated power, never a "safe" guarantee. ADR-016/017.</p>
   </div>
-
-  <div id="toasts" aria-live="polite"></div>
-
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="app.js?v=20260522d"></script>
 </body>
 </html>
