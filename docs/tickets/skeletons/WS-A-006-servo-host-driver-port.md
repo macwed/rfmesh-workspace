@@ -1,3 +1,5 @@
+**Status: CLOSED in defd4d4**
+
 # TICKET WS-A-006: Port servo host driver from `macwed/rf-mesh` salvage
 
 ## Goal (one sentence)
