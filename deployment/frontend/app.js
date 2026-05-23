@@ -141,7 +141,7 @@ const LEGEND_ROWS = [
   {
     k: "ellipse",
     swatch: '<span class="lg-line" style="border-top:2px dashed #f1c40f"></span>',
-    label: "bearing 95% ellipse",
+    label: "95% estimated emitter area",
     means: "Where the emitter likely is, from crossed sensor bearings alone.",
     read: "Smaller = more certain; long & thin = sensors nearly in a line (weak geometry — check GDOP).",
     act: "Treat as the search area.",
@@ -292,6 +292,11 @@ const THREAT = "#ff4d4f";
 function confColor(props) {
   if (props.stale) return STALE_COLOR;
   return THREAT;
+}
+function confidenceColor(props) {
+  if (props.stale) return STALE_COLOR;
+  const level = String(props.confidence_level).toLowerCase();
+  return COLORS[level === "med" ? "medium" : level] || COLORS.low;
 }
 // Confidence → fill opacity (stronger = more certain) so the red emitter still
 // shows certainty without changing hue.
@@ -1003,17 +1008,18 @@ function render() {
     const color = confColor(props);
     const ring = state.ellipses.get(id);
     if (ring) {
+      const ellipseColor = confidenceColor(props);
       // When the heat is shown under a selected fix, draw the ellipse as a
       // DASHED OUTLINE only so the cyan posterior is the readable fill and the
       // two layers don't blend into one blob.
       const outline = sel && heatOn;
       L.polygon(ring, {
-        color, weight: sel ? 3 : 1.5, opacity: sel ? 1 : 0.85,
-        fillColor: color,
+        color: ellipseColor, weight: sel ? 3 : 1.5, opacity: sel ? 1 : 0.85,
+        fillColor: ellipseColor,
         fillOpacity: props.stale ? 0.04 : (outline ? 0.0 : (sel ? confOpacity(props) + 0.06 : confOpacity(props))),
         dashArray: outline ? "7 5" : (props.stale ? "4 4" : null),
       })
-        .bindTooltip(`Bearing 95% ellipse · ${props.confidence_level.toUpperCase()}`, { sticky: true })
+        .bindTooltip("95% estimated emitter area", { sticky: true })
         .on("click", () => selectFix(id)).addTo(ellipseLayer);
     }
     const c = state.centers.get(id);
@@ -1064,22 +1070,34 @@ function render() {
 
 function renderList(f) {
   const ul = $("#fix-list");
+  const detailPanel = $("#detail-panel");
+  detailPanel.remove();
   ul.innerHTML = "";
   const items = [...state.fixes.values()]
     .filter((p) => passesFilter(p, f))
     .sort((a, b) => b.t_unix_ns - a.t_unix_ns);
   $("#fix-count").textContent = items.length;
+  let detailPlaced = false;
   for (const p of items) {
     const li = document.createElement("li");
     li.className = "fix-item" + (p.fix_id === state.selected ? " selected" : "") + (p.stale ? " stale" : "");
     li.innerHTML = `
-      <span class="swatch" style="background:${confColor(p)}"></span>
+      <span class="swatch" style="background:${confidenceColor(p)}"></span>
       <div>
         <div class="meta"><b>${p.confidence_level.toUpperCase()}</b> · ${p.contributing_nodes.length} nodes · ${fmtAge(p)}</div>
         <div class="meta">GDOP ${p.gdop.toFixed(2)} · ${p.method}${p.emitter_class ? " · " + p.emitter_class : ""}</div>
       </div>`;
     li.onclick = () => selectFix(p.fix_id);
     ul.appendChild(li);
+    if (p.fix_id === state.selected) {
+      const slot = document.createElement("li");
+      slot.appendChild(detailPanel);
+      ul.appendChild(slot);
+      detailPlaced = true;
+    }
+  }
+  if (!detailPlaced) {
+    $("#list-panel").after(detailPanel);
   }
 }
 
@@ -1134,6 +1152,19 @@ function renderDetail() {
 }
 
 function selectFix(id) {
+  if (id === state.selected) {
+    state.armed = false;
+    state.selected = null;
+    state.posterior = null;
+    state.investigation = null;
+    state.emitterH = null;
+    if (state.enhance) cancelEnhance("aborted");
+    state.enhanced = null;
+    state.panelOpen = false;
+    renderPosterior();
+    render();
+    return;
+  }
   if (id !== state.selected) {
     state.armed = false; // picking another fix defers any pending send
     state.posterior = null; // drop stale heat until the new one loads

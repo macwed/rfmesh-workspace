@@ -193,7 +193,7 @@ class FixPanel(Panel):
         if level is ConfidenceLevel.HIGH:
             return "green"
         if level is ConfidenceLevel.MEDIUM:
-            return "orange"
+            return "yellow"
         return "red"
 
     def _range_to_fix_m(self, east_m: float, north_m: float) -> float:
