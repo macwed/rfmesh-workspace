@@ -48,8 +48,10 @@ from .capabilities import build_estimators, detect_active_capabilities
 
 if TYPE_CHECKING:
     from rfmesh_contracts import BearingEstimator
+    from rfmesh_servo.driver import ServoDriver
 
     from .l1_sweep import L1SweepLoop
+    from .rendezvous import RendezvousLoop
 
 
 _LOG = logging.getLogger(__name__)
@@ -73,6 +75,8 @@ class Node:
         receiver: Receiver,
         bearer: Bearer | None = None,
         sweep_loop: L1SweepLoop | None = None,
+        rendezvous_loop: RendezvousLoop | None = None,
+        servo: ServoDriver | None = None,
     ) -> None:
         """Bind the node config and the receiver (and optionally the bearer).
 
@@ -89,6 +93,13 @@ class Node:
         self._receiver = receiver
         self._bearer = bearer
         self._sweep_loop = sweep_loop
+        self._rendezvous_loop = rendezvous_loop
+        # Servo lifecycle is owned here (not in the sweep loop) so the sweep
+        # and rendezvous loops can share one connected servo without
+        # re-enumerating the USB-CDC link on every mode flip (ADR-019).
+        self._servo = servo
+        # Operator-facing rendezvous state, surfaced via NodeStatus.status_detail.
+        self._rendezvous_status_detail = ""
         self._estimators: tuple[BearingEstimator, ...] = ()
         self._active_capabilities: tuple[Capability, ...] = ()
         self._tasks: list[asyncio.Task[None]] = []
@@ -105,17 +116,27 @@ class Node:
         try:
             self._open_receiver()
             self._build_pipeline()
+            # Connect the servo once, here, before any servo-driving task
+            # starts (ADR-019: lifecycle hoisted out of L1SweepLoop so the
+            # sweep and rendezvous loops share one connected servo).
+            if self._servo is not None:
+                await asyncio.to_thread(self._servo.connect)
             self._tasks = [
                 asyncio.create_task(self._heartbeat_loop(), name="node-heartbeat"),
             ]
-            # L1 sweep loop: only when an L1 sweep was wired (servo present
-            # and L1_RSSI active). It drives the receiver -> servo ->
-            # estimator -> bearer cycle the v1.0 container otherwise omits.
-            if self._sweep_loop is not None:
+            # Servo-driving task: exactly one, so only one writer touches the
+            # single-outstanding-command servo at a time (ADR-019).
+            #  * rendezvous wired -> the supervisor owns the servo and
+            #    time-shares it with the jammer sweep (link-hold <-> DF sweep);
+            #  * else L1 sweep wired -> the plain blind-sweep loop;
+            #  * else heartbeat-only (the v1.0 container behaviour).
+            if self._rendezvous_loop is not None:
                 self._tasks.append(
-                    asyncio.create_task(
-                        self._sweep_loop.run(self._stopping), name="node-l1-sweep"
-                    )
+                    asyncio.create_task(self._rendezvous_supervisor(), name="node-rendezvous")
+                )
+            elif self._sweep_loop is not None:
+                self._tasks.append(
+                    asyncio.create_task(self._sweep_loop.run(self._stopping), name="node-l1-sweep")
                 )
             await self._stopping.wait()
         finally:
@@ -174,6 +195,36 @@ class Node:
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self._stopping.wait(), timeout=interval_s)
 
+    async def _rendezvous_supervisor(self) -> None:
+        """Time-share the servo: acquire+hold the directional link, break to DF.
+
+        ADR-019. Owns the servo for the whole cycle so it is the only ``move``
+        writer. Acquire the peer link; on lock, hold for ``link_hold_s`` then
+        yield the servo to one jammer ``L1SweepLoop`` pass and re-acquire. On
+        failure, surface the loud reason and (if a sweep is wired) keep doing
+        jammer DF while retrying the link.
+        """
+        rv = self._rendezvous_loop
+        if rv is None:  # pragma: no cover - guarded by the caller
+            return
+        cfg = rv.config
+        sweep = self._sweep_loop
+        while not self._stopping.is_set():
+            locked = await rv.acquire(self._stopping)
+            self._rendezvous_status_detail = rv.last_status
+            if not locked:
+                # FAILED: do useful jammer DF (if wired) instead of spinning,
+                # then pause and retry the link.
+                if sweep is not None and not self._stopping.is_set():
+                    await sweep.run_once(self._stopping)
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(self._stopping.wait(), timeout=cfg.retry_pause_s)
+                continue
+            # LOCKED: hold the link, then break for one jammer sweep, re-acquire.
+            await rv.hold(self._stopping, cfg.link_hold_s)
+            if sweep is not None and not self._stopping.is_set():
+                await sweep.run_once(self._stopping)
+
     def _build_status(self) -> NodeStatus:
         # Surface bearer health into status_detail when the bearer exposes
         # a health_summary() method (e.g. BothBearer reports "LoRa bearer
@@ -189,6 +240,11 @@ class Node:
             except Exception:
                 _LOG.exception("Node._build_status: bearer.health_summary failed")
                 status_detail = ""
+        # Rendezvous state is the active operational status when running; it
+        # takes precedence over bearer health so the dashboard shows lock /
+        # loud-failure reasons (ADR-019, E1 status_detail channel).
+        if self._rendezvous_status_detail:
+            status_detail = self._rendezvous_status_detail
         return NodeStatus(
             node_id=self._config.node_id,
             t_unix_ns=time.time_ns(),
@@ -213,6 +269,11 @@ class Node:
                 self._bearer.close()
             except Exception as exc:
                 _LOG.exception("Node.teardown: bearer.close failed: %s", exc)
+        if self._servo is not None:
+            try:
+                self._servo.close()
+            except Exception as exc:
+                _LOG.exception("Node.teardown: servo.close failed: %s", exc)
         self._running = False
 
     # ------------------------------------------------------------------

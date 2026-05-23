@@ -106,8 +106,8 @@ async def test_sweep_loop_emits_and_sends_a_bearing() -> None:
         stopping.set()
         await asyncio.wait_for(task, timeout=5.0)
 
-    assert servo.connected
-    assert servo.closed
+    # Servo connect/close is owned by Node, not L1SweepLoop (ADR-019); this
+    # unit test drives the loop directly, so it does not exercise lifecycle.
     assert bearer.sent, "loop produced no bearing"
     report = bearer.sent[0]
     truth = (_BORESIGHT + _TRUE_OFFSET) % 360.0
