@@ -66,11 +66,17 @@
         <h2>Nodes</h2>
         <ul id="node-list" class="nodes"></ul>
         <p id="no-nodes-hint" class="caveat">
-          No node connected. On the field Pi (systemd), check
-          <code>journalctl -u rfmesh-node -f</code>. For a bench run, see
-          <code>field-deploy/node-config.example.yaml</code> + invoke
-          <code>rfmesh-node --config &lt;path.yaml&gt;</code>.
+          No node connected. Check the node has power, the antenna is mounted,
+          and the operator AP / cellular link is up. The node will appear here
+          as soon as it phones home.
         </p>
+        <details id="no-nodes-hint-admin" class="caveat" hidden>
+          <summary>Admin / bench</summary>
+          On the field Pi (systemd), tail
+          <code>journalctl -u rfmesh-node -f</code>. For a bench run, copy
+          <code>field-deploy/node-config.example.yaml</code> and invoke
+          <code>rfmesh-node --config &lt;path.yaml&gt;</code>.
+        </details>
       </section>
 
       <!-- Detail drawer: shown when a node is selected. -->

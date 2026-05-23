@@ -211,24 +211,36 @@
 
     // ADR-022 manual-steer slider clamp: if the node has reported a
     // calibrated_geographic_arc_deg in its node_hello, clamp the slider
-    // to that arc. Otherwise leave it disabled (B3 — never let the
-    // operator command an angle the system cannot verify).
+    // to that arc. A wrap-around arc (min > max — straddles 0° true)
+    // is not safely representable on a single linear <input type=range>;
+    // refuse loudly rather than render a broken slider (B3).
+    n.cal_arc_wraps = false;
     if (n.cal_arc && Number.isFinite(n.cal_arc.min) && Number.isFinite(n.cal_arc.max)) {
-      detailSliderEl.min = n.cal_arc.min;
-      detailSliderEl.max = n.cal_arc.max;
-      const cur = parseFloat(detailSliderEl.value);
-      if (!(cur >= n.cal_arc.min && cur <= n.cal_arc.max)) {
-        const mid = (n.cal_arc.min + n.cal_arc.max) / 2;
-        detailSliderEl.value = mid;
-        detailSliderValEl.textContent = `${mid.toFixed(1)}°`;
+      if (n.cal_arc.min > n.cal_arc.max) {
+        n.cal_arc_wraps = true;
+        console.warn(
+          `${n.node_id}: calibrated arc straddles 0° (` +
+            `${n.cal_arc.min}-${n.cal_arc.max}); slider disabled until ` +
+            `wrap-arc rendering ships.`,
+        );
+      } else {
+        detailSliderEl.min = n.cal_arc.min;
+        detailSliderEl.max = n.cal_arc.max;
+        const cur = parseFloat(detailSliderEl.value);
+        if (!(cur >= n.cal_arc.min && cur <= n.cal_arc.max)) {
+          const mid = (n.cal_arc.min + n.cal_arc.max) / 2;
+          detailSliderEl.value = mid;
+          detailSliderValEl.textContent = `${mid.toFixed(1)}°`;
+        }
       }
     }
 
     // Steering controls enabled iff (a) WS to backend is up,
-    // (b) node has a known calibrated arc, (c) node has a wired
-    // controller (ADR-022 stub refuses until NodeController lands),
-    // (d) node is not in FAULT.
-    const calibrated = !!(n.cal_arc && Number.isFinite(n.cal_arc.min));
+    // (b) node has a known calibrated arc that does NOT wrap 0°,
+    // (c) node has a wired controller (ADR-022 stub refuses until
+    // NodeController lands), (d) node is not in FAULT.
+    const calibrated =
+      !!(n.cal_arc && Number.isFinite(n.cal_arc.min)) && !n.cal_arc_wraps;
     const controllerReady = !!n.controller_ready;
     const canSteer =
       state.wsConnected && calibrated && controllerReady && n.state !== "fault";
@@ -237,10 +249,13 @@
     if (!canSteer) {
       let reason;
       if (!state.wsConnected) reason = "Backend offline — controls disabled.";
-      else if (!calibrated) reason = "Node arc unknown — awaiting node_hello.";
-      else if (!controllerReady)
-        reason = "NodeController not wired (ADR-022 stub) — steer disabled.";
-      else reason = "Node is FAULT — manual steering disabled.";
+      else if (!calibrated) reason = "Node arc unknown — awaiting handshake.";
+      else if (!controllerReady) {
+        reason = "Manual steering not yet enabled on this node.";
+        console.warn(
+          `${n.node_id}: NodeController not wired (ADR-022 stub); steer disabled.`,
+        );
+      } else reason = "Node is FAULT — manual steering disabled.";
       detailMsgEl.textContent = reason;
       detailMsgEl.style.color = "var(--low)";
     } else {
