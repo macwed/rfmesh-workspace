@@ -154,9 +154,11 @@ def test_run_calibration_default_persist_is_no() -> None:
 
 def test_run_calibration_reprompts_on_inverted_angles() -> None:
     driver = _mock_driver()
-    # First angle_at_max (-95) inverts the range; user re-enters
+    # Opposite-sign observations (90, -95) trigger the inverted-mount
+    # auto-detect prompt. Decline ("n") to fall through to the original
+    # validation-failure re-prompt path; the operator then re-enters
     # angle_at_min (-90) and angle_at_max (+90).
-    fake_input, _ = _scripted_input(["", "90.0", "", "-95.0", "-90.0", "90.0", "n"])
+    fake_input, _ = _scripted_input(["", "90.0", "", "-95.0", "n", "-90.0", "90.0", "n"])
     out, print_fn = _capture_output()
 
     cal = servo_calibrate.run_calibration(
@@ -168,6 +170,30 @@ def test_run_calibration_reprompts_on_inverted_angles() -> None:
     assert cal.angle_min_deg == -90.0
     assert cal.angle_max_deg == 90.0
     assert any("rejected:" in line for line in out)
+
+
+def test_run_calibration_auto_detect_inverted_accept() -> None:
+    """Opposite-sign observations + 'y' → inverted mode applied automatically.
+
+    Operator observes the mast at +85° when servo is at pulse_min and
+    at -88° when at pulse_max — classic inverted-mount signature. Tool
+    detects, prompts, operator accepts, calibration stores the negated
+    angles so the firmware validator passes.
+    """
+    driver = _mock_driver()
+    fake_input, _ = _scripted_input(["", "85.0", "", "-88.0", "y", "n"])
+    out, print_fn = _capture_output()
+
+    cal = servo_calibrate.run_calibration(
+        driver,
+        axis=0,
+        input_fn=fake_input,  # type: ignore[arg-type]
+        print_fn=print_fn,
+    )
+    # Operator observed +85 / -88 but inverted mode negates before storing.
+    assert cal.angle_min_deg == -85.0
+    assert cal.angle_max_deg == 88.0
+    assert any("Inverted-direction mode ON" in line for line in out)
 
 
 def test_run_calibration_reprompt_re_asks_both_endpoints() -> None:
