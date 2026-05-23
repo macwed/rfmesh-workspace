@@ -1,3 +1,5 @@
+**Status: CLOSED in 6acf482 (WS-A-007a S2 port) + 481288c (WS-A-007b LoRa beacon). SUPERSEDED by ADR-015 (C6 replaces S2 as firmware target).**
+
 # TICKET WS-A-007: ESP32-S2 firmware port + LoRa beacon firmware
 
 ## Goal (one sentence)
