@@ -344,6 +344,57 @@ def _append_polygon(
     ET.SubElement(detail, "labels_on", attrib={"value": "true"})
 
 
+def build_self_sa_xml(
+    uid: str,
+    callsign: str,
+    lat_deg: float = 0.0,
+    lon_deg: float = 0.0,
+    stale_after_s: float = 120.0,
+    team: str = "Cyan",
+    role: str = "Team Member",
+) -> bytes:
+    """Render a self-SA (self situational-awareness) presence event.
+
+    A long-lived sender (the operator console server) sends this on
+    connect and periodically to identify itself as a connected client, so
+    FreeTAKServer relays its operator markers to the other connected ATAK
+    clients. The marker is a friendly ground-unit (``a-f-G-U-C``) carrying
+    a ``<__group>`` (TAK team colour + role). Pass a far-away / 0,0
+    position so the presence icon does not clutter the operational area.
+    """
+    t_ns = time.time_ns()
+    time_str = _format_cot_time(t_ns)
+    stale_str = _format_stale_time(t_ns, stale_after_s)
+    event = ET.Element(
+        "event",
+        attrib={
+            "version": "2.0",
+            "type": "a-f-G-U-C",
+            "uid": uid,
+            "time": time_str,
+            "start": time_str,
+            "stale": stale_str,
+            "how": "m-g",
+        },
+    )
+    ET.SubElement(
+        event,
+        "point",
+        attrib={
+            "lat": f"{lat_deg:.{_LATLON_PRECISION}f}",
+            "lon": f"{lon_deg:.{_LATLON_PRECISION}f}",
+            "hae": "0.0",
+            "ce": _CE_UNKNOWN,
+            "le": _CE_UNKNOWN,
+        },
+    )
+    detail = ET.SubElement(event, "detail")
+    ET.SubElement(detail, "contact", attrib={"callsign": callsign})
+    ET.SubElement(detail, "__group", attrib={"name": team, "role": role})
+    blob: bytes = ET.tostring(event, encoding="utf-8")
+    return blob
+
+
 def operator_delete_to_cot_xml(uid: str, t_unix_ns: int | None = None) -> bytes:
     """Render a CoT *delete* event that removes the marker with ``uid``.
 

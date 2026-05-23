@@ -15,6 +15,7 @@ members = [
     "rfmesh-fusion",
     "rfmesh-ml",
     "rfmesh-node",
+    "rfmesh-operator-console",
     "rfmesh-ops",
     "rfmesh-sdr",
     "rfmesh-servo",
@@ -1778,6 +1779,23 @@ requires-dist = [
 ]
 
 [[package]]
+name = "rfmesh-operator-console"
+version = "0.1.0"
+source = { editable = "apps/operator-console" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "rfmesh-contracts" },
+    { name = "rfmesh-cot" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiohttp", specifier = ">=3.9" },
+    { name = "rfmesh-contracts", editable = "packages/rfmesh-contracts" },
+    { name = "rfmesh-cot", editable = "packages/rfmesh-cot" },
+]
+
+[[package]]
 name = "rfmesh-ops"
 version = "0.1.0"
 source = { editable = "packages/rfmesh-ops" }
@@ -1838,6 +1856,7 @@ dependencies = [
     { name = "rfmesh-fusion" },
     { name = "rfmesh-ml" },
     { name = "rfmesh-node" },
+    { name = "rfmesh-operator-console" },
     { name = "rfmesh-ops" },
     { name = "rfmesh-sdr" },
     { name = "rfmesh-servo" },
@@ -1866,6 +1885,7 @@ requires-dist = [
     { name = "rfmesh-fusion", editable = "packages/rfmesh-fusion" },
     { name = "rfmesh-ml", editable = "packages/rfmesh-ml" },
     { name = "rfmesh-node", editable = "packages/rfmesh-node" },
+    { name = "rfmesh-operator-console", editable = "apps/operator-console" },
     { name = "rfmesh-ops", editable = "packages/rfmesh-ops" },
     { name = "rfmesh-sdr", editable = "packages/rfmesh-sdr" },
     { name = "rfmesh-servo", editable = "packages/rfmesh-servo" },

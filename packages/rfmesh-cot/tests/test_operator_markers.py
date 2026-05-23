@@ -17,6 +17,7 @@ from xml.etree import ElementTree as ET
 import pytest
 from rfmesh_cot import (
     OperatorMarker,
+    build_self_sa_xml,
     operator_delete_to_cot_xml,
     operator_marker_to_cot_xml,
     template,
@@ -117,6 +118,16 @@ def test_delete_event_targets_uid() -> None:
     link = ev.find("./detail/link")
     assert link is not None and link.attrib["uid"] == "rfmesh.op.hostile.jammer-a"
     assert ev.find("./detail/__forcedelete") is not None
+
+
+def test_self_sa_is_friendly_with_group() -> None:
+    ev = _parse(build_self_sa_xml("console.self.x", "13-cj-console", team="Cyan"))
+    assert ev.attrib["type"] == "a-f-G-U-C"
+    assert ev.attrib["uid"] == "console.self.x"
+    contact = ev.find("./detail/contact")
+    assert contact is not None and contact.attrib["callsign"] == "13-cj-console"
+    grp = ev.find("./detail/__group")
+    assert grp is not None and grp.attrib["name"] == "Cyan"
 
 
 def test_stale_override_applies() -> None:

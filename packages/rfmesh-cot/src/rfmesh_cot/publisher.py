@@ -223,6 +223,22 @@ class PyTAKCotPublisher:
             raise CotEncodingError(msg) from exc
         self._enqueue_threadsafe(blob)
 
+    def publish_raw(self, blob: bytes) -> None:
+        """Enqueue a pre-encoded CoT ``<event>`` blob as-is (advanced).
+
+        Thread-safe, like :meth:`publish_marker`. The caller owns the
+        bytes; no validation is done. The motivating use is a **self-SA /
+        keepalive** frame: FreeTAKServer relays a sender's CoT to other
+        connected clients only while that sender behaves like a connected
+        client -- it must identify itself (a self-SA event) and hold the
+        connection open. A long-lived publisher (e.g. the operator
+        console server) sends a self-SA on connect and periodically
+        thereafter via this method so its markers are actually relayed.
+        See ``build_self_sa_xml`` in ``operator.py``.
+        """
+        self._check_open()
+        self._enqueue_threadsafe(blob)
+
     def close(self) -> None:
         """Tear down the transport. Idempotent; safe in cleanup paths.
 
