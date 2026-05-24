@@ -13,6 +13,9 @@
 
 #include "tcp_server.h"
 
+#include <errno.h>
+#include <stdbool.h>
+
 #include "esp_log.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
@@ -28,17 +31,32 @@ static const char *TAG = "tcp_server";
 
 #define RX_CHUNK_BYTES 64
 
-static void send_wire_tcp(int sock, const uint8_t *wire, size_t len) {
-    if (len == 0) return;
-    // send() returns -1 on error or partial on EAGAIN; we want
-    // all-or-error semantics matching USB send_wire(). The lwip
-    // default blocking send loops until the kernel queue drains, so
-    // a single send call is sufficient on a healthy socket. A short
-    // send is logged loud (B3 -- never silently truncate a frame).
-    const int written = send(sock, wire, len, 0);
-    if (written < 0 || (size_t)written != len) {
-        ESP_LOGW(TAG, "short send: %d / %u", written, (unsigned)len);
+// Returns true if every byte was sent, false on error / partial send
+// (after which the caller MUST close the socket -- the frame on the
+// wire is now truncated and any further send would interleave with the
+// next reply). Loops on partial writes (lwip can return short under
+// memory pressure / slow client backpressure), but bails on any
+// negative return code other than EINTR. B3: never silently truncate
+// a frame; either the whole reply lands or the connection drops.
+static bool send_wire_tcp(int sock, const uint8_t *wire, size_t len) {
+    if (len == 0) return true;
+    size_t sent = 0;
+    while (sent < len) {
+        const int n = send(sock, wire + sent, len - sent, 0);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            ESP_LOGW(TAG, "send error after %u/%u bytes: errno=%d",
+                     (unsigned)sent, (unsigned)len, errno);
+            return false;
+        }
+        if (n == 0) {
+            ESP_LOGW(TAG, "send returned 0 after %u/%u bytes (peer closed)",
+                     (unsigned)sent, (unsigned)len);
+            return false;
+        }
+        sent += (size_t)n;
     }
+    return true;
 }
 
 static void serve_client(int sock) {
@@ -50,8 +68,10 @@ static void serve_client(int sock) {
     // Unsolicited startup PONG, mirroring the USB protocol_main_loop
     // contract (servo_uart_v1 §4.5). Lets the laptop driver confirm
     // the firmware version + uptime as soon as the TCP link is up.
+    // A failed PONG send means the TCP link broke before we even got
+    // a request out -- drop the client and let the accept loop spin.
     const size_t pong_len = dispatch_build_pong(wire_out);
-    send_wire_tcp(sock, wire_out, pong_len);
+    if (!send_wire_tcp(sock, wire_out, pong_len)) return;
 
     uint8_t buf[RX_CHUNK_BYTES];
     while (true) {
@@ -70,7 +90,12 @@ static void serve_client(int sock) {
             post_action_t post = POST_ACTION_NONE;
             const size_t reply_len = dispatch_handle(
                 rx.decoded, rx.decoded_len, wire_out, &post);
-            send_wire_tcp(sock, wire_out, reply_len);
+            // Short send = wire is now corrupt for this client. Drop
+            // the connection so the laptop sees a clean reset and
+            // reconnects with a fresh proto_rx state, instead of
+            // trying to decode an interleaved next reply (B3 -- never
+            // silently truncate a frame).
+            if (!send_wire_tcp(sock, wire_out, reply_len)) return;
             if (post == POST_ACTION_RESET) {
                 // Give the TCP stack a moment to flush the reply
                 // before we yank the rug. Mirrors the USB §3.11

@@ -115,15 +115,29 @@ def _honest_sigma_deg(prominence_db: float, step_deg: float, hpbw_deg: float) ->
     """1-σ azimuth uncertainty for an amplitude-sweep peak (B2).
 
     Standard amplitude-DF CRLB approximation
-    ``sigma ≈ HPBW / (1.6 * sqrt(2 * SNR_linear))``. SNR_linear is
-    derived from the peak's prominence above the run-min floor. The
-    result is clamped to ``[1°, step_deg]``: a step-coarse scan cannot
-    honestly claim sub-1° accuracy, and a strong-SNR peak is still
-    bounded below by the discrete-grid uniform-half-step prior.
+    ``sigma ≈ HPBW / (1.6 * sqrt(2 * SNR_linear))``. The 1.6 prefactor
+    is the standard amplitude-monopulse CRLB constant (Sherman & Barton,
+    *Monopulse Principles and Techniques*, 2nd ed., eq. 5.20); SNR_linear
+    is derived from the peak's prominence above the run-min floor.
+
+    **Scope note (B2 boundary):** this function lives in a bench
+    operator-script, not a :class:`BearingEstimator` inside ``rfmesh-dsp``.
+    The binding B2 sigma-honesty Monte-Carlo gate (±20% band at SNR ∈
+    {10, 20, 30} dB) applies to in-package estimators; a one-shot
+    operator-paced manual sweep is a different regime (operator-induced
+    pointing error dominates SNR-induced error). The clamp floor at
+    ``step_deg / 2`` -- the uniform-half-step discretisation bound --
+    is the honest lower bound regardless of SNR: a 30°-step hand sweep
+    cannot truthfully claim < 15° accuracy, no matter how strong the
+    peak. A follow-up Monte-Carlo validation against the simulator is
+    parked in `scripts/TODO-manual-sweep-sigma-validation.md`.
     """
     snr_lin = 10.0 ** (max(0.0, prominence_db) / 10.0)
     sigma = hpbw_deg / (1.6 * np.sqrt(2.0 * max(1.0, snr_lin)))
-    return float(np.clip(sigma, 1.0, step_deg))
+    # Floor at step_deg/2 (discretisation bound); ceiling at step_deg
+    # (no peak can be more uncertain than the step). 1° absolute floor
+    # belt-and-suspenders.
+    return float(np.clip(sigma, max(1.0, step_deg / 2.0), step_deg))
 
 
 def _print_summary(

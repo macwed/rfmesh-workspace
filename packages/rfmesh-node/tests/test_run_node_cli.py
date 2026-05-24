@@ -72,3 +72,42 @@ def test_cli_rejects_schema_invalid(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 # stand up the receiver / servo / bearer stack, and exercising it without
 # mocks risks blocking on the actual RTL-SDR library. The load path
 # itself is covered by test_runtime_config.py (model_validate).
+
+
+# --- ADR-027: _build_servo URL parsing (TcpTransport vs SerialTransport) ---
+
+
+def _runtime_with_servo_port(port_value: str) -> object:
+    """Minimal NodeRuntimeConfig-shaped stub for _build_servo unit tests.
+
+    We do not call NodeRuntimeConfig.model_validate here because that
+    would also require a valid `node:` block (Pydantic frozen contract).
+    The function under test only reads `runtime.servo_port` and
+    `runtime.node.capabilities`, so a SimpleNamespace is enough.
+    """
+    from types import SimpleNamespace
+
+    from rfmesh_contracts.enums import Capability
+
+    return SimpleNamespace(
+        servo_port=port_value,
+        node=SimpleNamespace(capabilities=(Capability.L1_RSSI,)),
+    )
+
+
+def test_build_servo_rejects_tcp_url_without_host() -> None:
+    """`tcp://` with no host is a loud config error, not a stack trace."""
+    from rfmesh_node.cli.run_node import _build_servo
+
+    runtime = _runtime_with_servo_port("tcp://:5555")
+    with pytest.raises(ValueError, match="missing a hostname"):
+        _build_servo(runtime)  # type: ignore[arg-type]
+
+
+def test_build_servo_rejects_tcp_url_with_bad_port() -> None:
+    """`tcp://host:999999` is rejected with a port-range message."""
+    from rfmesh_node.cli.run_node import _build_servo
+
+    runtime = _runtime_with_servo_port("tcp://node-01.local:999999")
+    with pytest.raises(ValueError, match="invalid port"):
+        _build_servo(runtime)  # type: ignore[arg-type]

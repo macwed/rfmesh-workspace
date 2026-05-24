@@ -171,14 +171,26 @@ def _build_servo(runtime: NodeRuntimeConfig) -> ServoDriver | None:
         from urllib.parse import urlparse  # noqa: PLC0415
 
         parsed = urlparse(port_str)
+        # Parse + validate eagerly so malformed YAML fails at startup
+        # (B3) with an actionable message, instead of dying mid-init
+        # with a stdlib stack trace from urllib or socket.
         host = parsed.hostname
         if not host:
             msg = (
                 f"_build_servo: servo_port={port_str!r} is missing a hostname; "
-                "expected 'tcp://host:port' (e.g. 'tcp://node-01.local:5555')."
+                "expected 'tcp://host:port' (e.g. 'tcp://node-01.local:5555' "
+                "or 'tcp://192.168.4.11:5555')."
             )
             raise ValueError(msg)
-        tcp_port = parsed.port if parsed.port is not None else 5555
+        try:
+            raw_port = parsed.port  # urllib raises on out-of-range ports.
+        except ValueError as exc:
+            msg = (
+                f"_build_servo: servo_port={port_str!r} has an invalid port "
+                f"({exc}); expected an integer in [1, 65535]."
+            )
+            raise ValueError(msg) from exc
+        tcp_port = raw_port if raw_port is not None else 5555
         transport = TcpTransport(host=host, port=tcp_port)
     else:
         transport = SerialTransport(port_str)
