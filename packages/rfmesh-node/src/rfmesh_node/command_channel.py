@@ -41,11 +41,13 @@ from typing import Any
 
 import aiohttp
 
-from .commands import AllStopCommand, ManualSteerCommand, parse_command
+from .commands import AllStopCommand, ClearFaultCommand, ManualSteerCommand, parse_command
 
 _LOG = logging.getLogger(__name__)
 
-CommandHandler = Callable[[ManualSteerCommand | AllStopCommand], Awaitable[None]]
+CommandHandler = Callable[
+    [ManualSteerCommand | AllStopCommand | ClearFaultCommand], Awaitable[None]
+]
 """Async callable consuming one command. Implemented by NodeController
 (or a test fake)."""
 

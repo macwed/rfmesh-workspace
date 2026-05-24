@@ -46,7 +46,7 @@ from rfmesh_contracts import (
 
 from .capabilities import build_estimators, detect_active_capabilities
 from .command_channel import CommandChannel
-from .commands import AllStopCommand, ManualSteerCommand
+from .commands import AllStopCommand, ClearFaultCommand, ManualSteerCommand
 from .controller import NodeController
 
 if TYPE_CHECKING:
@@ -432,7 +432,10 @@ class Node:
             return False
         return await self._command_channel.send_response(payload)
 
-    async def _handle_command(self, command: ManualSteerCommand | AllStopCommand) -> None:
+    async def _handle_command(
+        self,
+        command: ManualSteerCommand | AllStopCommand | ClearFaultCommand,
+    ) -> None:
         """Dispatch operator commands.
 
         When ``NodeController`` is wired (ADR-024) the controller validates

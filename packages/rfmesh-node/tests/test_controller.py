@@ -7,7 +7,7 @@ import time
 from typing import Any
 
 import pytest
-from rfmesh_node.commands import AllStopCommand, ManualSteerCommand
+from rfmesh_node.commands import AllStopCommand, ClearFaultCommand, ManualSteerCommand
 from rfmesh_node.controller import (
     DRAIN_TIMEOUT_S,
     ManualSteerOutOfArcError,
@@ -186,10 +186,27 @@ async def test_clear_fault_only_works_in_fault_state() -> None:
         node_id="node-test",
     )
     # Not in FAULT -> refused.
-    refusal = await c.dispatch_command(type("CF", (), {"kind": "clear_fault"})())
+    refusal = await c.dispatch_command(ClearFaultCommand(requestor_id="ui"))
     assert refusal is not None
     assert refusal["refused_kind"] == "clear_fault"
     # Promote to FAULT then clear -> SWEEPING.
+    c._state = NodeState.FAULT
+    ok = await c.dispatch_command(ClearFaultCommand(requestor_id="ui"))
+    assert ok is None
+    assert c.state is NodeState.SWEEPING
+
+
+@pytest.mark.asyncio
+async def test_clear_fault_legacy_duck_typed_dispatch_still_works() -> None:
+    """Backwards-compat: pre-typed legacy tests pass an object with .kind."""
+    servo = _RecordingServo()
+    c = NodeController(
+        servo=servo,  # type: ignore[arg-type]
+        sweep_loop=None,
+        rendezvous_loop=None,
+        calibrated_arc_deg=(-90.0, 90.0),
+        node_id="node-test",
+    )
     c._state = NodeState.FAULT
     ok = await c.dispatch_command(type("CF", (), {"kind": "clear_fault"})())
     assert ok is None

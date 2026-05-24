@@ -52,16 +52,35 @@ class AllStopCommand(BaseModel):
     requestor_id: str = Field(default="unknown", max_length=64)
 
 
+class ClearFaultCommand(BaseModel):
+    """Operator acknowledges a sticky FAULT (ADR-024 §6, §8).
+
+    Sent in response to a controller-reported FAULT (mode_drain_timeout,
+    uncalibrated servo, hardware refusal). Transitions FAULT -> SWEEPING
+    if the underlying condition is fixed; if not, the controller raises
+    FAULT again with the new ``status_detail``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["clear_fault"] = "clear_fault"
+    requestor_id: str = Field(default="unknown", max_length=64)
+
+
 Command = Annotated[
-    ManualSteerCommand | AllStopCommand,
+    ManualSteerCommand | AllStopCommand | ClearFaultCommand,
     Field(discriminator="kind"),
 ]
 
 
-_COMMAND_ADAPTER: TypeAdapter[ManualSteerCommand | AllStopCommand] = TypeAdapter(Command)
+_COMMAND_ADAPTER: TypeAdapter[ManualSteerCommand | AllStopCommand | ClearFaultCommand] = (
+    TypeAdapter(Command)
+)
 
 
-def parse_command(frame: str) -> ManualSteerCommand | AllStopCommand:
+def parse_command(
+    frame: str,
+) -> ManualSteerCommand | AllStopCommand | ClearFaultCommand:
     """Decode a JSON text frame into a typed Command.
 
     Raises:
@@ -83,6 +102,7 @@ def parse_command(frame: str) -> ManualSteerCommand | AllStopCommand:
 
 __all__ = [
     "AllStopCommand",
+    "ClearFaultCommand",
     "Command",
     "ManualSteerCommand",
     "parse_command",

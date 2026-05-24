@@ -141,6 +141,10 @@
           </button>
           <button id="detail-stop" class="warning">STOP this node</button>
         </div>
+        <!-- Visible only when node.state === "fault" (ADR-024 §8). -->
+        <button id="detail-clear-fault" class="warning" hidden>
+          Clear FAULT
+        </button>
         <p id="detail-msg" class="caveat">&nbsp;</p>
       </section>
     </aside>

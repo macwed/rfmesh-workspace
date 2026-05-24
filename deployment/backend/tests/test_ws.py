@@ -180,6 +180,43 @@ def test_ui_ws_subscriber_receives_pushed_bearing(app: FastAPI) -> None:
 
 
 # ---------------------------------------------------------------------------
+# ADR-024 §8 clear_fault route
+# ---------------------------------------------------------------------------
+
+
+def test_clear_fault_pushes_to_registered_node(client: TestClient) -> None:
+    """POST /node/{id}/clear_fault forwards the JSON to the node WS."""
+    with client.websocket_connect("/ws/node/node-a") as node_ws:
+        resp = client.post(
+            "/node/node-a/clear_fault",
+            json={"kind": "clear_fault", "requestor_id": "ui-test"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body == {"delivered_to": "node-a", "kind": "clear_fault"}
+        received = json.loads(node_ws.receive_text())
+        assert received["kind"] == "clear_fault"
+        assert received["requestor_id"] == "ui-test"
+
+
+def test_clear_fault_503_when_node_offline(client: TestClient) -> None:
+    resp = client.post(
+        "/node/no-such-node/clear_fault",
+        json={"kind": "clear_fault"},
+    )
+    assert resp.status_code == 503
+    assert "not connected" in resp.json()["detail"]
+
+
+def test_clear_fault_422_on_wrong_kind(client: TestClient) -> None:
+    resp = client.post(
+        "/node/node-a/clear_fault",
+        json={"kind": "manual_steer"},  # wrong kind for this route
+    )
+    assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
 # ADR-022 node_hello capability handshake + /node/{id}/capabilities
 # ---------------------------------------------------------------------------
 

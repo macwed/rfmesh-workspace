@@ -47,7 +47,7 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
-from .commands import AllStopCommand, ManualSteerCommand
+from .commands import AllStopCommand, ClearFaultCommand, ManualSteerCommand
 
 if TYPE_CHECKING:
     from rfmesh_servo.driver import ServoDriver
@@ -247,7 +247,8 @@ class NodeController:
     # ------------------------------------------------------------------
 
     async def dispatch_command(
-        self, command: ManualSteerCommand | AllStopCommand | object
+        self,
+        command: ManualSteerCommand | AllStopCommand | ClearFaultCommand | object,
     ) -> dict[str, object] | None:
         """Apply an operator command; return a refusal payload or ``None`` on ok.
 
@@ -259,7 +260,9 @@ class NodeController:
             return await self._dispatch_manual_steer(command)
         if isinstance(command, AllStopCommand):
             return await self._dispatch_all_stop(command)
-        # Future command kinds (clear_fault, resume) land here.
+        if isinstance(command, ClearFaultCommand):
+            return self._dispatch_clear_fault(command)
+        # Legacy duck-typed fallback (used by older test fixtures).
         if getattr(command, "kind", None) == "clear_fault":
             return self._dispatch_clear_fault(command)
         return {

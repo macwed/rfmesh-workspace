@@ -16,6 +16,7 @@ import json
 import pytest
 from rfmesh_node.commands import (
     AllStopCommand,
+    ClearFaultCommand,
     ManualSteerCommand,
     parse_command,
 )
@@ -48,6 +49,12 @@ def test_parse_manual_steer_defaults() -> None:
 def test_parse_all_stop() -> None:
     cmd = parse_command(json.dumps({"kind": "all_stop"}))
     assert isinstance(cmd, AllStopCommand)
+
+
+def test_parse_clear_fault() -> None:
+    cmd = parse_command(json.dumps({"kind": "clear_fault", "requestor_id": "ui"}))
+    assert isinstance(cmd, ClearFaultCommand)
+    assert cmd.requestor_id == "ui"
 
 
 def test_parse_rejects_non_json() -> None:

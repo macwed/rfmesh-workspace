@@ -98,6 +98,23 @@ class AllStopCommand(BaseModel):
     requestor_id: str = Field(default="unknown", max_length=64)
 
 
+class ClearFaultCommand(BaseModel):
+    """Operator ack of a sticky FAULT (ADR-024 §8).
+
+    Sent in response to a controller-reported FAULT
+    (mode_drain_timeout, uncalibrated servo, hardware refusal). The
+    node-side controller transitions FAULT -> SWEEPING; if the
+    underlying condition is still present, the next loop tick re-raises
+    FAULT with the new ``status_detail`` -- the operator sees the loop
+    visibly, not a silent re-FAULT.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str = Field(default="clear_fault", pattern="^clear_fault$")
+    requestor_id: str = Field(default="unknown", max_length=64)
+
+
 # ---------------------------------------------------------------------------
 # Per-node WS registry
 # ---------------------------------------------------------------------------
@@ -382,6 +399,49 @@ async def post_command(
     return {"delivered_to": node_id, "kind": command.kind}
 
 
+@router.post("/node/{node_id}/clear_fault")
+async def post_clear_fault(
+    node_id: str,
+    payload: dict[str, Any],
+    request: Request,
+) -> dict[str, Any]:
+    """Forward an operator FAULT-clear ack from UI HTTP to the node WS.
+
+    ADR-024 §8: FAULT is sticky and requires operator ack. The UI POSTs
+    here when the soldier presses "Clear FAULT" on a node whose
+    ``status_detail`` they have read. Backend validates + forwards the
+    JSON down the same WS used by manual_steer. Same B3 posture: 503
+    if the node is not registered, 422 on schema-invalid payload.
+    """
+    try:
+        command = ClearFaultCommand.model_validate(payload)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+
+    registry: NodeWsRegistry = request.app.state.node_ws_registry
+    ws = registry.get(node_id)
+    if ws is None:
+        msg = (
+            f"node {node_id!r} is not connected. Cannot clear FAULT remotely; "
+            "the operator must restart the node service out-of-band."
+        )
+        raise HTTPException(status_code=503, detail=msg)
+    try:
+        await ws.send_text(command.model_dump_json())
+    except Exception as exc:
+        _LOG.warning(
+            "ws/node: failed to push clear_fault to %s; evicting and returning 503: %s",
+            node_id,
+            exc,
+        )
+        registry.unregister(node_id, ws)
+        raise HTTPException(
+            status_code=503,
+            detail=f"node {node_id!r}: WS send failed ({exc!r})",
+        ) from exc
+    return {"delivered_to": node_id, "kind": command.kind}
+
+
 @router.get("/node/{node_id}/capabilities")
 async def get_node_capabilities(node_id: str, request: Request) -> dict[str, Any]:
     """Return the cached ``node_hello`` snapshot for one node (ADR-022).
@@ -493,6 +553,7 @@ async def push_to_ui_subscribers(app: FastAPI, payload: dict[str, Any]) -> None:
 
 __all__ = [
     "AllStopCommand",
+    "ClearFaultCommand",
     "ManualSteerCommand",
     "NodeWsRegistry",
     "UiWsRegistry",

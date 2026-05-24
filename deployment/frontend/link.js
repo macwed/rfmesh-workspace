@@ -147,6 +147,7 @@
   const detailSendBtn = document.getElementById("detail-send-steer");
   const detailStopBtn = document.getElementById("detail-stop");
   const detailMsgEl = document.getElementById("detail-msg");
+  const detailClearFaultBtn = document.getElementById("detail-clear-fault");
   const detailCloseBtn = document.getElementById("detail-close");
 
   function selectNode(nodeId) {
@@ -256,19 +257,18 @@
           `${n.node_id}: NodeController not wired (ADR-022 stub); steer disabled.`,
         );
       } else if (n.state === "fault") {
-        // ADR-024: FAULT is sticky and requires operator ack. The
-        // clear_fault HTTP route lands in a follow-up commit; for now,
-        // surface what the operator needs to know.
+        // ADR-024 §8: FAULT is sticky and requires operator ack.
+        // Surface status_detail + show the Clear FAULT button below.
         const detail = n.status_detail ? ` — ${n.status_detail}` : "";
-        reason =
-          `Node is FAULT${detail}. Clear via ops console (route lands in follow-up); ` +
-          "ALL-STOP still works.";
+        reason = `Node is FAULT${detail}. Press "Clear FAULT" after fixing the underlying condition.`;
       } else reason = "Manual steering disabled.";
       detailMsgEl.textContent = reason;
       detailMsgEl.style.color = "var(--low)";
     } else {
       detailMsgEl.textContent = "";
     }
+    // ADR-024 §8: Clear FAULT button visible only in FAULT state.
+    detailClearFaultBtn.hidden = n.state !== "fault";
   }
 
   detailSliderEl.addEventListener("input", () => {
@@ -315,6 +315,31 @@
     if (!state.selectedNodeId) return;
     detailMsgEl.textContent = "STOP this-node not yet implemented; use ALL STOP.";
     detailMsgEl.style.color = "var(--medium)";
+  });
+
+  detailClearFaultBtn.addEventListener("click", async () => {
+    const id = state.selectedNodeId;
+    if (!id) return;
+    detailMsgEl.textContent = "Clearing FAULT…";
+    detailMsgEl.style.color = "var(--muted)";
+    try {
+      const resp = await fetch(`/node/${encodeURIComponent(id)}/clear_fault`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "clear_fault", requestor_id: "ui-link" }),
+      });
+      const body = await resp.json().catch(() => ({}));
+      if (resp.ok) {
+        detailMsgEl.textContent = `FAULT cleared on ${id}.`;
+        detailMsgEl.style.color = "var(--high)";
+      } else {
+        detailMsgEl.textContent = `Clear FAULT refused: ${body.detail || resp.statusText}`;
+        detailMsgEl.style.color = "var(--low)";
+      }
+    } catch (e) {
+      detailMsgEl.textContent = `Network error: ${e.message}`;
+      detailMsgEl.style.color = "var(--low)";
+    }
   });
 
   // ---------------------------------------------------------------
