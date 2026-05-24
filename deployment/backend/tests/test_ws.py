@@ -190,7 +190,7 @@ def test_ui_ws_subscriber_receives_pushed_bearing(app: FastAPI) -> None:
 
 
 _VALID_STATUS_PAYLOAD = {
-    "schema_version": "1.3.0",
+    "schema_version": "1.4.0",
     "node_id": "node-a",
     "t_unix_ns": 1_700_000_000_000_000_000,
     "position": {

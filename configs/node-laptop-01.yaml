@@ -1,0 +1,70 @@
+# NodeRuntimeConfig template — bench MVP, node 1 of 2 (ADR-022 single-YAML).
+#
+# Laptop bench layout: 2x RTL-SDR V4 + 2x ESP32-C6 servo + backend on the
+# same laptop. Each rfmesh-node process pins its own RTL-SDR via
+# `sdr.serial` (rtl_test reports the serials) and its own /dev/ttyACM*.
+#
+# Update the position + heading_deg + sdr.serial + servo_port before use,
+# then:
+#
+#   uv run rfmesh-node --config configs/node-laptop-01.yaml
+#
+# Backend (separate terminal): see field-deploy/README.md or the
+# bench-2-nodes.sh helper.
+
+node:
+  schema_version: "1.4.0"
+  node_id: "node-laptop-01"
+  position:
+    # CHANGE: surveyed lat/lon of node 1 in the bench layout. Marche-les-Dames
+    # demo placeholder; smartphone GPS (~5-10 m) is fine -- bearing error
+    # dominates fix error at km range.
+    lat_deg: 50.46500
+    lon_deg: 5.00500
+    hae_m: 170.0
+    sigma_m: 8.0
+  # CHANGE: antenna boresight azimuth, degrees true. Survey-and-align: point
+  # Yagi at a known landmark, read map bearing. Required for L1.
+  heading_deg: 90.0
+  sdr:
+    driver: "rtlsdr"
+    # CHANGE: RTL-SDR V4 serial -- `rtl_test -t` prints them. NEVER null on
+    # a multi-dongle host; index-based addressing is foot-gun-prone (B.7).
+    serial: "00000001"
+    sample_rate_hz: 2.4e6
+    center_freq_hz: 915.0e6
+    gain_db: 30.0
+    bias_tee: false
+  capabilities:
+    - l1_rssi
+  bearer:
+    kind: wifi
+    heartbeat_interval_s: 2.0
+  fusion_endpoint: "http://127.0.0.1:8000/bearings"
+
+# CHANGE: ESP32-C6 servo serial port. /dev/ttyACM0 typical for first device.
+servo_port: "/dev/ttyACM0"
+
+sweep:
+  axis: 0
+  min_deg: -90.0
+  max_deg: 90.0
+  step_deg: 2.0
+  settle_s: 0.20
+  dwell_samples: 1024
+  inter_sweep_s: 1.0
+  peak_prominence_db_min: 6.0
+
+rendezvous: null
+
+command_endpoint:
+  enabled: true
+  backend_ws_url: "ws://127.0.0.1:8000"
+
+motion:
+  max_vel_dps: 25.0
+  accel_time_s: 0.40
+  motion_step_deg: 1.0
+  fast_threshold_deg: 10.0
+  fast_settle_s: 0.10
+  invert_direction: false

@@ -1,0 +1,53 @@
+# NodeRuntimeConfig template — bench MVP, node 2 of 2 (ADR-022 single-YAML).
+# Sister of configs/node-laptop-01.yaml: distinct node_id + RTL-SDR serial +
+# servo_port. Position offset ~1 km east so the two LOBs cross with usable
+# GDOP at a typical bench emitter ~1 km away.
+
+node:
+  schema_version: "1.4.0"
+  node_id: "node-laptop-02"
+  position:
+    lat_deg: 50.46500
+    lon_deg: 5.02000           # ~1 km east of node-laptop-01
+    hae_m: 170.0
+    sigma_m: 8.0
+  heading_deg: 270.0           # facing west toward node-1 baseline
+  sdr:
+    driver: "rtlsdr"
+    serial: "00000002"         # second RTL-SDR V4 dongle
+    sample_rate_hz: 2.4e6
+    center_freq_hz: 915.0e6
+    gain_db: 30.0
+    bias_tee: false
+  capabilities:
+    - l1_rssi
+  bearer:
+    kind: wifi
+    heartbeat_interval_s: 2.0
+  fusion_endpoint: "http://127.0.0.1:8000/bearings"
+
+servo_port: "/dev/ttyACM1"     # second ESP32-C6
+
+sweep:
+  axis: 0
+  min_deg: -90.0
+  max_deg: 90.0
+  step_deg: 2.0
+  settle_s: 0.20
+  dwell_samples: 1024
+  inter_sweep_s: 1.0
+  peak_prominence_db_min: 6.0
+
+rendezvous: null
+
+command_endpoint:
+  enabled: true
+  backend_ws_url: "ws://127.0.0.1:8000"
+
+motion:
+  max_vel_dps: 25.0
+  accel_time_s: 0.40
+  motion_step_deg: 1.0
+  fast_threshold_deg: 10.0
+  fast_settle_s: 0.10
+  invert_direction: false
