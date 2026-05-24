@@ -73,6 +73,12 @@ def _wrap180(angle_deg: float) -> float:
     return (angle_deg + _DEG_HALF_CIRCLE) % _DEG_FULL_CIRCLE - _DEG_HALF_CIRCLE
 
 
+def _mode_cancelled(cancel: asyncio.Event | None) -> bool:
+    """ADR-024 cancel-event helper -- ``cancel`` may be ``None`` for callers
+    that have not opted into mode-handoff semantics (legacy/test path)."""
+    return cancel is not None and cancel.is_set()
+
+
 def geodesic_initial_bearing_deg(origin: GeodeticPosition, target: GeodeticPosition) -> float:
     """Great-circle initial bearing origin->target, degrees true, [0, 360).
 
@@ -247,12 +253,21 @@ class RendezvousLoop:
             max_servo_deg=self._cfg.max_servo_deg,
         )
 
-    async def acquire(self, stopping: asyncio.Event) -> bool:
+    async def acquire(  # noqa: PLR0911
+        self, stopping: asyncio.Event, cancel: asyncio.Event | None = None
+    ) -> bool:
         """Point at the peer and (if SCANNER) refine to a lock.
 
         Returns True on lock, False on out-of-arc / refine-ladder exhaustion /
-        stop. On failure, :attr:`last_status` carries the loud reason. Motion is
-        bidirectional (connection mode): point directly, no same-side approach.
+        stop / cancel. On failure, :attr:`last_status` carries the loud reason.
+        Motion is bidirectional (connection mode): point directly, no same-side
+        approach.
+
+        ``cancel`` (ADR-024) is the NodeController mode-handoff signal. Checked
+        at the top of each escalation iteration and inside ``_refine_once``;
+        when set, returns False after the next safe checkpoint between two
+        ``servo.move`` calls (the in-flight ``to_thread`` always completes
+        first; see ADR-024 §2 binding clause).
         """
         try:
             target = self.target_servo_angle()
@@ -261,6 +276,8 @@ class RendezvousLoop:
             _LOG.warning("%s", self._last_status)
             return False
 
+        if _mode_cancelled(cancel):
+            return False
         await self._point(target)
 
         if self._role == "STARER":
@@ -272,12 +289,14 @@ class RendezvousLoop:
 
         # SCANNER: refine across a widening ladder until a peak clears the gate.
         for half_arc in self._cfg.escalation_half_arcs:
-            if stopping.is_set():
+            if stopping.is_set() or _mode_cancelled(cancel):
                 return False
-            report = await self._refine_once(stopping, half_arc)
+            report = await self._refine_once(stopping, half_arc, cancel)
             if report is not None:
                 self._last_report = report
                 # Re-point onto the refined peak (bidirectional, within arc).
+                if _mode_cancelled(cancel):
+                    return False
                 await self._point(_wrap180(report.azimuth_deg - self._boresight))
                 self._last_status = (
                     f"rendezvous: SCANNER locked, peer bearing {report.azimuth_deg:.1f} "
@@ -294,10 +313,33 @@ class RendezvousLoop:
         _LOG.warning("%s", self._last_status)
         return False
 
-    async def hold(self, stopping: asyncio.Event, duration_s: float) -> None:
-        """Keep the antenna on the peer for ``duration_s`` (servo already pointed)."""
+    async def hold(
+        self,
+        stopping: asyncio.Event,
+        duration_s: float,
+        cancel: asyncio.Event | None = None,
+    ) -> None:
+        """Keep the antenna on the peer for ``duration_s`` (servo already pointed).
+
+        ``cancel`` lets ``NodeController`` preempt the hold immediately; a
+        manual_steer arriving during a 30s link-hold should not wait for the
+        hold to expire.
+        """
+        wait_targets = [stopping.wait()]
+        if cancel is not None:
+            wait_targets.append(cancel.wait())
         with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(stopping.wait(), timeout=duration_s)
+            _done, pending = await asyncio.wait(
+                [asyncio.create_task(t) for t in wait_targets],
+                timeout=duration_s,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+
+    def reset(self) -> None:
+        """Drop the estimator's accumulator (ADR-024 mode-exit reset)."""
+        self._estimator.begin_sweep(time.time_ns())
 
     async def _point(self, angle_deg: float) -> None:
         """Move directly to ``angle_deg`` and settle (no same-side approach)."""
@@ -305,12 +347,17 @@ class RendezvousLoop:
         await asyncio.sleep(self._cfg.settle_s)
 
     async def _refine_once(
-        self, stopping: asyncio.Event, half_arc_deg: float
+        self,
+        stopping: asyncio.Event,
+        half_arc_deg: float,
+        cancel: asyncio.Event | None = None,
     ) -> BearingReport | None:
         """One refine mini-sweep across ±``half_arc_deg`` around the peer target.
 
         Bidirectional motion, clamped to the servo arc. Reuses the L1 estimator
         for the peak fit; returns its ``BearingReport`` or ``None``.
+
+        Safe checkpoint (ADR-024 §2 binding): BETWEEN two ``servo.move`` calls.
         """
         target = self.target_servo_angle()
         lo = max(target - half_arc_deg, self._cfg.min_servo_deg)
@@ -325,7 +372,7 @@ class RendezvousLoop:
 
         self._estimator.begin_sweep(time.time_ns())
         for angle in angles:
-            if stopping.is_set():
+            if stopping.is_set() or _mode_cancelled(cancel):
                 return None
             await self._point(angle)
             iq = await asyncio.to_thread(self._receiver.read, self._cfg.dwell_samples)

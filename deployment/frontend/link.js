@@ -123,7 +123,7 @@
       cs.textContent = node.node_id;
       const badge = document.createElement("span");
       badge.className = "badge " + (node.state || "stale");
-      badge.textContent = node.state || "stale";
+      badge.textContent = badgeLabel(node);
       li.append(cs, badge);
       li.addEventListener("click", () => selectNode(node.node_id));
       nodeListEl.append(li);
@@ -200,7 +200,7 @@
     detailEl.hidden = false;
     detailCallsignEl.textContent = n.node_id;
     detailStateBadge.className = "badge " + (n.state || "stale");
-    detailStateBadge.textContent = n.state || "stale";
+    detailStateBadge.textContent = badgeLabel(n);
     detailCalEl.textContent = n.cal_label || "unknown";
     detailPeerEl.textContent = (n.peer && n.peer.node_id) || n.peer_id || "—";
     detailMarginEl.textContent =
@@ -255,7 +255,15 @@
         console.warn(
           `${n.node_id}: NodeController not wired (ADR-022 stub); steer disabled.`,
         );
-      } else reason = "Node is FAULT — manual steering disabled.";
+      } else if (n.state === "fault") {
+        // ADR-024: FAULT is sticky and requires operator ack. The
+        // clear_fault HTTP route lands in a follow-up commit; for now,
+        // surface what the operator needs to know.
+        const detail = n.status_detail ? ` — ${n.status_detail}` : "";
+        reason =
+          `Node is FAULT${detail}. Clear via ops console (route lands in follow-up); ` +
+          "ALL-STOP still works.";
+      } else reason = "Manual steering disabled.";
       detailMsgEl.textContent = reason;
       detailMsgEl.style.color = "var(--low)";
     } else {
@@ -413,13 +421,31 @@
       // Cache the slider clamp + light up the node in the list even
       // before the first /bearings push arrives.
       mergeHello(payload.node_id, payload.data || {});
+    } else if (payload.kind === "node_state") {
+      // ADR-024: NodeController emitted a state transition. Update the
+      // badge + countdown without waiting for the next heartbeat.
+      mergeControllerState(payload.node_id, payload.data || {});
     } else if (payload.kind === "command_refused") {
-      // Node-side refusal (B3, stub handler until NodeController lands).
-      // Surface red toast on the detail panel of the affected node.
+      // Node-side refusal (B3). Surface red toast on the detail panel.
       showRefusal(payload.node_id, payload.data || {});
     }
-    // Future kinds: "node_status", "link_state". Schema is additive;
-    // unknown kinds are ignored honestly.
+    // Future kinds. Schema additive; unknown kinds ignored honestly.
+  }
+
+  function mergeControllerState(nodeId, snap) {
+    if (!nodeId) return;
+    const n = state.nodes.get(nodeId) || { node_id: nodeId };
+    if (typeof snap.state === "string") n.state = snap.state;
+    n.status_detail = snap.status_detail || "";
+    n.manual_hold_expires_at_ns = snap.manual_hold_expires_at_ns ?? null;
+    n.last_commanded_angle_deg = snap.last_commanded_angle_deg ?? null;
+    if (typeof snap.controller_ready === "boolean") {
+      n.controller_ready = snap.controller_ready;
+    }
+    state.nodes.set(nodeId, n);
+    renderNode(n);
+    renderNodeList();
+    if (state.selectedNodeId === nodeId) renderDetail();
   }
 
   function mergeHello(nodeId, hello) {
@@ -437,13 +463,36 @@
       : "unknown";
     n.peer = hello.peer || null;
     n.controller_ready = !!hello.controller_ready;
-    // Only set "searching" if the node has not yet emitted a bearing;
-    // otherwise leave the bearing-driven state alone.
+    // ADR-024 controller snapshot, if present on this hello.
+    if (typeof hello.state === "string") n.state = hello.state;
+    n.status_detail = hello.status_detail || "";
+    n.manual_hold_expires_at_ns = hello.manual_hold_expires_at_ns ?? null;
+    n.last_commanded_angle_deg = hello.last_commanded_angle_deg ?? null;
+    // Fallback for nodes that have not yet sent a state: "searching"
+    // until a bearing arrives.
     if (!n.state) n.state = "searching";
     state.nodes.set(nodeId, n);
     renderNode(n);
     renderNodeList();
     if (state.selectedNodeId === nodeId) renderDetail();
+  }
+
+  function manualHoldRemainingS(node) {
+    if (!node || node.state !== "manual_hold" || !node.manual_hold_expires_at_ns) {
+      return null;
+    }
+    const remainingMs = node.manual_hold_expires_at_ns / 1e6 - Date.now();
+    return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
+  }
+
+  function badgeLabel(node) {
+    const s = node.state || "stale";
+    if (s === "manual_hold") {
+      const r = manualHoldRemainingS(node);
+      return r !== null ? `manual · ${r}s` : "manual";
+    }
+    if (s === "acquired_peer") return "linked";
+    return s;
   }
 
   function showRefusal(nodeId, payload) {
@@ -480,23 +529,42 @@
     if (state.selectedNodeId === id) renderDetail();
   }
 
-  // Periodic "age" refresh — show how stale the last bearing is.
+  // Periodic 1 s tick: bearing-age labels + MANUAL_HOLD countdown.
   setInterval(() => {
     const now = Date.now();
     let changed = false;
     for (const n of state.nodes.values()) {
-      if (n.last_bearing_t == null) continue;
-      const ageS = Math.floor((now - n.last_bearing_t) / 1000);
-      const newLabel =
-        ageS < 2
-          ? "just now"
-          : ageS < 60
-            ? `${ageS} s ago`
-            : `${Math.floor(ageS / 60)} min ago`;
-      const newState = ageS < 10 ? "acquired" : ageS < 30 ? "searching" : "stale";
-      if (n.last_acquired_age !== newLabel || n.state !== newState) {
-        n.last_acquired_age = newLabel;
-        n.state = newState;
+      // Bearing-driven legacy state. Skip when the controller has set
+      // an authoritative state (sweeping/manual_hold/parked/fault/
+      // acquired_peer) -- those flips come from the node_state push.
+      const controllerOwnsState = [
+        "sweeping",
+        "manual_hold",
+        "parked",
+        "fault",
+        "acquired_peer",
+      ].includes(n.state);
+      if (!controllerOwnsState && n.last_bearing_t != null) {
+        const ageS = Math.floor((now - n.last_bearing_t) / 1000);
+        const newLabel =
+          ageS < 2
+            ? "just now"
+            : ageS < 60
+              ? `${ageS} s ago`
+              : `${Math.floor(ageS / 60)} min ago`;
+        const newState = ageS < 10 ? "acquired" : ageS < 30 ? "searching" : "stale";
+        if (n.last_acquired_age !== newLabel || n.state !== newState) {
+          n.last_acquired_age = newLabel;
+          n.state = newState;
+          changed = true;
+          renderNode(n);
+        }
+      }
+      // ADR-024 MANUAL_HOLD countdown: re-render once a second so the
+      // badge label ticks down (manual · 7s -> 6s -> ...). When the
+      // countdown reaches 0, the node-side controller auto-resumes and
+      // publishes a node_state frame, which flips us out of MANUAL_HOLD.
+      if (n.state === "manual_hold" && n.manual_hold_expires_at_ns) {
         changed = true;
         renderNode(n);
       }

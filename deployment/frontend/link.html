@@ -64,6 +64,16 @@
            drawer (steering controls + link margin). -->
       <section class="panel">
         <h2>Nodes</h2>
+        <!-- ADR-024 5-state badge legend (demo-integrity rec). Ordered
+             left-to-right by operator-action-required so a jury can read
+             "what needs attention first?" at a glance. -->
+        <div class="state-legend">
+          <span class="chip"><span class="swatch fault"></span> fault</span>
+          <span class="chip"><span class="swatch manual_hold"></span> manual</span>
+          <span class="chip"><span class="swatch acquired_peer"></span> linked</span>
+          <span class="chip"><span class="swatch sweeping"></span> sweeping</span>
+          <span class="chip"><span class="swatch parked"></span> parked</span>
+        </div>
         <ul id="node-list" class="nodes"></ul>
         <p id="no-nodes-hint" class="caveat">
           No node connected. Check the node has power, the antenna is mounted,

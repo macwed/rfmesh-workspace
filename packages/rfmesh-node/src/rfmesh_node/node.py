@@ -47,6 +47,7 @@ from rfmesh_contracts import (
 from .capabilities import build_estimators, detect_active_capabilities
 from .command_channel import CommandChannel
 from .commands import AllStopCommand, ManualSteerCommand
+from .controller import NodeController
 
 if TYPE_CHECKING:
     from rfmesh_contracts import BearingEstimator
@@ -117,6 +118,9 @@ class Node:
         # ADR-022 comms-mode command channel.
         self._command_endpoint = command_endpoint
         self._command_channel: CommandChannel | None = None
+        # ADR-024 NodeController -- owns servo when wired (replaces
+        # the stub _handle_command of ADR-022 + folds the _rendezvous_supervisor).
+        self._controller: NodeController | None = None
 
     async def run(self) -> None:
         """Bring the node up; run until ``shutdown`` is called."""
@@ -137,12 +141,42 @@ class Node:
                 asyncio.create_task(self._heartbeat_loop(), name="node-heartbeat"),
             ]
             # Servo-driving task: exactly one, so only one writer touches the
-            # single-outstanding-command servo at a time (ADR-019).
-            #  * rendezvous wired -> the supervisor owns the servo and
-            #    time-shares it with the jammer sweep (link-hold <-> DF sweep);
-            #  * else L1 sweep wired -> the plain blind-sweep loop;
+            # single-outstanding-command servo at a time (ADR-019/ADR-024).
+            #  * comms-mode wired (command_endpoint + servo) -> NodeController
+            #    arbitrates between SWEEPING/ACQUIRED_PEER/MANUAL_HOLD/PARKED
+            #    /FAULT modes via cancel-drained handoff (ADR-024).
+            #  * else rendezvous wired -> the legacy supervisor owns the servo
+            #    (kept one release for backwards-compat with BartekDu's path).
+            #  * else L1 sweep wired -> the plain blind-sweep loop.
             #  * else heartbeat-only (the v1.0 container behaviour).
-            if self._rendezvous_loop is not None:
+            controller_eligible = (
+                self._servo is not None
+                and self._command_endpoint is not None
+                and self._command_endpoint.backend_ws_url
+            )
+            if controller_eligible:
+                # Cached calibrated arc for manual-steer validation. v1
+                # uses the configured sweep / rendezvous arc as the
+                # source (cal_provenance="config", per ADR-022); when
+                # the firmware get_calibration round-trip is wired in,
+                # this flips to "firmware-nvs". The arc is in servo-frame
+                # degrees here -- the same numbers the slider clamps to.
+                cal_arc = self._cached_calibrated_arc()
+                self._controller = NodeController(
+                    servo=self._servo,
+                    sweep_loop=self._sweep_loop,
+                    rendezvous_loop=self._rendezvous_loop,
+                    calibrated_arc_deg=cal_arc,
+                    node_id=self._config.node_id,
+                    on_state_change=self._on_controller_state_change,
+                )
+                self._tasks.append(
+                    asyncio.create_task(
+                        self._controller.run(self._stopping),
+                        name="node-controller",
+                    )
+                )
+            elif self._rendezvous_loop is not None:
                 self._tasks.append(
                     asyncio.create_task(self._rendezvous_supervisor(), name="node-rendezvous")
                 )
@@ -314,8 +348,25 @@ class Node:
     # Comms-mode (ADR-022): node_hello + command handler stub.
     # ------------------------------------------------------------------
 
+    def _cached_calibrated_arc(self) -> tuple[float, float] | None:
+        """The configured servo arc, in servo-frame degrees (B3 source).
+
+        Source of truth until the firmware ``get_calibration`` roundtrip
+        is wired in here (per memory CAL_PERSIST cosmetic quirk); then
+        flips to ``"firmware-nvs"`` in the hello's ``cal_provenance``.
+        This arc is what ``NodeController._validate_manual_angle``
+        clamps to, and what ``link.js`` clamps the slider to.
+        """
+        if self._sweep_loop is not None:
+            cfg = self._sweep_loop._cfg
+            return (float(cfg.min_deg), float(cfg.max_deg))
+        if self._rendezvous_loop is not None:
+            rv = self._rendezvous_loop.config
+            return (float(rv.min_servo_deg), float(rv.max_servo_deg))
+        return None
+
     def _build_hello_payload(self) -> dict[str, object]:
-        """Build the one-shot ``node_hello`` capability snapshot.
+        """Build the ``node_hello`` capability snapshot.
 
         Sent by ``CommandChannel`` on every (re)connect. The backend
         caches it on ``NodeWsRegistry`` and serves it from
@@ -323,29 +374,17 @@ class Node:
         to clamp the manual-steer slider to the calibrated arc
         (ADR-021 §"Manual-steer safety" layer 3).
 
-        Calibrated-arc honesty (B3): v1 reports the *configured* arc
-        from the sweep / rendezvous config and tags ``cal_provenance``
-        as ``"config"``. When the firmware's ``get_calibration``
-        roundtrip is wired in here (per memory CAL_PERSIST cosmetic
-        quirk), the source flips to ``"firmware-nvs"`` and the arc
-        comes from there.
-        """
-        # The configured arc is the L1 sweep's calibrated range; if a
-        # rendezvous block is present, its arc is contained in the sweep
-        # arc (validated by NodeRuntimeConfig._coherence).
-        sweep_loop = self._sweep_loop
-        rv_loop = self._rendezvous_loop
-        if sweep_loop is not None:
-            cfg = sweep_loop._cfg
-            arc_min, arc_max = cfg.min_deg, cfg.max_deg
-        elif rv_loop is not None:
-            arc_min = rv_loop.config.min_servo_deg
-            arc_max = rv_loop.config.max_servo_deg
-        else:
-            # No servo-driving loop -> there is no arc to clamp the UI to.
-            arc_min = None
-            arc_max = None
+        ADR-024 additions: ``controller_ready`` flips to ``true`` when a
+        ``NodeController`` is wired, and the ``state`` /
+        ``manual_hold_expires_at_ns`` / ``last_commanded_angle_deg``
+        fields are populated from the controller snapshot so the UI can
+        render the 5-state badge + countdown without polling.
 
+        Calibrated-arc honesty (B3): v1 reports the *configured* arc and
+        tags ``cal_provenance`` as ``"config"``.
+        """
+        arc = self._cached_calibrated_arc()
+        rv_loop = self._rendezvous_loop
         peer: dict[str, object] | None = None
         if rv_loop is not None:
             pp = rv_loop.config.peer_position
@@ -354,6 +393,10 @@ class Node:
                 "lat_deg": pp.lat_deg,
                 "lon_deg": pp.lon_deg,
             }
+
+        controller_snap: dict[str, object] = {}
+        if self._controller is not None:
+            controller_snap = self._controller.snapshot()
 
         return {
             "node_id": self._config.node_id,
@@ -365,30 +408,47 @@ class Node:
                 "lon_deg": self._config.position.lon_deg,
             },
             "calibrated_geographic_arc_deg": (
-                None
-                if arc_min is None or arc_max is None
-                else {"min": float(arc_min), "max": float(arc_max)}
+                None if arc is None else {"min": arc[0], "max": arc[1]}
             ),
             "cal_provenance": "config",
             "peer": peer,
-            "controller_ready": False,
+            "controller_ready": self._controller is not None,
+            "state": controller_snap.get("state"),
+            "status_detail": controller_snap.get("status_detail", ""),
+            "manual_hold_expires_at_ns": controller_snap.get("manual_hold_expires_at_ns"),
+            "last_commanded_angle_deg": controller_snap.get("last_commanded_angle_deg"),
         }
 
-    async def _handle_command(self, command: ManualSteerCommand | AllStopCommand) -> None:
-        """Stub command handler (ADR-022): refuse loudly, do not touch the servo.
+    async def _on_controller_state_change(self, payload: dict[str, object]) -> bool:
+        """ADR-024 broadcast hook: push state-change frame back over the WS.
 
-        The real handler ships with ``NodeController`` in a follow-up ADR;
-        the council code-reviewer's BLOCK on item 2 (mode-switch preemption
-        racing in-flight ``RendezvousLoop._refine_once`` writes) is unresolved.
-        Until then this handler keeps B3 by never silently accepting a
-        steer the system cannot honour, and surfaces the refusal back
-        through the WS so ``link.html`` can render a red toast.
+        Routes through the same ``CommandChannel.send_response`` used by
+        the refusal-stub of ADR-022; backend's ``/ws/node/{id}`` handler
+        forwards ``kind=node_state`` frames to UI subscribers so the badge
+        flips within ~200 ms of the firmware event (per demo-integrity
+        rec — event-driven link_state, not heartbeat cadence).
         """
+        if self._command_channel is None:
+            return False
+        return await self._command_channel.send_response(payload)
+
+    async def _handle_command(self, command: ManualSteerCommand | AllStopCommand) -> None:
+        """Dispatch operator commands.
+
+        When ``NodeController`` is wired (ADR-024) the controller validates
+        + applies the command; refusals are acked back over the WS. When
+        not wired (sweep-only bench, no servo), the ADR-022 refusal stub
+        semantics apply: log + ack ``command_refused`` loudly. B3 throughout.
+        """
+        if self._controller is not None:
+            refusal = await self._controller.dispatch_command(command)
+            if refusal is not None and self._command_channel is not None:
+                refusal.setdefault("requestor_id", command.requestor_id)
+                await self._command_channel.send_response(refusal)
+            return
+
         kind = command.kind
-        reason = (
-            "NodeController not yet wired (ADR-022 ships transport + capability "
-            "handshake; servo-action handler waits on NodeController ADR)."
-        )
+        reason = "NodeController not wired on this node (sweep-only bench / no servo)."
         _LOG.warning(
             "Node %s: refusing %s command from %s -- %s",
             self._config.node_id,

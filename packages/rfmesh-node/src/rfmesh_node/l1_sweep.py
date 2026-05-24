@@ -139,12 +139,19 @@ class L1SweepLoop:
             peak_prominence_db_min=self._cfg.peak_prominence_db_min,
         )
 
-    async def run(self, stopping: asyncio.Event) -> None:
-        """Sweep repeatedly until ``stopping`` is set.
+    async def run(
+        self, stopping: asyncio.Event, cancel: asyncio.Event | None = None
+    ) -> None:
+        """Sweep repeatedly until ``stopping`` or ``cancel`` is set.
 
         Assumes ``Node`` has already ``connect``-ed the servo (the lifecycle
         is hoisted to ``Node`` so the sweep and rendezvous loops can share
         one connected servo -- ADR-019). Does not connect or close it.
+
+        ``cancel`` (ADR-024) is the mode-handoff signal from ``NodeController``;
+        when set, the loop returns after the next safe checkpoint between two
+        ``servo.move`` calls so the controller can hand the servo to a
+        different mode without violating the single-writer invariant.
         """
         _LOG.info(
             "L1 sweep: arc [%.0f, %.0f] deg step %.1f, boresight %.1f deg",
@@ -153,31 +160,56 @@ class L1SweepLoop:
             self._cfg.step_deg,
             self._boresight_heading_deg,
         )
-        while not stopping.is_set():
-            await self._one_sweep(stopping)
+        while not stopping.is_set() and not (cancel is not None and cancel.is_set()):
+            await self._one_sweep(stopping, cancel)
+            if cancel is not None and cancel.is_set():
+                return
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stopping.wait(), timeout=self._cfg.inter_sweep_s)
 
-    async def run_once(self, stopping: asyncio.Event) -> None:
+    async def run_once(
+        self, stopping: asyncio.Event, cancel: asyncio.Event | None = None
+    ) -> None:
         """Run a single sweep pass.
 
-        Used by the rendezvous supervisor to time-share the servo: hold the
-        link, then break for one jammer-DF sweep, then re-acquire (ADR-019).
-        Assumes the servo is already connected (owned by ``Node``).
+        Used by the rendezvous supervisor / NodeController to time-share the
+        servo. ``cancel`` (ADR-024) lets the controller preempt the sweep
+        between two ``servo.move`` calls. Assumes the servo is already
+        connected (owned by ``Node``).
         """
-        await self._one_sweep(stopping)
+        await self._one_sweep(stopping, cancel)
 
-    async def _one_sweep(self, stopping: asyncio.Event) -> None:
-        """Run a single low->high sweep and emit a bearing if one is found."""
+    def reset(self) -> None:
+        """Drop the estimator's accumulator (ADR-024 mode-exit reset).
+
+        Called by ``NodeController`` after a mode handoff drain so a
+        half-completed sweep does not produce a ``BearingReport`` from
+        stale data on resume. B3 stale-accumulator guard.
+        """
+        self._estimator.begin_sweep(time.time_ns())
+
+    async def _one_sweep(
+        self, stopping: asyncio.Event, cancel: asyncio.Event | None = None
+    ) -> None:
+        """Run a single low->high sweep and emit a bearing if one is found.
+
+        Safe checkpoints (ADR-024 §2 binding): BETWEEN two
+        ``await asyncio.to_thread(self._servo.move, ...)`` calls. Never
+        inside a ``to_thread`` -- the underlying USB-CDC write completes
+        regardless of asyncio cancellation, so cancelling mid-call would
+        violate the single-writer servo invariant.
+        """
         angles = self._cfg.angles()
         # Park at the low end first so every sweep approaches from the same
         # side (servo backlash discipline, INHERITED_CONTEXT.md §3.1.1).
+        if self._mode_cancelled(cancel):
+            return
         await asyncio.to_thread(self._servo.move, self._cfg.axis, angles[0])
         await asyncio.sleep(self._cfg.settle_s)
 
         self._estimator.begin_sweep(time.time_ns())
         for angle in angles:
-            if stopping.is_set():
+            if stopping.is_set() or self._mode_cancelled(cancel):
                 return
             await asyncio.to_thread(self._servo.move, self._cfg.axis, angle)
             await asyncio.sleep(self._cfg.settle_s)
@@ -197,6 +229,10 @@ class L1SweepLoop:
         )
         if self._bearer is not None:
             await asyncio.to_thread(self._bearer.send_bearing, report)
+
+    @staticmethod
+    def _mode_cancelled(cancel: asyncio.Event | None) -> bool:
+        return cancel is not None and cancel.is_set()
 
     @property
     def method(self) -> Capability:
