@@ -26,6 +26,15 @@
   "use strict";
 
   // ---------------------------------------------------------------
+  // Constants
+  // ---------------------------------------------------------------
+
+  // ADR-026 §I: PeerLink link-margin warning threshold. Below this we
+  // render a ⚠ glyph on the soldier UI; soldier-grade demo-integrity
+  // gate from the post-cold-start council.
+  const PEER_LINK_LOW_MARGIN_DB = 10.0;
+
+  // ---------------------------------------------------------------
   // State
   // ---------------------------------------------------------------
 
@@ -147,6 +156,7 @@
   const detailSendBtn = document.getElementById("detail-send-steer");
   const detailStopBtn = document.getElementById("detail-stop");
   const detailMsgEl = document.getElementById("detail-msg");
+  const detailPeerBearingEl = document.getElementById("detail-peer-bearing");
   const detailClearFaultBlock = document.getElementById("detail-clear-fault-block");
   const detailClearFaultBtn = document.getElementById("detail-clear-fault");
   const detailClearFaultConfirm = document.getElementById("detail-clear-fault-confirm");
@@ -177,6 +187,30 @@
       mergeHello(body.node_id, body.hello || {});
     } catch (e) {
       console.warn(`capability fetch failed for ${nodeId}: ${e.message}`);
+    }
+    // ADR-026 §I: pull the posterior peer bearing if one exists. 404
+    // when the node has not yet emitted a PEER_LINK bearing.
+    try {
+      const resp = await fetch(`/node/${encodeURIComponent(nodeId)}/peer_bearing`);
+      if (!resp.ok) {
+        // 404 is the legitimate "no peer bearing yet" path.
+        const n = state.nodes.get(nodeId);
+        if (n) {
+          n.peer_bearing_text = null;
+          state.nodes.set(nodeId, n);
+          if (state.selectedNodeId === nodeId) renderDetail();
+        }
+        return;
+      }
+      const body = await resp.json();
+      const n = state.nodes.get(nodeId) || { node_id: nodeId };
+      n.peer_bearing_text =
+        `${body.posterior_mean_deg.toFixed(1)}° ± ` +
+        `${body.posterior_sigma_deg.toFixed(2)}° (posterior)`;
+      state.nodes.set(nodeId, n);
+      if (state.selectedNodeId === nodeId) renderDetail();
+    } catch (e) {
+      console.warn(`peer_bearing fetch failed for ${nodeId}: ${e.message}`);
     }
   }
 
@@ -212,10 +246,14 @@
     detailStateBadge.textContent = badgeLabel(n);
     detailCalEl.textContent = n.cal_label || "unknown";
     detailPeerEl.textContent = (n.peer && n.peer.node_id) || n.peer_id || "—";
-    detailMarginEl.textContent =
-      typeof n.link_margin_db === "number"
-        ? `${n.link_margin_db.toFixed(1)} dB`
-        : "—";
+    // ADR-026 §I PeerLink low-margin glyph at <+10 dB.
+    if (typeof n.link_margin_db === "number") {
+      const warn = n.link_margin_db < PEER_LINK_LOW_MARGIN_DB ? " ⚠" : "";
+      detailMarginEl.textContent = `${n.link_margin_db.toFixed(1)} dB${warn}`;
+    } else {
+      detailMarginEl.textContent = "—";
+    }
+    detailPeerBearingEl.textContent = n.peer_bearing_text || "—";
     detailLastEl.textContent = n.last_acquired_age || "never";
 
     // ADR-022 manual-steer slider clamp: if the node has reported a

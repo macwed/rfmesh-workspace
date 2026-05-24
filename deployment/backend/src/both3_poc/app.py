@@ -181,6 +181,43 @@ async def get_fixes() -> JSONResponse:
     return JSONResponse(fc)
 
 
+@app.get("/node/{node_id}/peer_bearing")
+async def get_peer_bearing(node_id: str) -> dict[str, Any]:
+    """Most recent PEER_LINK posterior bearing for ``node_id`` (ADR-026 §I).
+
+    Combines the wire's likelihood sigma + the prior fields server-side
+    via ``combine_bearing_prior`` so ``link.html`` does not reimplement
+    the circular-mean wrap in JS (one helper, every consumer keys off it
+    -- RF-DSP NOTE 2 on ADR-026).
+
+    404 when the node has not yet emitted any peer-acquired bearing.
+    """
+    from rfmesh_fusion import combine_bearing_prior  # noqa: PLC0415
+
+    bearing = _store(app).latest_peer_bearing(node_id)
+    if bearing is None:
+        msg = f"node {node_id!r}: no PEER_LINK bearing on record yet."
+        raise HTTPException(status_code=404, detail=msg)
+    assert bearing.prior_mean_deg is not None
+    assert bearing.prior_sigma_deg is not None
+    post_mean, post_sigma = combine_bearing_prior(
+        likelihood_mean_deg=bearing.azimuth_deg,
+        likelihood_sigma_deg=bearing.azimuth_sigma_deg,
+        prior_mean_deg=bearing.prior_mean_deg,
+        prior_sigma_deg=bearing.prior_sigma_deg,
+    )
+    return {
+        "node_id": node_id,
+        "t_unix_ns": bearing.t_unix_ns,
+        "likelihood_mean_deg": bearing.azimuth_deg,
+        "likelihood_sigma_deg": bearing.azimuth_sigma_deg,
+        "prior_mean_deg": bearing.prior_mean_deg,
+        "prior_sigma_deg": bearing.prior_sigma_deg,
+        "posterior_mean_deg": post_mean,
+        "posterior_sigma_deg": post_sigma,
+    }
+
+
 @app.get("/bearings")
 async def get_bearings() -> JSONResponse:
     settings = _settings(app)
