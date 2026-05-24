@@ -97,6 +97,29 @@ class Capability(StrEnum):
     COMMS_DSSS = "comms_dsss"
 
 
+class BearingPriorKind(StrEnum):
+    """The epistemic status of a ``BearingReport``'s azimuth prior (ADR-026).
+
+    Orthogonal to ``Capability`` (the estimator-type axis). A peer-acquired
+    bearing produced by the SAME L1_RSSI estimator path that produces emitter
+    bearings carries ``prior_kind = PEER_LINK``; an incidental secondary peak
+    from the same sweep carries ``prior_kind = FLAT``.
+
+    Added in SCHEMA_VERSION 1.4.0. A legacy producer (pre-1.4.0) that omits
+    the field entirely is treated by consumers as ``FLAT`` -- that is the
+    documented backwards-compatibility contract.
+    """
+
+    #: No prior -- the bearing is a measurement of an unknown emitter.
+    FLAT = "flat"
+    #: Bayesian prior from a known peer link (surveyed position + prior
+    #: comms). Producer MUST also populate ``BearingReport.prior_mean_deg``
+    #: and ``BearingReport.prior_sigma_deg``; the validator enforces this
+    #: coherence. Fusion filters these reports out of emitter ``FixEvent``
+    #: computation (ADR-026 Q3 per-peak filter).
+    PEER_LINK = "peer_link"
+
+
 class EmitterClass(StrEnum):
     """Emitter type label produced by the L3 classifier.
 

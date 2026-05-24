@@ -54,12 +54,13 @@ from .config import (
 from .enums import (
     ArrayGeometry,
     BearerKind,
+    BearingPriorKind,
     Capability,
     ConfidenceLevel,
     EmitterClass,
 )
 from .geospatial import EllipseENU, GeodeticPosition
-from .messages import BearingReport, FixEvent, NodeStatus
+from .messages import BearingReport, FixEvent, NodeStatus, PeerLink
 from .protocols import (
     Bearer,
     BearingEstimator,
@@ -84,6 +85,7 @@ __all__ = [
     "BearerConfig",
     "BearerKind",
     "BearingEstimator",
+    "BearingPriorKind",
     "BearingReport",
     "Capability",
     "CoherentIQBlock",
@@ -101,6 +103,7 @@ __all__ = [
     "IQBlock",
     "NodeConfig",
     "NodeStatus",
+    "PeerLink",
     "Receiver",
     "ReceiverCapabilities",
     "SDRConfig",

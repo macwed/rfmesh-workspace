@@ -41,6 +41,7 @@ from rfmesh_contracts import (
     Capability,
     NodeConfig,
     NodeStatus,
+    PeerLink,
     Receiver,
 )
 
@@ -317,6 +318,34 @@ class Node:
             gnss_locked=False,
             healthy=True,
             status_detail=status_detail,
+            peer_links=self._build_peer_links(),
+        )
+
+    def _build_peer_links(self) -> tuple[PeerLink, ...] | None:
+        """Build the ADR-026 ``NodeStatus.peer_links`` snapshot.
+
+        Returns ``None`` on a node with no rendezvous loop configured
+        (legacy semantics preserved). Returns an empty tuple on a 1.4.0+
+        node that has rendezvous configured but no live peer info yet
+        -- distinct from None per ADR-026 §Change E.
+
+        link_margin_db field is left as None in v1.4.0; live link margin
+        measurement is gate-5 of the soldier-grade checklist and lands
+        with ADR-025 comms-mode hardware. The peer_node_id +
+        last_lock_t_unix_ns fields are populated from RendezvousLoop's
+        last successful refine.
+        """
+        rv = self._rendezvous_loop
+        if rv is None:
+            return None
+        last_report = rv.last_report
+        last_lock_ns: int | None = last_report.t_unix_ns if last_report is not None else None
+        return (
+            PeerLink(
+                peer_node_id=rv.config.peer_node_id,
+                last_lock_t_unix_ns=last_lock_ns,
+                link_margin_db=None,
+            ),
         )
 
     async def _teardown(self) -> None:

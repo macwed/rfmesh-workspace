@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
+from rfmesh_contracts import BearingPriorKind
 from rfmesh_dsp.l1 import L1AmplitudeSweepEstimator
 
 if TYPE_CHECKING:
@@ -77,6 +78,43 @@ def _mode_cancelled(cancel: asyncio.Event | None) -> bool:
     """ADR-024 cancel-event helper -- ``cancel`` may be ``None`` for callers
     that have not opted into mode-handoff semantics (legacy/test path)."""
     return cancel is not None and cancel.is_set()
+
+
+_R_EARTH_M: float = 6_371_000.0
+_PEER_PRIOR_SIGMA_CAP_DEG: float = 90.0
+
+
+def great_circle_distance_m(a: GeodeticPosition, b: GeodeticPosition) -> float:
+    """Great-circle distance between two WGS-84 points, metres.
+
+    Spherical Haversine -- at the few-km inter-node ranges in scope the
+    ellipsoidal correction is far below the antenna HPBW, so a sphere is
+    honest here (same posture as ``geodesic_initial_bearing_deg``).
+    """
+    lat1 = math.radians(a.lat_deg)
+    lat2 = math.radians(b.lat_deg)
+    dlat = math.radians(b.lat_deg - a.lat_deg)
+    dlon = math.radians(b.lon_deg - a.lon_deg)
+    h = math.sin(dlat / 2.0) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2.0) ** 2
+    return float(2.0 * _R_EARTH_M * math.asin(math.sqrt(h)))
+
+
+def peer_prior_sigma_deg(peer_position_sigma_m: float, range_m: float) -> float:
+    """Fold peer-position uncertainty + LOS geometry into prior sigma on bearing.
+
+    Small-angle linearisation of ``arctan(sigma_pos / range)``: at v1 typical
+    ranges 1-5 km with sigma_pos 5-10 m the linearisation is exact to <1e-5°.
+    Capped at 90° (the servo arc) as a sanity bound -- when range
+    approaches sigma_pos the linearisation under-predicts and the operational
+    case is pathological anyway (peers nearly co-located cannot DF each
+    other). ADR-026 §H + RF-DSP NOTE 1 (linearisation defensible for
+    v1 ranges).
+
+    ``max(range_m, 1.0)`` avoids div-by-zero for the degenerate
+    co-located case; the 90° cap then saturates the result.
+    """
+    rad = peer_position_sigma_m / max(range_m, 1.0)
+    return min(math.degrees(rad), _PEER_PRIOR_SIGMA_CAP_DEG)
 
 
 def geodesic_initial_bearing_deg(origin: GeodeticPosition, target: GeodeticPosition) -> float:
@@ -293,6 +331,12 @@ class RendezvousLoop:
                 return False
             report = await self._refine_once(stopping, half_arc, cancel)
             if report is not None:
+                # ADR-026 §H: tag the peer-acquired bearing with PEER_LINK
+                # prior. The wire's ``azimuth_sigma_deg`` stays as the
+                # likelihood sigma (raw parabola peak-fit residual); the prior
+                # mean + sigma travel on the new optional fields. Downstream
+                # consumers combine via ``combine_bearing_prior``.
+                report = self._tag_peer_prior(report)
                 self._last_report = report
                 # Re-point onto the refined peak (bidirectional, within arc).
                 if _mode_cancelled(cancel):
@@ -340,6 +384,29 @@ class RendezvousLoop:
     def reset(self) -> None:
         """Drop the estimator's accumulator (ADR-024 mode-exit reset)."""
         self._estimator.begin_sweep(time.time_ns())
+
+    def _tag_peer_prior(self, report: BearingReport) -> BearingReport:
+        """Return a copy of ``report`` with ADR-026 PEER_LINK prior fields.
+
+        Mean = great-circle bearing self->peer (the GPS prior).
+        Sigma = ``peer_prior_sigma_deg(peer.sigma_m, range_m)`` --
+        small-angle fold of peer-position uncertainty.
+
+        The wire's ``azimuth_sigma_deg`` is NOT touched: it stays as the
+        likelihood sigma (raw peak-fit residual) so the MC sigma-honesty
+        test (B2) remains coherent (ADR-026 §G).
+        """
+        peer_pos = self._cfg.peer_position
+        bearing_to_peer = geodesic_initial_bearing_deg(self._node_position, peer_pos)
+        rng_m = great_circle_distance_m(self._node_position, peer_pos)
+        p_sigma = peer_prior_sigma_deg(peer_pos.sigma_m, rng_m)
+        return report.model_copy(
+            update={
+                "prior_kind": BearingPriorKind.PEER_LINK,
+                "prior_mean_deg": bearing_to_peer,
+                "prior_sigma_deg": p_sigma,
+            }
+        )
 
     async def _point(self, angle_deg: float) -> None:
         """Move directly to ``angle_deg`` and settle (no same-side approach)."""
@@ -389,5 +456,7 @@ __all__ = [
     "Role",
     "expected_servo_angle",
     "geodesic_initial_bearing_deg",
+    "great_circle_distance_m",
+    "peer_prior_sigma_deg",
     "role",
 ]

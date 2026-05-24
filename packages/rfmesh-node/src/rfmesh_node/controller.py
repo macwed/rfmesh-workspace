@@ -145,8 +145,10 @@ class NodeController:
         self._on_state_change = on_state_change
 
         self._state: NodeState = (
-            NodeState.ACQUIRED_PEER if rendezvous_loop is not None
-            else NodeState.SWEEPING if sweep_loop is not None
+            NodeState.ACQUIRED_PEER
+            if rendezvous_loop is not None
+            else NodeState.SWEEPING
+            if sweep_loop is not None
             else NodeState.PARKED
         )
         self._status_detail: str = ""
@@ -205,9 +207,7 @@ class NodeController:
         async with self._mode_lock:
             self._mode_cancel.set()
             try:
-                await asyncio.wait_for(
-                    self._mode_drained.wait(), timeout=DRAIN_TIMEOUT_S
-                )
+                await asyncio.wait_for(self._mode_drained.wait(), timeout=DRAIN_TIMEOUT_S)
             except TimeoutError:
                 prior = self._state.value
                 self._state = NodeState.FAULT
@@ -238,9 +238,7 @@ class NodeController:
         if self._on_state_change is None:
             return
         with contextlib.suppress(Exception):
-            await self._on_state_change(
-                {"kind": "node_state", **self.snapshot()}
-            )
+            await self._on_state_change({"kind": "node_state", **self.snapshot()})
 
     # ------------------------------------------------------------------
     # Operator command dispatch (called by Node._handle_command).
@@ -272,9 +270,7 @@ class NodeController:
             "reason": f"unknown command kind {getattr(command, 'kind', None)!r}",
         }
 
-    async def _dispatch_manual_steer(
-        self, command: ManualSteerCommand
-    ) -> dict[str, object] | None:
+    async def _dispatch_manual_steer(self, command: ManualSteerCommand) -> dict[str, object] | None:
         if self._state is NodeState.FAULT:
             return self._refused(
                 command,
@@ -293,19 +289,13 @@ class NodeController:
         # the commanded angle. The mode loop (run()) reads
         # _manual_hold_target_deg and drives the servo.
         self._manual_hold_target_deg = target
-        self._manual_hold_expires_at_ns = (
-            time.time_ns() + int(command.timeout_s * 1e9)
-        )
+        self._manual_hold_expires_at_ns = time.time_ns() + int(command.timeout_s * 1e9)
         self._last_commanded_angle_deg = target
-        self._status_detail = (
-            f"MANUAL_HOLD @ {target:.1f} deg, timeout {command.timeout_s:.1f}s"
-        )
+        self._status_detail = f"MANUAL_HOLD @ {target:.1f} deg, timeout {command.timeout_s:.1f}s"
         await self._broadcast_state_change()
         return None
 
-    async def _dispatch_all_stop(
-        self, command: AllStopCommand
-    ) -> dict[str, object] | None:
+    async def _dispatch_all_stop(self, command: AllStopCommand) -> dict[str, object] | None:
         if not await self._switch_mode(NodeState.PARKED):
             return self._refused(command, self._status_detail)
         self._status_detail = f"PARKED by ALL_STOP from {command.requestor_id}"
@@ -435,9 +425,7 @@ class NodeController:
             if self._sweep_loop is not None and not self._mode_cancel.is_set():
                 await self._sweep_loop.run_once(stopping, self._mode_cancel)
             with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(
-                    self._mode_cancel.wait(), timeout=rv.config.retry_pause_s
-                )
+                await asyncio.wait_for(self._mode_cancel.wait(), timeout=rv.config.retry_pause_s)
             return
         # LOCKED: hold the link, then break for one jammer sweep, re-acquire.
         await rv.hold(stopping, rv.config.link_hold_s, self._mode_cancel)
@@ -463,8 +451,7 @@ class NodeController:
             self._manual_hold_expires_at_ns = None
             self._status_detail = "MANUAL_HOLD expired; resuming"
             self._state = (
-                NodeState.ACQUIRED_PEER if self._rendezvous_loop is not None
-                else NodeState.SWEEPING
+                NodeState.ACQUIRED_PEER if self._rendezvous_loop is not None else NodeState.SWEEPING
             )
             await self._broadcast_state_change()
 
@@ -478,9 +465,7 @@ class NodeController:
         # or shutdown. status_detail carries the loud reason.
         await self._wait_cancel_or_stop(stopping, timeout_s=5.0)
 
-    async def _wait_cancel_or_stop(
-        self, stopping: asyncio.Event, timeout_s: float
-    ) -> str:
+    async def _wait_cancel_or_stop(self, stopping: asyncio.Event, timeout_s: float) -> str:
         """Wait for whichever fires first: mode_cancel, stopping, or timeout.
 
         Returns ``"cancel"`` / ``"stopping"`` / ``"timeout"`` so the caller can

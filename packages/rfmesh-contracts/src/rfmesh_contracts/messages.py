@@ -41,11 +41,43 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .enums import Capability, ConfidenceLevel, EmitterClass
+from .enums import BearingPriorKind, Capability, ConfidenceLevel, EmitterClass
 from .geospatial import EllipseENU, GeodeticPosition
 from .version import SCHEMA_VERSION, SchemaVersionT
+
+
+class PeerLink(BaseModel):
+    """Live state of one peer link reported by a node (ADR-026).
+
+    Travels in ``NodeStatus.peer_links`` so the operator UI renders a
+    "linked Ns ago · +M dB margin" line per peer without polling.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    peer_node_id: str = Field(
+        min_length=1,
+        description="Peer's stable node_id; matches the peer's NodeConfig.node_id.",
+    )
+    last_lock_t_unix_ns: int | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Timestamp of the most recent successful directional lock with "
+            "this peer. None when the link has never come up since boot."
+        ),
+    )
+    link_margin_db: float | None = Field(
+        default=None,
+        description=(
+            "Link margin in dB above local noise floor, NEVER absolute dBm "
+            "(no SDR in scope is power-calibrated, B.2). None when the link "
+            "is not currently locked. link.html shall render a warning "
+            "glyph when this is below +10 dB (ADR-026 §I)."
+        ),
+    )
 
 
 class BearingReport(BaseModel):
@@ -192,6 +224,65 @@ class BearingReport(BaseModel):
             "(ADR-013, G4)."
         ),
     )
+    prior_kind: BearingPriorKind | None = Field(
+        default=None,
+        description=(
+            "Epistemic axis (ADR-026): FLAT for unknown-emitter bearings, "
+            "PEER_LINK for bearings produced by peer-acquisition. None on "
+            "legacy producers (pre-1.4.0); consumers treat None as FLAT. "
+            "Fusion uses this for the emitter-FixEvent filter (NOT the "
+            "method, which stays as the estimator-type axis). Added in "
+            "SCHEMA_VERSION 1.4.0."
+        ),
+    )
+    prior_mean_deg: float | None = Field(
+        default=None,
+        ge=0.0,
+        lt=360.0,
+        description=(
+            "Prior mean azimuth in geographic degrees CW from north. "
+            "Populated when prior_kind=PEER_LINK (the GPS-prior bearing "
+            "from surveyed peer position via "
+            "rendezvous.geodesic_initial_bearing_deg). MUST be None "
+            "otherwise. Added in SCHEMA_VERSION 1.4.0 (ADR-026)."
+        ),
+    )
+    prior_sigma_deg: float | None = Field(
+        default=None,
+        gt=0.0,
+        description=(
+            "Prior 1-sigma uncertainty in degrees. Populated when "
+            "prior_kind=PEER_LINK. NOTE: the wire's azimuth_sigma_deg "
+            "stays as the LIKELIHOOD sigma (raw parabola peak-fit "
+            "residual, no prior folded in); downstream consumers "
+            "combine likelihood + prior to derive the posterior via "
+            "rfmesh_fusion.posterior.combine_bearing_prior. This split "
+            "keeps the MC sigma-honesty test (test_sigma_honesty.py, "
+            "B2) coherent -- it exercises the likelihood sigma "
+            "exclusively. MUST be None when prior_kind != PEER_LINK. "
+            "Added in SCHEMA_VERSION 1.4.0 (ADR-026)."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _prior_fields_coherent(self) -> BearingReport:
+        """ADR-026 B3 path: PEER_LINK requires both prior fields; FLAT
+        / None must NOT carry prior data (would mislead consumers)."""
+        if self.prior_kind is BearingPriorKind.PEER_LINK:
+            if self.prior_mean_deg is None or self.prior_sigma_deg is None:
+                msg = (
+                    "BearingReport.prior_kind=PEER_LINK requires both "
+                    "prior_mean_deg and prior_sigma_deg (ADR-026)."
+                )
+                raise ValueError(msg)
+        elif self.prior_mean_deg is not None or self.prior_sigma_deg is not None:
+            msg = (
+                "BearingReport.prior_mean_deg / prior_sigma_deg are only "
+                "valid when prior_kind=PEER_LINK; got prior_kind="
+                f"{self.prior_kind!r}."
+            )
+            raise ValueError(msg)
+        return self
 
 
 class FixEvent(BaseModel):
@@ -397,5 +488,17 @@ class NodeStatus(BaseModel):
             "Optional short human-readable elaboration, especially when "
             "healthy is False, e.g. 'SDR overflow' or 'LoRa bearer down, Wi-Fi "
             "only'. Empty string when there is nothing to add."
+        ),
+    )
+    peer_links: tuple[PeerLink, ...] | None = Field(
+        default=None,
+        description=(
+            "Live peer-link state, one entry per known peer (ADR-026). "
+            "None on legacy nodes that predate 1.4.0. Empty tuple on a "
+            "1.4.0+ node with no peers configured -- explicit 'has no "
+            "peers', distinct from the legacy None. link.html renders "
+            "one row per entry with 'linked Ns ago · +M dB margin' and "
+            "warns when link_margin_db < +10 dB. Added in "
+            "SCHEMA_VERSION 1.4.0."
         ),
     )

@@ -102,6 +102,7 @@ from typing import Final
 import numpy as np
 from rfmesh_contracts.config import FusionConfig  # type: ignore[import-untyped, unused-ignore]
 from rfmesh_contracts.enums import (  # type: ignore[import-untyped, unused-ignore]
+    BearingPriorKind,
     Capability,
     EmitterClass,
 )
@@ -205,9 +206,28 @@ class StansfieldMLEFuser:
         # must never contribute weight to a fix. They reach the fuser
         # only so a remote dashboard can render the refusal; here they
         # are stripped before the time-window + min-count check.
+        non_refusal = tuple(b for b in bearings if b.method is not Capability.L1_REFUSED_PROMINENCE)
+        # ADR-026: drop PEER_LINK-prior bearings (they belong to the
+        # link-state consumer, not the emitter fusion). Per-peak filter
+        # (not per-sweep) -- FLAT secondary peaks from the same
+        # rendezvous refine sweep DO contribute to emitter fixes,
+        # preserving Advantage #1 (density-scaled GDOP).
+        peer_count = sum(1 for b in non_refusal if b.prior_kind is BearingPriorKind.PEER_LINK)
         bearings_tuple = tuple(
-            b for b in bearings if b.method is not Capability.L1_REFUSED_PROMINENCE
+            b for b in non_refusal if b.prior_kind is not BearingPriorKind.PEER_LINK
         )
+        if not bearings_tuple and peer_count:
+            # B3: batch composed entirely of peer-link bearings is not a
+            # silent empty fix. The caller's filter is wrong, or
+            # rendezvous emitted peer reports into the emitter ingest
+            # path. Loud refusal so the operator sees the misconfig.
+            msg = (
+                f"Fuser.fuse: batch of {peer_count} bearings is entirely "
+                "PEER_LINK-prior; no emitter geolocation possible. PEER_LINK "
+                "reports belong to the link-state consumer (ADR-026), not "
+                "the emitter fusion."
+            )
+            raise ValueError(msg)
         windowed = _filter_to_time_window(bearings_tuple, active_config.batch_window_ms)
         if len(windowed) < active_config.min_bearings_for_fix:
             return None

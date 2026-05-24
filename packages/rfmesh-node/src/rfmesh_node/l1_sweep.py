@@ -139,9 +139,7 @@ class L1SweepLoop:
             peak_prominence_db_min=self._cfg.peak_prominence_db_min,
         )
 
-    async def run(
-        self, stopping: asyncio.Event, cancel: asyncio.Event | None = None
-    ) -> None:
+    async def run(self, stopping: asyncio.Event, cancel: asyncio.Event | None = None) -> None:
         """Sweep repeatedly until ``stopping`` or ``cancel`` is set.
 
         Assumes ``Node`` has already ``connect``-ed the servo (the lifecycle
@@ -167,9 +165,7 @@ class L1SweepLoop:
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stopping.wait(), timeout=self._cfg.inter_sweep_s)
 
-    async def run_once(
-        self, stopping: asyncio.Event, cancel: asyncio.Event | None = None
-    ) -> None:
+    async def run_once(self, stopping: asyncio.Event, cancel: asyncio.Event | None = None) -> None:
         """Run a single sweep pass.
 
         Used by the rendezvous supervisor / NodeController to time-share the

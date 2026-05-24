@@ -1140,7 +1140,9 @@ function renderDetail() {
     ["Semi-major", `${Math.round(p.semi_major_m)} m`],
     ["Semi-minor", `${Math.round(p.semi_minor_m)} m`],
     ["Orientation", `${p.orientation_deg.toFixed(1)}°`],
-    ["GDOP " + iTag("gdop"), p.gdop.toFixed(2)],
+    ["GDOP " + iTag("gdop"), p.gdop_uncomputable_reason
+      ? `uncomputable (${p.gdop_uncomputable_reason})`
+      : p.gdop.toFixed(2)],
     ["Method", p.method + (p.method === "fallback_centroid" ? " ⚠ suspect" : "")],
     ["Emitter", p.emitter_class || "—"],
     ["Residuals", nodeRows || "—"],
