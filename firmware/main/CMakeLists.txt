@@ -20,10 +20,12 @@ idf_component_register(
         "${CMAKE_CURRENT_BINARY_DIR}"
     REQUIRES
         driver
-        # Was esp_driver_usb_serial_jtag on the C3 salvage. ESP32-S2 has no
-        # USB-Serial-JTAG peripheral; the managed component below provides
-        # TinyUSB CDC instead. See main/idf_component.yml.
-        esp_tinyusb
+        # ESP32-C6 has the native USB-Serial-JTAG peripheral (same family
+        # as the C3 salvage). The driver provides usb_serial_jtag_* APIs
+        # used by main.c plus the VFS layer that the IDF console helper
+        # esp_console_new_repl_usb_serial_jtag rides in shell.c.
+        esp_driver_usb_serial_jtag
+        vfs
         nvs_flash
         console
         esp_timer

@@ -1,11 +1,16 @@
 ## Managed-component dependencies for the firmware/main component.
 ##
-## esp_tinyusb provides the TinyUSB stack + the CDC ACM helper used by
-## main.c and the stdio-routing helper used by shell.c. Pinned to the
-## 1.4.x line which targets ESP-IDF v5.1+ (matches the prior C3 build's
-## v5.4.3 baseline per README.md).
+## ESP32-C6 (ADR-015) uses the native USB-Serial-JTAG peripheral
+## (driver/usb_serial_jtag.h, in core IDF), NOT TinyUSB. The earlier
+## S2 build pulled espressif/esp_tinyusb here; that dep is removed
+## because esp_tinyusb does not support C6 (manifest restricts it to
+## S2/S3/P4/H4) and was breaking `idf.py set-target esp32c6` with a
+## solver error.
+##
+## All current direct deps live in main/CMakeLists.txt REQUIRES
+## (esp_wifi / esp_netif / esp_event / lwip etc. land via IDF's own
+## component registry — no managed-component entries needed).
 
 dependencies:
-  espressif/esp_tinyusb: "~1.4.0"
   idf:
     version: ">=5.1"
