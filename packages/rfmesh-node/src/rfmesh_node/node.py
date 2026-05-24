@@ -59,6 +59,7 @@ if TYPE_CHECKING:
     from rfmesh_contracts import BearingEstimator
     from rfmesh_servo.driver import ServoDriver
 
+    from .comms.comms_loop import CommsLoop
     from .l1_sweep import L1SweepLoop
     from .rendezvous import RendezvousLoop
     from .runtime_config import CommandEndpointConfig
@@ -86,6 +87,7 @@ class Node:
         bearer: Bearer | None = None,
         sweep_loop: L1SweepLoop | None = None,
         rendezvous_loop: RendezvousLoop | None = None,
+        comms_loop: CommsLoop | None = None,
         servo: ServoDriver | None = None,
         command_endpoint: CommandEndpointConfig | None = None,
     ) -> None:
@@ -110,6 +112,11 @@ class Node:
         self._bearer = bearer
         self._sweep_loop = sweep_loop
         self._rendezvous_loop = rendezvous_loop
+        # ADR-025 Iter 4.5: optional DSSS comms loop. Mutually exclusive
+        # with sweep_loop / rendezvous_loop in v1.3.0 (the YAML validator
+        # NodeRuntimeConfig._coherence enforces this at config-load
+        # time); Node trusts the upstream gate and does not re-check.
+        self._comms_loop = comms_loop
         # Servo lifecycle is owned here (not in the sweep loop) so the sweep
         # and rendezvous loops can share one connected servo without
         # re-enumerating the USB-CDC link on every mode flip (ADR-019).
@@ -175,6 +182,7 @@ class Node:
                     calibrated_arc_deg=cal_arc,
                     node_id=self._config.node_id,
                     on_state_change=self._on_controller_state_change,
+                    comms_loop=self._comms_loop,
                 )
                 self._tasks.append(
                     asyncio.create_task(
@@ -189,6 +197,21 @@ class Node:
             elif self._sweep_loop is not None:
                 self._tasks.append(
                     asyncio.create_task(self._sweep_loop.run(self._stopping), name="node-l1-sweep")
+                )
+            # ADR-025 Iter 4.5: DSSS comms supervisor. The comms loop is
+            # mutually exclusive with sweep/rendezvous (YAML validator),
+            # so we run it only when no DF loop has claimed the servo.
+            if self._comms_loop is not None and self._sweep_loop is None and (
+                self._rendezvous_loop is None
+            ):
+                # Wire the operator-facing callbacks before acquire so the
+                # link-up status frame surfaces on the dashboard the
+                # moment acquire completes.
+                self._comms_loop.on_received = self._on_comms_received
+                self._comms_loop.on_status = self._on_comms_status
+                self._comms_loop.on_frame_dropped = self._on_comms_frame_dropped
+                self._tasks.append(
+                    asyncio.create_task(self._comms_supervisor(), name="node-comms")
                 )
             # ADR-022 comms-mode: phone the backend so link.html can see
             # this node + clamp the manual-steer slider to the calibrated
@@ -465,6 +488,97 @@ class Node:
         if self._command_channel is None:
             return False
         return await self._command_channel.send_response(payload)
+
+    async def _comms_supervisor(self) -> None:
+        """ADR-025 Iter 4.5: drive the DSSS comms loop end-to-end.
+
+        ``acquire()`` once (points the Yagi at the peer, initialises the
+        TDD schedule), then ``run(stop)`` until the node-wide stop
+        event fires. Surfaces acquisition failures (``PeerOutOfArcError``
+        / ``RuntimeError``) loudly through the supervisor log -- the
+        comms loop's own callbacks already push WS frames for the
+        operator-facing surface.
+        """
+        loop = self._comms_loop
+        if loop is None:  # defensive -- caller already checked
+            return
+        try:
+            await loop.acquire()
+        except Exception:
+            _LOG.exception(
+                "Node %s: comms acquire() failed -- link will not come up.",
+                self._config.node_id,
+            )
+            return
+        try:
+            await loop.run(self._stopping)
+        except Exception:
+            _LOG.exception(
+                "Node %s: comms run() raised; supervisor exiting.",
+                self._config.node_id,
+            )
+
+    async def _on_comms_received(self, contents: object) -> None:
+        """Fan a decoded inbound DSSS frame to the operator dashboard.
+
+        The dashboard's ``link.js`` listens for ``kind=comms_rx``
+        frames and appends them newest-first to the message log.
+        Padding (NULs from the fixed-size frame policy) is stripped
+        so the operator sees the original text.
+        """
+        if self._command_channel is None:
+            return
+        # Late-import the FrameContents type only for the isinstance /
+        # attribute-access shape -- avoids a top-level rfmesh_dsss
+        # import on nodes that never run comms mode.
+        peer = getattr(contents, "src_node_id", None)
+        payload_bytes = getattr(contents, "payload", b"")
+        # CommsLoop.strip_padding is a staticmethod; import lazily for
+        # the same scope-hygiene reason.
+        from .comms.comms_loop import CommsLoop  # noqa: PLC0415
+
+        text_bytes = CommsLoop.strip_padding(payload_bytes)
+        try:
+            text = text_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            text = text_bytes.hex()
+        await self._command_channel.send_response(
+            {
+                "kind": "comms_rx",
+                "node_id": self._config.node_id,
+                "data": {
+                    "peer": peer,
+                    "text": text,
+                    "t_unix_ns": time.time_ns(),
+                },
+            },
+        )
+
+    async def _on_comms_status(self, snapshot: dict[str, object]) -> None:
+        """Fan a comms-link status snapshot to the operator dashboard."""
+        if self._command_channel is None:
+            return
+        await self._command_channel.send_response(
+            {
+                "kind": "comms_status",
+                "node_id": self._config.node_id,
+                "data": snapshot,
+            },
+        )
+
+    async def _on_comms_frame_dropped(self, reason: str) -> None:
+        """Log a dropped frame; surface to dashboard if WS attached.
+
+        The dashboard does not yet render dropped frames as a distinct
+        panel (Iter 5 multi-hop will add a per-link error counter
+        view); for v1.3.0 the count is visible via the comms_status
+        snapshot's ``frames_dropped`` field and this log line.
+        """
+        _LOG.warning(
+            "Node %s: comms frame dropped -- %s",
+            self._config.node_id,
+            reason,
+        )
 
     async def _handle_command(
         self,

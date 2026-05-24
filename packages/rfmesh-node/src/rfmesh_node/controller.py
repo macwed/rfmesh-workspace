@@ -47,7 +47,12 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
-from .commands import AllStopCommand, ClearFaultCommand, ManualSteerCommand
+from .commands import (
+    AllStopCommand,
+    ClearFaultCommand,
+    ManualSteerCommand,
+    SendCommsMessageCommand,
+)
 
 if TYPE_CHECKING:
     from rfmesh_servo.driver import ServoDriver
@@ -114,6 +119,7 @@ class NodeController:
         calibrated_arc_deg: tuple[float, float] | None,
         node_id: str,
         on_state_change: StateBroadcastFn | None = None,
+        comms_loop: object | None = None,
     ) -> None:
         """Bind dependencies.
 
@@ -143,6 +149,11 @@ class NodeController:
         self._cal_arc = calibrated_arc_deg
         self._node_id = node_id
         self._on_state_change = on_state_change
+        # ADR-025 Iter 4.5: optional CommsLoop. When wired, the
+        # SendCommsMessageCommand dispatch path queues the payload onto
+        # comms_loop's outbox; when None, the command refuses loudly
+        # (B3 -- never silently drop a soldier message).
+        self._comms_loop = comms_loop
 
         self._state: NodeState = (
             NodeState.ACQUIRED_PEER
@@ -260,6 +271,8 @@ class NodeController:
             return await self._dispatch_all_stop(command)
         if isinstance(command, ClearFaultCommand):
             return self._dispatch_clear_fault(command)
+        if isinstance(command, SendCommsMessageCommand):
+            return self._dispatch_send_comms_message(command)
         # Legacy duck-typed fallback (used by older test fixtures).
         if getattr(command, "kind", None) == "clear_fault":
             return self._dispatch_clear_fault(command)
@@ -269,6 +282,37 @@ class NodeController:
             "refused_kind": getattr(command, "kind", "unknown"),
             "reason": f"unknown command kind {getattr(command, 'kind', None)!r}",
         }
+
+    def _dispatch_send_comms_message(
+        self,
+        command: SendCommsMessageCommand,
+    ) -> dict[str, object] | None:
+        """Route a soldier message to the comms loop's TX outbox (ADR-025 Iter 4.5).
+
+        Refuses loudly (B3) when:
+        * No comms loop is wired (this node is DF-mode or sweep-only).
+        * The node is in FAULT (operator must clear the fault first).
+        * The payload exceeds the comms config's max-payload bound
+          (``queue_outbound`` itself raises ``ValueError``; we wrap
+          into ``command_refused`` so the operator sees the reason).
+        """
+        if self._state is NodeState.FAULT:
+            return self._refused(
+                command,
+                "node is FAULT; POST /node/{id}/clear_fault before sending comms messages",
+            )
+        loop = self._comms_loop
+        if loop is None:
+            return self._refused(
+                command,
+                "comms loop not wired on this node (DF-mode or sweep-only -- "
+                "operator must reconfigure YAML with a comms: block)",
+            )
+        try:
+            loop.queue_outbound(command.payload_bytes())  # type: ignore[attr-defined]
+        except ValueError as exc:
+            return self._refused(command, str(exc))
+        return None
 
     async def _dispatch_manual_steer(self, command: ManualSteerCommand) -> dict[str, object] | None:
         if self._state is NodeState.FAULT:
@@ -337,7 +381,9 @@ class NodeController:
             raise ManualSteerOutOfArcError(msg)
 
     def _refused(
-        self, command: ManualSteerCommand | AllStopCommand, reason: str
+        self,
+        command: ManualSteerCommand | AllStopCommand | SendCommsMessageCommand,
+        reason: str,
     ) -> dict[str, object]:
         return {
             "kind": "command_refused",

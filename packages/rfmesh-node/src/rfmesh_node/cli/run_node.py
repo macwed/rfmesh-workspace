@@ -218,6 +218,73 @@ def _build_rendezvous_loop(
     )
 
 
+def _build_comms_loop(
+    runtime: NodeRuntimeConfig,
+    servo: object | None,
+) -> tuple[object | None, object | None]:
+    """Build the ADR-025 CommsLoop (+ its own RX) when comms mode is enabled.
+
+    Returns ``(comms_loop, comms_receiver)``. The comms RX is a
+    distinct ``LoopbackReceiver`` (not the same instance Node uses
+    for DF -- DF and COMMS are mutex per ADR-025 Decision B and the
+    YAML validator). For v1.3.0 the only supported driver is
+    ``"sim"`` (LoopbackChannel + SyntheticTransmitter + LoopbackReceiver);
+    hardware drivers (BladeRF / HackRF / Pluto TX) land in the
+    parallel Iter 6 branch and slot in here without contract change.
+    """
+    if runtime.comms is None:
+        return (None, None)
+    driver = runtime.node.sdr.driver
+    if driver != "sim":
+        msg = (
+            f"run_node: comms mode on driver {driver!r} is not yet wired "
+            "into the CLI (hardware TX drivers are ADR-025 Iter 6 -- "
+            "BladeRF / HackRF / Pluto+). Use driver=sim for the loopback "
+            "smoke test, or wait for the hardware-driver branch to merge."
+        )
+        raise NotImplementedError(msg)
+    if runtime.node.heading_deg is None:
+        msg = (
+            "run_node: comms mode requires node.heading_deg in the YAML "
+            "(antenna boresight azimuth; the comms loop computes the "
+            "servo angle that points the Yagi at the peer)."
+        )
+        raise ValueError(msg)
+    # Lazy imports so non-comms nodes do not load the rfmesh-sdr
+    # simulator / rfmesh-dsss DSP stack on every boot.
+    from rfmesh_sdr.simulator import (  # noqa: PLC0415
+        LoopbackChannel,
+        LoopbackReceiver,
+        SyntheticTransmitter,
+    )
+
+    from rfmesh_node.comms.comms_loop import CommsLoop  # noqa: PLC0415
+
+    comms_contract = runtime.comms_contract()
+    comms_link = runtime.comms_link_dataclass()
+    if comms_contract is None or comms_link is None:
+        msg = "run_node: comms section present but materialisers returned None (bug)."
+        raise RuntimeError(msg)
+    # One shared loopback channel for the sim path. Real hardware will
+    # have separate TX / RX device handles instead.
+    channel = LoopbackChannel(
+        sample_rate_hz=comms_contract.chip_rate_hz,
+    )
+    tx = SyntheticTransmitter(channel)
+    comms_rx = LoopbackReceiver(channel)
+    loop = CommsLoop(
+        self_node_id=runtime.node.node_id,
+        self_position=runtime.node.position,
+        boresight_heading_deg=runtime.node.heading_deg,
+        comms_link=comms_link,
+        comms_config=comms_contract,
+        transmitter=tx,
+        receiver=comms_rx,
+        servo=servo,
+    )
+    return (loop, comms_rx)
+
+
 async def _run(runtime: NodeRuntimeConfig) -> None:
     """Bring the node up; wait for SIGINT; tear down."""
     receiver = _build_receiver(runtime)
@@ -225,12 +292,14 @@ async def _run(runtime: NodeRuntimeConfig) -> None:
     servo = _build_servo(runtime)
     sweep_loop = _build_sweep_loop(runtime, receiver, bearer, servo)
     rendezvous_loop = _build_rendezvous_loop(runtime, receiver, servo)
+    comms_loop, _comms_rx = _build_comms_loop(runtime, servo)
     node = Node(
         runtime.node,
         receiver=receiver,
         bearer=bearer,
         sweep_loop=sweep_loop,
         rendezvous_loop=rendezvous_loop,
+        comms_loop=comms_loop,  # type: ignore[arg-type]
         servo=servo,
         command_endpoint=runtime.command_endpoint if runtime.command_endpoint.enabled else None,
     )
