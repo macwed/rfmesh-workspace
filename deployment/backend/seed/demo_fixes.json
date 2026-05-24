@@ -3,8 +3,8 @@
     "fix_id": "aaaaaaaa-0000-4000-8000-000000000001",
     "center_freq_hz": 1575420000,
     "t_unix_ns": 1779058164250000000,
-    "lat_deg": 50.3551,
-    "lon_deg": 5.0002,
+    "lat_deg": 50.4907107,
+    "lon_deg": 4.9800686,
     "hae_m": 0.0,
     "sigma_m": 130.0,
     "semi_major_m": 900.0,
@@ -13,15 +13,21 @@
     "gdop": 1.6,
     "confidence_level": "medium",
     "method": "stansfield+mle",
-    "contributing_nodes": ["node-l1-north", "node-l1-south"],
-    "residuals_deg": [0.4, -0.7]
+    "contributing_nodes": [
+      "node-l1-north",
+      "node-l1-south"
+    ],
+    "residuals_deg": [
+      0.4,
+      -0.7
+    ]
   },
   {
     "fix_id": "bbbbbbbb-0000-4000-8000-000000000002",
     "center_freq_hz": 2450000000,
     "t_unix_ns": 1779058164290000000,
-    "lat_deg": 50.3549,
-    "lon_deg": 4.9998,
+    "lat_deg": 50.4905107,
+    "lon_deg": 4.9796686,
     "hae_m": 0.0,
     "sigma_m": 120.0,
     "semi_major_m": 850.0,
@@ -30,15 +36,21 @@
     "gdop": 1.7,
     "confidence_level": "medium",
     "method": "stansfield+mle",
-    "contributing_nodes": ["node-l1-east", "node-l1-west"],
-    "residuals_deg": [0.9, -0.3]
+    "contributing_nodes": [
+      "node-l1-east",
+      "node-l1-west"
+    ],
+    "residuals_deg": [
+      0.9,
+      -0.3
+    ]
   },
   {
     "fix_id": "cccccccc-0000-4000-8000-000000000003",
     "center_freq_hz": 5800000000,
     "t_unix_ns": 1779058164330000000,
-    "lat_deg": 50.3552,
-    "lon_deg": 5.0003,
+    "lat_deg": 50.4908107,
+    "lon_deg": 4.9801686,
     "hae_m": 0.0,
     "sigma_m": 140.0,
     "semi_major_m": 800.0,
@@ -47,15 +59,21 @@
     "gdop": 1.5,
     "confidence_level": "high",
     "method": "stansfield+mle",
-    "contributing_nodes": ["node-l1-north", "node-l1-east"],
-    "residuals_deg": [-0.5, 0.6]
+    "contributing_nodes": [
+      "node-l1-north",
+      "node-l1-east"
+    ],
+    "residuals_deg": [
+      -0.5,
+      0.6
+    ]
   },
   {
     "fix_id": "dddddddd-0000-4000-8000-000000000004",
     "center_freq_hz": 5800000000,
     "t_unix_ns": 1779058164370000000,
-    "lat_deg": 50.3396,
-    "lon_deg": 4.9315,
+    "lat_deg": 50.4752107,
+    "lon_deg": 4.9113686,
     "hae_m": 0.0,
     "sigma_m": 300.0,
     "semi_major_m": 1200.0,
@@ -64,7 +82,13 @@
     "gdop": 4.6,
     "confidence_level": "low",
     "method": "stansfield+mle",
-    "contributing_nodes": ["node-ridge-s1", "node-ridge-s2"],
-    "residuals_deg": [0.6, -0.5]
+    "contributing_nodes": [
+      "node-ridge-s1",
+      "node-ridge-s2"
+    ],
+    "residuals_deg": [
+      0.6,
+      -0.5
+    ]
   }
 ]
