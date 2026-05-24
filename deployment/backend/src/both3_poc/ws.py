@@ -39,8 +39,9 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Body, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from rfmesh_contracts import NodeStatus
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -98,26 +99,69 @@ class AllStopCommand(BaseModel):
     requestor_id: str = Field(default="unknown", max_length=64)
 
 
+class ClearFaultCommand(BaseModel):
+    """Operator ack of a sticky FAULT (ADR-024 §8).
+
+    Sent in response to a controller-reported FAULT
+    (mode_drain_timeout, uncalibrated servo, hardware refusal). The
+    node-side controller transitions FAULT -> SWEEPING; if the
+    underlying condition is still present, the next loop tick re-raises
+    FAULT with the new ``status_detail`` -- the operator sees the loop
+    visibly, not a silent re-FAULT.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str = Field(default="clear_fault", pattern="^clear_fault$")
+    requestor_id: str = Field(default="unknown", max_length=64)
+
+
+class SendCommsMessageCommand(BaseModel):
+    """Operator typed a DSSS comms message in the link panel (ADR-025 Iter 4).
+
+    Backend forwards through the same ``/command/{node_id}`` plumbing
+    as ``ManualSteerCommand``; node-side handler parses + queues onto
+    the ``CommsLoop`` outbox. Schema mirrors
+    ``rfmesh_node.commands.SendCommsMessageCommand`` (duplication is
+    deliberate -- backend / node validate independently; both raise
+    422 on schema-invalid payloads).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str = Field(default="send_comms_message", pattern="^send_comms_message$")
+    peer_node_id: str = Field(min_length=1, max_length=64)
+    payload_text: str = Field(min_length=1, max_length=256)
+    requestor_id: str = Field(default="unknown", max_length=64)
+
+
 # ---------------------------------------------------------------------------
 # Per-node WS registry
 # ---------------------------------------------------------------------------
 
 
 class NodeWsRegistry:
-    """Registry of currently-connected node WebSockets.
+    """Registry of currently-connected node WebSockets + capability snapshots.
 
     A single registry instance lives on ``app.state.node_ws_registry``,
     populated by the ``/ws/node/{node_id}`` handler on connect and
-    cleared on disconnect. Lookups by the manual-steer POST handler
-    return the connected WS or raise.
+    cleared on disconnect. ADR-022: the node sends a ``node_hello``
+    frame once per connect carrying its capability + calibrated-arc
+    snapshot; the registry caches it so ``GET /node/{id}/capabilities``
+    can serve it (the soldier UI clamps the manual-steer slider to
+    that arc, ADR-021 §"Manual-steer safety" layer 3).
 
     Thread-safety: FastAPI's event loop is single-threaded; the
-    registry's mutation points (add / remove) happen on the loop, so
-    no lock is required.
+    registry's mutation points (add / remove / snapshot) happen on the
+    loop, so no lock is required.
     """
 
     def __init__(self) -> None:
         self._by_node: dict[str, WebSocket] = {}
+        # ADR-022 capability snapshots, populated from inbound node_hello
+        # frames. Kept across reconnect-disconnect transitions intentionally:
+        # a brief network flap should not lose the slider clamp.
+        self._hello_by_node: dict[str, dict[str, Any]] = {}
 
     def register(self, node_id: str, ws: WebSocket) -> None:
         """Register a connected node WS. Overwrites any prior entry.
@@ -155,6 +199,24 @@ class NodeWsRegistry:
 
     def __len__(self) -> int:
         return len(self._by_node)
+
+    # ----- ADR-022 capability snapshots ------------------------------------
+
+    def set_hello(self, node_id: str, payload: dict[str, Any]) -> None:
+        """Cache a ``node_hello`` snapshot for this node (ADR-022)."""
+        self._hello_by_node[node_id] = payload
+
+    def get_hello(self, node_id: str) -> dict[str, Any] | None:
+        """Return the cached snapshot, or ``None`` if no hello has been seen."""
+        return self._hello_by_node.get(node_id)
+
+    def online_node_ids(self) -> set[str]:
+        """Currently-connected node_ids (subset of nodes with cached hellos)."""
+        return set(self._by_node)
+
+    def hello_snapshots(self) -> dict[str, dict[str, Any]]:
+        """Snapshot of every cached node_hello payload (read-only copy)."""
+        return dict(self._hello_by_node)
 
 
 class UiWsRegistry:
@@ -208,16 +270,18 @@ async def node_socket(ws: WebSocket, node_id: str) -> None:
     Connection lifecycle:
       1. Node opens ``ws://backend/ws/node/{node_id}``.
       2. Backend ``accept()``s + registers in ``NodeWsRegistry``.
-      3. Backend pushes ``ManualSteerCommand`` / ``AllStopCommand``
+      3. Node sends ``{"kind": "node_hello", ...}`` once -- ADR-022
+         capability handshake. Backend caches it on the registry; the
+         UI fetches via ``GET /node/{node_id}/capabilities``.
+      4. Backend pushes ``ManualSteerCommand`` / ``AllStopCommand``
          frames down the socket when the UI issues commands.
-      4. Node sends a heartbeat frame (any non-empty JSON) periodically
-         so the backend can detect dead connections; the backend reads
-         and discards.
-      5. On disconnect (network flap, node shutdown) the handler
-         unregisters and exits.
-
-    Frame format: JSON over text-frames. Binary frames are reserved for
-    a future msgpack envelope (mirrors ``rfmesh-node`` ``WebSocketSubscriber``).
+      5. Node optionally sends ``{"kind": "command_refused", ...}`` /
+         future ack frames; backend fans them out to the UI via
+         ``push_to_ui_subscribers`` so a red toast appears on
+         ``link.html`` when a steer is refused (B3).
+      6. On disconnect the handler unregisters and exits. The cached
+         hello snapshot persists across the disconnect so a brief
+         flap does not drop the slider clamp.
     """
     app = ws.app
     registry: NodeWsRegistry = app.state.node_ws_registry
@@ -229,14 +293,63 @@ async def node_socket(ws: WebSocket, node_id: str) -> None:
         len(registry),
     )
     try:
-        # Drain client-side messages; we don't act on them today but
-        # they keep the connection alive and let the node send
-        # heartbeats / ack frames for future use.
         while True:
             msg = await ws.receive()
             if msg.get("type") == "websocket.disconnect":
                 break
-            # Future: dispatch ack frames to a per-command outstanding map.
+            text = msg.get("text")
+            if not text:
+                continue
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError:
+                _LOG.warning("ws/node: %s sent non-JSON frame; dropping", node_id)
+                continue
+            if not isinstance(payload, dict):
+                continue
+            kind = payload.get("kind")
+            if kind == "node_hello":
+                registry.set_hello(node_id, payload)
+                _LOG.info(
+                    "ws/node: %s hello received (caps=%s arc=%s)",
+                    node_id,
+                    payload.get("active_capabilities"),
+                    payload.get("calibrated_geographic_arc_deg"),
+                )
+                # Fan a "node_hello" event to the UI so a freshly-opened
+                # link.html that loaded before this node connected can
+                # pick the snapshot up without polling.
+                await push_to_ui_subscribers(
+                    app, {"kind": "node_hello", "node_id": node_id, "data": payload}
+                )
+            elif kind == "command_refused":
+                # Refusal from the node (ADR-022 stub handler) -- forward
+                # to the UI so link.html can render the red toast (B3).
+                await push_to_ui_subscribers(
+                    app, {"kind": "command_refused", "node_id": node_id, "data": payload}
+                )
+            elif kind == "node_state":
+                # ADR-024: NodeController emitted a state transition
+                # (SWEEPING / ACQUIRED_PEER / MANUAL_HOLD / PARKED /
+                # FAULT). Backend relays to UI so the badge + countdown
+                # flip within ~200 ms of the firmware event (per the
+                # demo-integrity event-driven-link-state rec).
+                await push_to_ui_subscribers(
+                    app, {"kind": "node_state", "node_id": node_id, "data": payload}
+                )
+            elif kind == "comms_rx":
+                # ADR-025 Iter 4.6: decoded inbound DSSS frame from a
+                # linked peer. The node already stripped padding +
+                # UTF-8-decoded the payload; relay verbatim. link.js
+                # appends to the message log newest-first.
+                await push_to_ui_subscribers(app, payload)
+            elif kind == "comms_status":
+                # ADR-025 Iter 4.6: CommsLoopStats snapshot (link
+                # up/down, frames sent/received/dropped, last tx/rx
+                # timestamps). Relay verbatim; link.js latches per-node
+                # and renders the comms panel state line.
+                await push_to_ui_subscribers(app, payload)
+            # Other frames (future ack / status / heartbeat) ignored for now.
     except WebSocketDisconnect:
         pass
     finally:
@@ -293,11 +406,16 @@ async def post_command(
     kind = payload.get("kind", "manual_steer")
     try:
         if kind == "manual_steer":
-            command = ManualSteerCommand.model_validate(payload)
+            command: ManualSteerCommand | SendCommsMessageCommand = (
+                ManualSteerCommand.model_validate(payload)
+            )
+        elif kind == "send_comms_message":
+            command = SendCommsMessageCommand.model_validate(payload)
         else:
             msg = (
                 f"unknown command kind {kind!r}. Use POST /command/{{node_id}} "
-                "for manual_steer; POST /command_broadcast for all_stop."
+                "for manual_steer / send_comms_message; "
+                "POST /command_broadcast for all_stop."
             )
             raise HTTPException(status_code=422, detail=msg)
     except ValidationError as exc:
@@ -325,6 +443,122 @@ async def post_command(
             detail=f"node {node_id!r}: WS send failed ({exc!r})",
         ) from exc
     return {"delivered_to": node_id, "kind": command.kind}
+
+
+@router.post("/status")
+async def ingest_status(
+    request: Request,
+    payload: Any = Body(...),  # noqa: B008 -- FastAPI parameter dependency
+) -> dict[str, Any]:
+    """Ingest one or more ``NodeStatus`` heartbeats; fan to UI as ``node_status``.
+
+    ADR-022 + demo-integrity rec on item 3: NodeStatus heartbeat (2s
+    cadence, contract-bound) is one of two push payload kinds the UI
+    listens for. The other -- ``node_state`` -- is event-driven from the
+    NodeController on every mode transition (~200ms latency, ADR-024).
+    Splitting the two decouples badge-flip latency from the heartbeat
+    cadence.
+
+    Accepts a single ``NodeStatus`` JSON or a list. 422 on schema-invalid
+    payloads (B3, never silently accept-and-drop).
+    """
+    accepted = 0
+    errors: list[str] = []
+    pushed: list[dict[str, Any]] = []
+    items = payload if isinstance(payload, list) else [payload]
+    for i, rec in enumerate(items):
+        try:
+            status = NodeStatus.model_validate(rec)
+            accepted += 1
+            pushed.append(status.model_dump(mode="json"))
+        except (ValidationError, ValueError, KeyError, TypeError) as exc:
+            errors.append(f"[{i}] {exc}")
+    for record in pushed:
+        await push_to_ui_subscribers(
+            request.app,
+            {"kind": "node_status", "node_id": record.get("node_id"), "data": record},
+        )
+    if accepted == 0 and errors:
+        raise HTTPException(status_code=422, detail=errors)
+    return {"accepted": accepted, "errors": errors}
+
+
+@router.post("/node/{node_id}/clear_fault")
+async def post_clear_fault(
+    node_id: str,
+    payload: dict[str, Any],
+    request: Request,
+) -> dict[str, Any]:
+    """Forward an operator FAULT-clear ack from UI HTTP to the node WS.
+
+    ADR-024 §8: FAULT is sticky and requires operator ack. The UI POSTs
+    here when the soldier presses "Clear FAULT" on a node whose
+    ``status_detail`` they have read. Backend validates + forwards the
+    JSON down the same WS used by manual_steer. Same B3 posture: 503
+    if the node is not registered, 422 on schema-invalid payload.
+    """
+    try:
+        command = ClearFaultCommand.model_validate(payload)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+
+    registry: NodeWsRegistry = request.app.state.node_ws_registry
+    ws = registry.get(node_id)
+    if ws is None:
+        msg = (
+            f"node {node_id!r} is not connected. Cannot clear FAULT remotely; "
+            "the operator must restart the node service out-of-band."
+        )
+        raise HTTPException(status_code=503, detail=msg)
+    try:
+        await ws.send_text(command.model_dump_json())
+    except Exception as exc:
+        _LOG.warning(
+            "ws/node: failed to push clear_fault to %s; evicting and returning 503: %s",
+            node_id,
+            exc,
+        )
+        registry.unregister(node_id, ws)
+        raise HTTPException(
+            status_code=503,
+            detail=f"node {node_id!r}: WS send failed ({exc!r})",
+        ) from exc
+    return {"delivered_to": node_id, "kind": command.kind}
+
+
+@router.get("/node/{node_id}/capabilities")
+async def get_node_capabilities(node_id: str, request: Request) -> dict[str, Any]:
+    """Return the cached ``node_hello`` snapshot for one node (ADR-022).
+
+    The soldier UI reads this when a node is selected so the
+    manual-steer slider can clamp to the node's calibrated arc. 404 if
+    the node has never sent a hello (e.g. not yet connected, or running
+    an older build without the comms-mode wiring).
+    """
+    registry: NodeWsRegistry = request.app.state.node_ws_registry
+    hello = registry.get_hello(node_id)
+    if hello is None:
+        msg = (
+            f"node {node_id!r}: no capability snapshot cached. The node has "
+            "either never connected or is running a build that predates "
+            "ADR-022. Bring it up with command_endpoint.enabled=true."
+        )
+        raise HTTPException(status_code=404, detail=msg)
+    online = node_id in registry.online_node_ids()
+    return {"node_id": node_id, "online": online, "hello": hello}
+
+
+@router.get("/nodes/capabilities")
+async def list_node_capabilities(request: Request) -> dict[str, Any]:
+    """List every cached node snapshot (ADR-022). Used by link.html for the
+    initial node list when the page loads before any /bearings push arrives."""
+    registry: NodeWsRegistry = request.app.state.node_ws_registry
+    online = registry.online_node_ids()
+    nodes = [
+        {"node_id": node_id, "online": node_id in online, "hello": hello}
+        for node_id, hello in registry.hello_snapshots().items()
+    ]
+    return {"nodes": nodes}
 
 
 @router.post("/command_broadcast")
@@ -403,6 +637,7 @@ async def push_to_ui_subscribers(app: FastAPI, payload: dict[str, Any]) -> None:
 
 __all__ = [
     "AllStopCommand",
+    "ClearFaultCommand",
     "ManualSteerCommand",
     "NodeWsRegistry",
     "UiWsRegistry",

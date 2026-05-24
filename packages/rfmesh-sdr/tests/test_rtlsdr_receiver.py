@@ -328,6 +328,42 @@ def test_serial_resolution_prefers_serial_over_index(
     assert device._device_index == 1
 
 
+def test_serial_resolution_tolerates_nonzero_exit_on_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: rtl_eeprom on some distros (Fedora 44 etc.) returns
+    exit code 1 even on successful reads. The probe loop must parse the
+    output and accept the serial regardless of exit code."""
+    _patch_rtl_sdr_available(monkeypatch)
+
+    def _fake_run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        del kwargs
+        idx = int(argv[2])
+        if idx == 0:
+            return subprocess.CompletedProcess(
+                argv,
+                returncode=1,  # <-- nonzero exit even though read succeeded
+                stdout=b"Found 2 device(s):\n  0:  Generic\nSerial number: 00000001\n",
+                stderr=b"",
+            )
+        if idx == 1:
+            return subprocess.CompletedProcess(
+                argv,
+                returncode=1,
+                stdout=b"Found 2 device(s):\n  1:  Generic\nSerial number: 00000002\n",
+                stderr=b"",
+            )
+        return subprocess.CompletedProcess(argv, returncode=1, stdout=b"", stderr=b"")
+
+    monkeypatch.setattr(
+        "rfmesh_sdr.devices.rtlsdr.subprocess.run",
+        _fake_run,
+    )
+    device = RTLSDRDevice(serial="00000002")
+    device.open()
+    assert device._device_index == 1
+
+
 def test_serial_resolution_unknown_serial_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

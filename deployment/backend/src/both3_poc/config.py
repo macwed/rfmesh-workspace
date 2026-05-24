@@ -48,6 +48,12 @@ class Settings:
     enhance_timeout_s: float
     # ---- Phase 2: emitter investigation ----
     equipment_catalog_file: Path
+    # ---- Phase 3: auto-fuse on /bearings ingest (2-node MVP) ----
+    fusion_enabled: bool
+    fusion_batch_window_ms: float
+    fusion_min_bearings: int
+    fusion_node_stale_after_s: float
+    fusion_gdop_warn_threshold: float
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -80,5 +86,14 @@ class Settings:
             enhance_timeout_s=float(os.environ.get("ENHANCE_TIMEOUT_S", "30")),
             equipment_catalog_file=Path(
                 os.environ.get("EQUIPMENT_CATALOG_FILE", "/app/data/equipment_catalog.json")
+            ),
+            fusion_enabled=_bool("FUSION_ENABLED", True),
+            fusion_batch_window_ms=float(os.environ.get("FUSION_BATCH_WINDOW_MS", "500")),
+            fusion_min_bearings=int(os.environ.get("FUSION_MIN_BEARINGS", "2")),
+            fusion_node_stale_after_s=float(
+                os.environ.get("FUSION_NODE_STALE_AFTER_S", "30")
+            ),
+            fusion_gdop_warn_threshold=float(
+                os.environ.get("FUSION_GDOP_WARN_THRESHOLD", "10.0")
             ),
         )

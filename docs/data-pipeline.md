@@ -1,6 +1,6 @@
 # rfmesh — Data Pipeline & Node/Server Boundary
 
-**Status:** explanatory, **non-binding**. Mirrors code at `SCHEMA_VERSION = "1.1.0"`.
+**Status:** explanatory, **non-binding**. Mirrors code at `SCHEMA_VERSION = "1.3.0"`.
 Derived from `ARCHITECTURE.md` (§1, §2, §7), `INTERFACES.md` (§2, §3, §5), and the
 package sources cited inline. If this doc and the code disagree, **the code wins** and
 this doc is a bug — the binding sources are `ARCHITECTURE.md` / `INTERFACES.md` / the

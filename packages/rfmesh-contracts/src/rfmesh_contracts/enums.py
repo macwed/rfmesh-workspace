@@ -58,6 +58,34 @@ class Capability(StrEnum):
     * ``L3_CLASSIFY`` -- edge ML emitter classification (STFT spectrogram into
       a CNN/ResNet). Labels the emitter (ELRS, Crossfire, GSM jammer, ...).
       Needs a compute node (Raspberry Pi class) but is SDR-agnostic.
+    * ``L1_REFUSED_PROMINENCE`` -- a *capability state*, not a bearing method.
+      Added in SCHEMA_VERSION 1.2.0 (ADR-013). A ``BearingReport`` carrying
+      ``method = L1_REFUSED_PROMINENCE`` is the wire-level surface for an L1
+      refusal: the L1 amplitude-sweep estimator inspected a sweep and
+      declined to emit a bearing (prominence-gate failure, saddle, vertex
+      out of window, singular covariance, non-finite variance,
+      under-populated sweep). The free-form cause travels on
+      ``BearingReport.refusal_reason``. The fuser SKIPS these reports
+      (they do not contribute to a fix); they exist so a remote dashboard
+      can render the refusal as a structured event instead of seeing
+      nothing arrive from that node for one batch window
+      (Mast A in ``docs/phase-c-report/findings.md`` is the canonical
+      example). Producers populate the bearing-direction fields with
+      sentinels: ``azimuth_deg=0.0`` and
+      ``azimuth_sigma_deg=180.0`` (infinite-uncertainty equivalent),
+      because the contract requires both to be present. Consumers MUST
+      branch on ``method`` first and not interpret those sentinels as a
+      real bearing.
+    * ``COMMS_DSSS`` -- the node participates in the DSSS directional mesh
+      (ADR-025). Requires *both* an RX path and a TX path on the
+      configured SDR (HackRF One, ADALM-Pluto+, BladeRF 2.0 micro);
+      RTL-SDR V4 is RX-only and a node declaring ``COMMS_DSSS`` on
+      RTL-SDR hardware is a fatal startup error (B3). Mutually
+      exclusive with the DF capabilities (``L1_RSSI``, ``L2_MUSIC``,
+      ``L2_CAPON``, ``L2_MVDR_NULL``) in v1.3.0 -- a node runs DF mode
+      OR comms mode, never both concurrently on one SDR/Yagi.
+      ``L3_CLASSIFY`` may coexist with ``COMMS_DSSS`` (SDR-agnostic
+      classification on tapped IQ). Added in SCHEMA_VERSION 1.3.0.
     """
 
     L1_RSSI = "l1_rssi"
@@ -65,6 +93,31 @@ class Capability(StrEnum):
     L2_CAPON = "l2_capon"
     L2_MVDR_NULL = "l2_mvdr_null"
     L3_CLASSIFY = "l3_classify"
+    L1_REFUSED_PROMINENCE = "l1_refused_prominence"
+    COMMS_DSSS = "comms_dsss"
+
+
+class BearingPriorKind(StrEnum):
+    """The epistemic status of a ``BearingReport``'s azimuth prior (ADR-026).
+
+    Orthogonal to ``Capability`` (the estimator-type axis). A peer-acquired
+    bearing produced by the SAME L1_RSSI estimator path that produces emitter
+    bearings carries ``prior_kind = PEER_LINK``; an incidental secondary peak
+    from the same sweep carries ``prior_kind = FLAT``.
+
+    Added in SCHEMA_VERSION 1.4.0. A legacy producer (pre-1.4.0) that omits
+    the field entirely is treated by consumers as ``FLAT`` -- that is the
+    documented backwards-compatibility contract.
+    """
+
+    #: No prior -- the bearing is a measurement of an unknown emitter.
+    FLAT = "flat"
+    #: Bayesian prior from a known peer link (surveyed position + prior
+    #: comms). Producer MUST also populate ``BearingReport.prior_mean_deg``
+    #: and ``BearingReport.prior_sigma_deg``; the validator enforces this
+    #: coherence. Fusion filters these reports out of emitter ``FixEvent``
+    #: computation (ADR-026 Q3 per-peak filter).
+    PEER_LINK = "peer_link"
 
 
 class EmitterClass(StrEnum):

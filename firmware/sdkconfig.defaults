@@ -1,31 +1,44 @@
 # --- IDF target -----------------------------------------------------------
-# ESP32-S2 has native USB-OTG (D+/D- on GPIO19/GPIO20), no USB-Serial-JTAG
-# peripheral. Console + the protocol-mode RX/TX path both go through
-# TinyUSB CDC; main.c does the stdio routing via esp_tusb_init_console().
-CONFIG_IDF_TARGET="esp32s2"
+# ESP32-C6 has the same USB-Serial-JTAG peripheral as the C3 (D+/D- on
+# GPIO12/GPIO13). No TinyUSB stack needed — the JTAG peripheral exposes a
+# CDC-ACM endpoint to the host directly. Console + protocol RX/TX both ride
+# the usb_serial_jtag driver in main.c.
+CONFIG_IDF_TARGET="esp32c6"
 
-# --- Console / USB-OTG TinyUSB CDC ----------------------------------------
-# Disable the standard UART/JTAG console wiring; TinyUSB CDC owns stdio.
-CONFIG_ESP_CONSOLE_NONE=y
+# --- Console / USB-Serial-JTAG --------------------------------------------
+# Route stdio (printf, ESP_LOG) through the USB-Serial-JTAG peripheral.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
 
-# TinyUSB stack (managed component espressif/esp_tinyusb, pinned in
-# main/idf_component.yml). CDC interface 0 carries everything.
-CONFIG_USB_OTG_SUPPORTED=y
-CONFIG_TINYUSB_CDC_ENABLED=y
-CONFIG_TINYUSB_CDC_COUNT=1
-# Match the JTAG-driver buffer sizes the C3 salvage used (USB_RX_BUF_BYTES /
-# USB_TX_BUF_BYTES in main.c). The host-side driver assumes at least these.
-CONFIG_TINYUSB_CDC_RX_BUFSIZE=1024
-CONFIG_TINYUSB_CDC_TX_BUFSIZE=1024
+# RX/TX ringbuf sizes are set at runtime via usb_serial_jtag_driver_config_t
+# in firmware/main/main.c (USB_RX_BUF_BYTES / USB_TX_BUF_BYTES). No Kconfig
+# knob exists for the driver-installed buffers in IDF v5.4.
 
-# --- Radios off (saves flash, removes coexistence headaches) --------------
-# Identical to the C3 salvage. The S2 has no Bluetooth radio anyway, but the
-# Wi-Fi disable keeps the binary small and removes the coexistence layer
-# from the build entirely.
+# --- Radios (ADR-027: WiFi station for servo TCP transport) ---------------
+# The C6 has Wi-Fi 6 / BLE 5 / 802.15.4 (Thread/Zigbee). The servo node
+# uses WiFi station mode only -- BLE / OpenThread / 802.15.4 stay off
+# (no coexistence layer needed when only one radio is active).
 CONFIG_BT_ENABLED=n
-CONFIG_ESP_WIFI_ENABLED=n
+CONFIG_ESP_WIFI_ENABLED=y
 CONFIG_ESP_COEX_SW_COEXIST_ENABLE=n
+CONFIG_OPENTHREAD_ENABLED=n
+CONFIG_IEEE802154_ENABLED=n
+
+# --- WiFi station tunables ------------------------------------------------
+# Static-RX-buffer count drives RAM use; the default 10 is fine for our
+# single-TCP-client servo workload. WPA2-PSK auth + PMF-capable (not
+# required) covers the bench AP (SSID "rfmesh", PSK "karasie01" --
+# hardcoded in wifi_sta.c).
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+
+# --- LWIP (TCP server on :5555) -------------------------------------------
+# One listening socket + one accepted client at a time, plus the DHCP
+# client socket. The IDF default of 10 sockets covers this with margin.
+CONFIG_LWIP_MAX_SOCKETS=10
+CONFIG_LWIP_TCP_KEEPIDLE_DEFAULT=30
+CONFIG_LWIP_TCP_KEEPINTVL_DEFAULT=5
+CONFIG_LWIP_TCP_KEEPCNT_DEFAULT=3
 
 # --- Scheduler / NVS ------------------------------------------------------
 CONFIG_FREERTOS_HZ=1000

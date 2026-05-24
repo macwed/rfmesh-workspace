@@ -48,6 +48,7 @@ from .geometry import (
     weighted_centroid_of_crossings,
 )
 from .mle import MLEResult, solve_mle
+from .posterior import combine_bearing_prior
 from .projection import (
     MAX_DISTANCE_M,
     R_EARTH_M,
@@ -71,6 +72,7 @@ __all__ = (
     "StansfieldMLEFuser",
     "bearing_to_unit_vector",
     "choose_enu_origin",
+    "combine_bearing_prior",
     "compute_confidence_level",
     "compute_covariance",
     "compute_gdop",

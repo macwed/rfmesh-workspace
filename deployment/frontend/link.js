@@ -26,6 +26,15 @@
   "use strict";
 
   // ---------------------------------------------------------------
+  // Constants
+  // ---------------------------------------------------------------
+
+  // ADR-026 §I: PeerLink link-margin warning threshold. Below this we
+  // render a ⚠ glyph on the soldier UI; soldier-grade demo-integrity
+  // gate from the post-cold-start council.
+  const PEER_LINK_LOW_MARGIN_DB = 10.0;
+
+  // ---------------------------------------------------------------
   // State
   // ---------------------------------------------------------------
 
@@ -123,7 +132,7 @@
       cs.textContent = node.node_id;
       const badge = document.createElement("span");
       badge.className = "badge " + (node.state || "stale");
-      badge.textContent = node.state || "stale";
+      badge.textContent = badgeLabel(node);
       li.append(cs, badge);
       li.addEventListener("click", () => selectNode(node.node_id));
       nodeListEl.append(li);
@@ -147,12 +156,97 @@
   const detailSendBtn = document.getElementById("detail-send-steer");
   const detailStopBtn = document.getElementById("detail-stop");
   const detailMsgEl = document.getElementById("detail-msg");
+  const detailPeerBearingEl = document.getElementById("detail-peer-bearing");
+  const detailSweepPeakEl = document.getElementById("detail-sweep-peak");
+  const detailSweepSnrEl = document.getElementById("detail-sweep-snr");
+  const detailClearFaultBlock = document.getElementById("detail-clear-fault-block");
+  const detailClearFaultBtn = document.getElementById("detail-clear-fault");
+  const detailClearFaultConfirm = document.getElementById("detail-clear-fault-confirm");
+  const detailClearFaultConfirmBtn = document.getElementById(
+    "detail-clear-fault-confirm-btn",
+  );
+  const detailClearFaultCancelBtn = document.getElementById(
+    "detail-clear-fault-cancel-btn",
+  );
   const detailCloseBtn = document.getElementById("detail-close");
+  // ADR-025 Iter 4: comms panel (soldier message send / receive).
+  const detailCommsBlock = document.getElementById("detail-comms-block");
+  const detailCommsLink = document.getElementById("detail-comms-link");
+  const detailCommsSent = document.getElementById("detail-comms-sent");
+  const detailCommsRx = document.getElementById("detail-comms-rx");
+  const detailCommsDrop = document.getElementById("detail-comms-drop");
+  const detailCommsInput = document.getElementById("detail-comms-input");
+  const detailCommsSendBtn = document.getElementById("detail-comms-send");
+  const detailCommsLog = document.getElementById("detail-comms-log");
 
   function selectNode(nodeId) {
     state.selectedNodeId = nodeId;
+    // ADR-022: pull a fresh per-node capability snapshot. The WS push
+    // would have already merged the same payload, but a freshly-opened
+    // page that selects a node before any push arrives must still be
+    // able to clamp the slider.
+    fetchNodeCapabilities(nodeId);
     renderNodeList();
     renderDetail();
+  }
+
+  async function fetchNodeCapabilities(nodeId) {
+    try {
+      const resp = await fetch(`/node/${encodeURIComponent(nodeId)}/capabilities`);
+      if (!resp.ok) return;
+      const body = await resp.json();
+      mergeHello(body.node_id, body.hello || {});
+    } catch (e) {
+      console.warn(`capability fetch failed for ${nodeId}: ${e.message}`);
+    }
+    // ADR-026 §I: pull the posterior peer bearing if one exists. 404
+    // when the node has not yet emitted a PEER_LINK bearing.
+    try {
+      const resp = await fetch(`/node/${encodeURIComponent(nodeId)}/peer_bearing`);
+      if (!resp.ok) {
+        // 404 is the legitimate "no peer bearing yet" path.
+        const n = state.nodes.get(nodeId);
+        if (n) {
+          n.peer_bearing_text = null;
+          n.peer_bearing_tooltip = null;
+          state.nodes.set(nodeId, n);
+          if (state.selectedNodeId === nodeId) renderDetail();
+        }
+        return;
+      }
+      const body = await resp.json();
+      const n = state.nodes.get(nodeId) || { node_id: nodeId };
+      n.peer_bearing_text =
+        `${body.posterior_mean_deg.toFixed(1)}° ± ` +
+        `${body.posterior_sigma_deg.toFixed(2)}° (posterior)`;
+      // ADR-026 demo-integrity REC 1: tooltip exposing all three μ/σ
+      // triplets so a jury asking "how much did the prior tighten this?"
+      // can read likelihood vs prior vs posterior without leaving the UI.
+      n.peer_bearing_tooltip =
+        `likelihood: ${body.likelihood_mean_deg.toFixed(1)}° ± ` +
+        `${body.likelihood_sigma_deg.toFixed(2)}°\n` +
+        `prior:      ${body.prior_mean_deg.toFixed(1)}° ± ` +
+        `${body.prior_sigma_deg.toFixed(2)}°\n` +
+        `posterior:  ${body.posterior_mean_deg.toFixed(1)}° ± ` +
+        `${body.posterior_sigma_deg.toFixed(2)}°`;
+      state.nodes.set(nodeId, n);
+      if (state.selectedNodeId === nodeId) renderDetail();
+    } catch (e) {
+      console.warn(`peer_bearing fetch failed for ${nodeId}: ${e.message}`);
+    }
+  }
+
+  async function hydrateAllCapabilities() {
+    try {
+      const resp = await fetch("/nodes/capabilities");
+      if (!resp.ok) return;
+      const body = await resp.json();
+      for (const entry of body.nodes || []) {
+        mergeHello(entry.node_id, entry.hello || {});
+      }
+    } catch (e) {
+      console.warn(`capability list fetch failed: ${e.message}`);
+    }
   }
 
   detailCloseBtn.addEventListener("click", () => {
@@ -171,30 +265,130 @@
     detailEl.hidden = false;
     detailCallsignEl.textContent = n.node_id;
     detailStateBadge.className = "badge " + (n.state || "stale");
-    detailStateBadge.textContent = n.state || "stale";
+    detailStateBadge.textContent = badgeLabel(n);
     detailCalEl.textContent = n.cal_label || "unknown";
-    detailPeerEl.textContent = n.peer_id || "—";
-    detailMarginEl.textContent =
-      typeof n.link_margin_db === "number"
-        ? `${n.link_margin_db.toFixed(1)} dB`
-        : "—";
+    detailPeerEl.textContent = (n.peer && n.peer.node_id) || n.peer_id || "—";
+    // ADR-026 §I PeerLink low-margin glyph at <+10 dB.
+    if (typeof n.link_margin_db === "number") {
+      const warn = n.link_margin_db < PEER_LINK_LOW_MARGIN_DB ? " ⚠" : "";
+      detailMarginEl.textContent = `${n.link_margin_db.toFixed(1)} dB${warn}`;
+    } else {
+      detailMarginEl.textContent = "—";
+    }
+    detailPeerBearingEl.textContent = n.peer_bearing_text || "—";
+    detailPeerBearingEl.title = n.peer_bearing_tooltip || "";
     detailLastEl.textContent = n.last_acquired_age || "never";
 
+    // 2-node manual-sweep MVP: render the last L1 peak with its honest
+    // 1-σ. The pointing arrow on the map uses the same numbers; this
+    // panel is the soldier's textual readout (compass heading + uncertainty).
+    if (typeof n.azimuth_deg === "number") {
+      const sigma = typeof n.azimuth_sigma_deg === "number" ? n.azimuth_sigma_deg : null;
+      const sigmaTxt = sigma !== null ? ` ± ${sigma.toFixed(1)}°` : "";
+      detailSweepPeakEl.textContent = `${n.azimuth_deg.toFixed(1)}°${sigmaTxt}`;
+    } else {
+      detailSweepPeakEl.textContent = "—";
+    }
+    if (typeof n.snr_db === "number" || n.last_bearing_t) {
+      const snrTxt = typeof n.snr_db === "number" ? `+${n.snr_db.toFixed(1)} dB` : "—";
+      const ageS = n.last_bearing_t
+        ? Math.max(0, Math.round((Date.now() - n.last_bearing_t) / 1000))
+        : null;
+      const ageTxt = ageS !== null ? `${ageS}s ago` : "—";
+      detailSweepSnrEl.textContent = `${snrTxt} · ${ageTxt}`;
+    } else {
+      detailSweepSnrEl.textContent = "—";
+    }
+
+    // ADR-022 manual-steer slider clamp: if the node has reported a
+    // calibrated_geographic_arc_deg in its node_hello, clamp the slider
+    // to that arc. A wrap-around arc (min > max — straddles 0° true)
+    // is not safely representable on a single linear <input type=range>;
+    // refuse loudly rather than render a broken slider (B3).
+    n.cal_arc_wraps = false;
+    if (n.cal_arc && Number.isFinite(n.cal_arc.min) && Number.isFinite(n.cal_arc.max)) {
+      if (n.cal_arc.min > n.cal_arc.max) {
+        n.cal_arc_wraps = true;
+        console.warn(
+          `${n.node_id}: calibrated arc straddles 0° (` +
+            `${n.cal_arc.min}-${n.cal_arc.max}); slider disabled until ` +
+            `wrap-arc rendering ships.`,
+        );
+      } else {
+        detailSliderEl.min = n.cal_arc.min;
+        detailSliderEl.max = n.cal_arc.max;
+        const cur = parseFloat(detailSliderEl.value);
+        if (!(cur >= n.cal_arc.min && cur <= n.cal_arc.max)) {
+          const mid = (n.cal_arc.min + n.cal_arc.max) / 2;
+          detailSliderEl.value = mid;
+          detailSliderValEl.textContent = `${mid.toFixed(1)}°`;
+        }
+      }
+    }
+
     // Steering controls enabled iff (a) WS to backend is up,
-    // (b) node has a known calibration, (c) node is not in FAULT.
-    const calibrated = n.cal_label && n.cal_label !== "uncalibrated";
-    const canSteer = state.wsConnected && calibrated && n.state !== "fault";
+    // (b) node has a known calibrated arc that does NOT wrap 0°,
+    // (c) node has a wired controller (ADR-022 stub refuses until
+    // NodeController lands), (d) node is not in FAULT.
+    const calibrated =
+      !!(n.cal_arc && Number.isFinite(n.cal_arc.min)) && !n.cal_arc_wraps;
+    const controllerReady = !!n.controller_ready;
+    const canSteer =
+      state.wsConnected && calibrated && controllerReady && n.state !== "fault";
     detailSliderEl.disabled = !canSteer;
     detailSendBtn.disabled = !canSteer;
     if (!canSteer) {
-      detailMsgEl.textContent = calibrated
-        ? state.wsConnected
-          ? "Node is FAULT — manual steering disabled."
-          : "Backend offline — controls disabled."
-        : "Node uncalibrated — run rfmesh-servo-calibrate.";
+      let reason;
+      if (!state.wsConnected) reason = "Backend offline — controls disabled.";
+      else if (!calibrated) reason = "Node arc unknown — awaiting handshake.";
+      else if (!controllerReady) {
+        reason = "Manual steering not yet enabled on this node.";
+        console.warn(
+          `${n.node_id}: NodeController not wired (ADR-022 stub); steer disabled.`,
+        );
+      } else if (n.state === "fault") {
+        // ADR-024 §8: FAULT is sticky and requires operator ack.
+        // Surface status_detail + show the Clear FAULT button below.
+        const detail = n.status_detail ? ` — ${n.status_detail}` : "";
+        reason = `Node is FAULT${detail}. Press "Clear FAULT" after fixing the underlying condition.`;
+      } else reason = "Manual steering disabled.";
+      detailMsgEl.textContent = reason;
       detailMsgEl.style.color = "var(--low)";
     } else {
       detailMsgEl.textContent = "";
+    }
+    // ADR-024 §8: Clear FAULT block visible only in FAULT state.
+    // Two-tap symmetric with ALL-STOP (demo-integrity follow-up).
+    detailClearFaultBlock.hidden = n.state !== "fault";
+    if (n.state !== "fault") {
+      detailClearFaultConfirm.hidden = true;
+      detailClearFaultBtn.disabled = false;
+    }
+
+    // ADR-025 Iter 4: comms panel visible iff the node has reported
+    // any comms_status frame (signals the loop is wired). Soldier
+    // sees link state + message log + send box.
+    if (n.comms) {
+      detailCommsBlock.hidden = false;
+      detailCommsLink.textContent = n.comms.link_up ? "UP" : "DOWN";
+      detailCommsLink.style.color = n.comms.link_up ? "var(--high)" : "var(--low)";
+      detailCommsSent.textContent = n.comms.frames_sent;
+      detailCommsRx.textContent = n.comms.frames_received;
+      detailCommsDrop.textContent = n.comms.frames_dropped;
+      // Send button disabled until link is up and a peer is known.
+      const canSend = n.comms.link_up && !!((n.peer && n.peer.node_id) || n.peer_id);
+      detailCommsSendBtn.disabled = !canSend;
+      detailCommsInput.disabled = !canSend;
+      // Render newest 50 messages.
+      detailCommsLog.innerHTML = "";
+      const inbox = n.comms_inbox || [];
+      for (const m of inbox) {
+        const li = document.createElement("li");
+        li.textContent = `[${m.peer}] ${m.text}`;
+        detailCommsLog.appendChild(li);
+      }
+    } else {
+      detailCommsBlock.hidden = true;
     }
   }
 
@@ -242,6 +436,100 @@
     if (!state.selectedNodeId) return;
     detailMsgEl.textContent = "STOP this-node not yet implemented; use ALL STOP.";
     detailMsgEl.style.color = "var(--medium)";
+  });
+
+  // ADR-025 Iter 4: comms-message send. POSTs send_comms_message via
+  // the existing /command/{node_id} plumbing; backend forwards to the
+  // node WS where CommsLoop.queue_outbound picks it up on the next TX
+  // slot. Soldier UX: type, press Enter or click Send, see result.
+  async function sendCommsMessage() {
+    const id = state.selectedNodeId;
+    if (!id) return;
+    const n = state.nodes.get(id);
+    if (!n || !n.comms || !n.comms.link_up) {
+      detailMsgEl.textContent = "Link is DOWN — message not sent.";
+      detailMsgEl.style.color = "var(--low)";
+      return;
+    }
+    const text = (detailCommsInput.value || "").trim();
+    if (!text) return;
+    const peerId = (n.peer && n.peer.node_id) || n.peer_id;
+    if (!peerId) {
+      detailMsgEl.textContent = "No peer known on this node.";
+      detailMsgEl.style.color = "var(--low)";
+      return;
+    }
+    detailCommsSendBtn.disabled = true;
+    detailMsgEl.textContent = "Sending message…";
+    detailMsgEl.style.color = "var(--muted)";
+    try {
+      const resp = await fetch(`/command/${encodeURIComponent(id)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "send_comms_message",
+          peer_node_id: peerId,
+          payload_text: text,
+          requestor_id: "ui-link",
+        }),
+      });
+      const body = await resp.json().catch(() => ({}));
+      if (resp.ok) {
+        detailMsgEl.textContent = `Sent → ${peerId}`;
+        detailMsgEl.style.color = "var(--high)";
+        detailCommsInput.value = "";
+      } else {
+        const reason = body.detail || resp.statusText;
+        detailMsgEl.textContent = `Refused: ${reason}`;
+        detailMsgEl.style.color = "var(--low)";
+      }
+    } catch (e) {
+      detailMsgEl.textContent = `Network error: ${e.message}`;
+      detailMsgEl.style.color = "var(--low)";
+    } finally {
+      detailCommsSendBtn.disabled = false;
+    }
+  }
+  detailCommsSendBtn.addEventListener("click", sendCommsMessage);
+  detailCommsInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") sendCommsMessage();
+  });
+
+  // ADR-024 §8 two-tap confirm (symmetric with ALL-STOP).
+  detailClearFaultBtn.addEventListener("click", () => {
+    detailClearFaultConfirm.hidden = false;
+    detailClearFaultBtn.disabled = true;
+  });
+  detailClearFaultCancelBtn.addEventListener("click", () => {
+    detailClearFaultConfirm.hidden = true;
+    detailClearFaultBtn.disabled = false;
+  });
+  detailClearFaultConfirmBtn.addEventListener("click", async () => {
+    const id = state.selectedNodeId;
+    if (!id) return;
+    detailMsgEl.textContent = "Clearing FAULT…";
+    detailMsgEl.style.color = "var(--muted)";
+    try {
+      const resp = await fetch(`/node/${encodeURIComponent(id)}/clear_fault`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "clear_fault", requestor_id: "ui-link" }),
+      });
+      const body = await resp.json().catch(() => ({}));
+      if (resp.ok) {
+        detailMsgEl.textContent = `FAULT cleared on ${id}.`;
+        detailMsgEl.style.color = "var(--high)";
+      } else {
+        detailMsgEl.textContent = `Clear FAULT refused: ${body.detail || resp.statusText}`;
+        detailMsgEl.style.color = "var(--low)";
+      }
+    } catch (e) {
+      detailMsgEl.textContent = `Network error: ${e.message}`;
+      detailMsgEl.style.color = "var(--low)";
+    } finally {
+      detailClearFaultConfirm.hidden = true;
+      detailClearFaultBtn.disabled = false;
+    }
   });
 
   // ---------------------------------------------------------------
@@ -343,9 +631,160 @@
     if (!payload || !payload.kind) return;
     if (payload.kind === "bearing") {
       mergeBearing(payload.data || {});
+    } else if (payload.kind === "node_hello") {
+      // ADR-022: backend forwarded a freshly-arrived capability snapshot.
+      // Cache the slider clamp + light up the node in the list even
+      // before the first /bearings push arrives.
+      mergeHello(payload.node_id, payload.data || {});
+    } else if (payload.kind === "node_state") {
+      // ADR-024: NodeController emitted a state transition. Update the
+      // badge + countdown without waiting for the next heartbeat.
+      mergeControllerState(payload.node_id, payload.data || {});
+    } else if (payload.kind === "node_status") {
+      // ADR-022 heartbeat fan-out: NodeStatus arrived (~2s cadence).
+      // Carries position + gnss_locked + healthy + status_detail.
+      mergeNodeStatus(payload.node_id, payload.data || {});
+    } else if (payload.kind === "command_refused") {
+      // Node-side refusal (B3). Surface red toast on the detail panel.
+      showRefusal(payload.node_id, payload.data || {});
+    } else if (payload.kind === "comms_status") {
+      // ADR-025 Iter 4: CommsLoop pushed a stats snapshot (link
+      // up/down, frames sent/received/dropped, last tx/rx
+      // timestamps). Latched into the node record so renderDetail
+      // can show it without polling.
+      mergeCommsStatus(payload.node_id, payload.data || {});
+    } else if (payload.kind === "comms_rx") {
+      // ADR-025 Iter 4: a decoded inbound DSSS frame arrived from
+      // the linked peer. Append to the log, newest-first.
+      appendCommsRx(payload.node_id, payload.data || {});
     }
-    // Future kinds: "node_status", "link_state", etc. The schema is
-    // additive; unknown kinds are ignored honestly.
+    // Future kinds. Schema additive; unknown kinds ignored honestly.
+  }
+
+  function mergeCommsStatus(nodeId, snap) {
+    if (!nodeId) return;
+    const n = state.nodes.get(nodeId) || { node_id: nodeId };
+    n.comms = {
+      link_up: !!snap.link_up,
+      frames_sent: snap.frames_sent | 0,
+      frames_received: snap.frames_received | 0,
+      frames_dropped: snap.frames_dropped | 0,
+      last_rx_t_unix_ns: snap.last_rx_t_unix_ns || null,
+      last_tx_t_unix_ns: snap.last_tx_t_unix_ns || null,
+    };
+    state.nodes.set(nodeId, n);
+    if (state.selectedNodeId === nodeId) renderDetail();
+  }
+
+  function appendCommsRx(nodeId, msg) {
+    if (!nodeId) return;
+    const n = state.nodes.get(nodeId) || { node_id: nodeId };
+    if (!Array.isArray(n.comms_inbox)) n.comms_inbox = [];
+    // Newest-first; cap at 50 to keep DOM small.
+    n.comms_inbox.unshift({
+      peer: msg.peer || msg.src_node_id || "?",
+      text: msg.text || msg.payload_text || "",
+      t_unix_ns: msg.t_unix_ns || Date.now() * 1e6,
+    });
+    if (n.comms_inbox.length > 50) n.comms_inbox.length = 50;
+    state.nodes.set(nodeId, n);
+    if (state.selectedNodeId === nodeId) renderDetail();
+  }
+
+  function mergeNodeStatus(nodeId, status) {
+    if (!nodeId) return;
+    const n = state.nodes.get(nodeId) || { node_id: nodeId };
+    if (status.position) {
+      n.lat = status.position.lat_deg;
+      n.lon = status.position.lon_deg;
+    }
+    n.gnss_locked = !!status.gnss_locked;
+    n.healthy = !!status.healthy;
+    // Only overwrite status_detail when the heartbeat carries one --
+    // the controller's node_state push is the more current source for
+    // mode-specific reasons (e.g. mode_drain_timeout).
+    if (status.status_detail) {
+      n.status_detail = status.status_detail;
+    }
+    n.last_heartbeat_t = Date.now();
+    state.nodes.set(nodeId, n);
+    renderNode(n);
+    renderNodeList();
+    if (state.selectedNodeId === nodeId) renderDetail();
+  }
+
+  function mergeControllerState(nodeId, snap) {
+    if (!nodeId) return;
+    const n = state.nodes.get(nodeId) || { node_id: nodeId };
+    if (typeof snap.state === "string") n.state = snap.state;
+    n.status_detail = snap.status_detail || "";
+    n.manual_hold_expires_at_ns = snap.manual_hold_expires_at_ns ?? null;
+    n.last_commanded_angle_deg = snap.last_commanded_angle_deg ?? null;
+    if (typeof snap.controller_ready === "boolean") {
+      n.controller_ready = snap.controller_ready;
+    }
+    state.nodes.set(nodeId, n);
+    renderNode(n);
+    renderNodeList();
+    if (state.selectedNodeId === nodeId) renderDetail();
+  }
+
+  function mergeHello(nodeId, hello) {
+    if (!nodeId) return;
+    const n = state.nodes.get(nodeId) || { node_id: nodeId };
+    if (hello.position) {
+      n.lat = hello.position.lat_deg;
+      n.lon = hello.position.lon_deg;
+    }
+    n.active_capabilities = hello.active_capabilities || [];
+    n.heading_deg = hello.heading_deg;
+    n.cal_arc = hello.calibrated_geographic_arc_deg || null;
+    n.cal_label = hello.cal_provenance
+      ? `${hello.cal_provenance}`
+      : "unknown";
+    n.peer = hello.peer || null;
+    n.controller_ready = !!hello.controller_ready;
+    // ADR-024 controller snapshot, if present on this hello.
+    if (typeof hello.state === "string") n.state = hello.state;
+    n.status_detail = hello.status_detail || "";
+    n.manual_hold_expires_at_ns = hello.manual_hold_expires_at_ns ?? null;
+    n.last_commanded_angle_deg = hello.last_commanded_angle_deg ?? null;
+    // Fallback for nodes that have not yet sent a state: "searching"
+    // until a bearing arrives.
+    if (!n.state) n.state = "searching";
+    state.nodes.set(nodeId, n);
+    renderNode(n);
+    renderNodeList();
+    if (state.selectedNodeId === nodeId) renderDetail();
+  }
+
+  function manualHoldRemainingS(node) {
+    if (!node || node.state !== "manual_hold" || !node.manual_hold_expires_at_ns) {
+      return null;
+    }
+    const remainingMs = node.manual_hold_expires_at_ns / 1e6 - Date.now();
+    return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
+  }
+
+  function badgeLabel(node) {
+    const s = node.state || "stale";
+    if (s === "manual_hold") {
+      const r = manualHoldRemainingS(node);
+      return r !== null ? `manual · ${r}s` : "manual";
+    }
+    if (s === "acquired_peer") return "linked";
+    return s;
+  }
+
+  function showRefusal(nodeId, payload) {
+    if (state.selectedNodeId !== nodeId) {
+      // Not selected -- log to console; the next time the user opens
+      // this node's drawer they'll see the controller_ready=false note.
+      console.warn(`refusal from ${nodeId}: ${payload.reason || "(no reason)"}`);
+      return;
+    }
+    detailMsgEl.textContent = `Refused: ${payload.reason || "(no reason)"}`;
+    detailMsgEl.style.color = "var(--low)";
   }
 
   function mergeBearing(report) {
@@ -371,23 +810,42 @@
     if (state.selectedNodeId === id) renderDetail();
   }
 
-  // Periodic "age" refresh — show how stale the last bearing is.
+  // Periodic 1 s tick: bearing-age labels + MANUAL_HOLD countdown.
   setInterval(() => {
     const now = Date.now();
     let changed = false;
     for (const n of state.nodes.values()) {
-      if (n.last_bearing_t == null) continue;
-      const ageS = Math.floor((now - n.last_bearing_t) / 1000);
-      const newLabel =
-        ageS < 2
-          ? "just now"
-          : ageS < 60
-            ? `${ageS} s ago`
-            : `${Math.floor(ageS / 60)} min ago`;
-      const newState = ageS < 10 ? "acquired" : ageS < 30 ? "searching" : "stale";
-      if (n.last_acquired_age !== newLabel || n.state !== newState) {
-        n.last_acquired_age = newLabel;
-        n.state = newState;
+      // Bearing-driven legacy state. Skip when the controller has set
+      // an authoritative state (sweeping/manual_hold/parked/fault/
+      // acquired_peer) -- those flips come from the node_state push.
+      const controllerOwnsState = [
+        "sweeping",
+        "manual_hold",
+        "parked",
+        "fault",
+        "acquired_peer",
+      ].includes(n.state);
+      if (!controllerOwnsState && n.last_bearing_t != null) {
+        const ageS = Math.floor((now - n.last_bearing_t) / 1000);
+        const newLabel =
+          ageS < 2
+            ? "just now"
+            : ageS < 60
+              ? `${ageS} s ago`
+              : `${Math.floor(ageS / 60)} min ago`;
+        const newState = ageS < 10 ? "acquired" : ageS < 30 ? "searching" : "stale";
+        if (n.last_acquired_age !== newLabel || n.state !== newState) {
+          n.last_acquired_age = newLabel;
+          n.state = newState;
+          changed = true;
+          renderNode(n);
+        }
+      }
+      // ADR-024 MANUAL_HOLD countdown: re-render once a second so the
+      // badge label ticks down (manual · 7s -> 6s -> ...). When the
+      // countdown reaches 0, the node-side controller auto-resumes and
+      // publishes a node_state frame, which flips us out of MANUAL_HOLD.
+      if (n.state === "manual_hold" && n.manual_hold_expires_at_ns) {
         changed = true;
         renderNode(n);
       }
@@ -403,6 +861,7 @@
   // ---------------------------------------------------------------
 
   connectWs();
+  hydrateAllCapabilities();
   renderNodeList();
   renderDetail();
 })();

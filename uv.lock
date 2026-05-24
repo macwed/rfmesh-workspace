@@ -12,6 +12,7 @@ members = [
     "rfmesh-cot",
     "rfmesh-demo-replay",
     "rfmesh-dsp",
+    "rfmesh-dsss",
     "rfmesh-fusion",
     "rfmesh-ml",
     "rfmesh-node",
@@ -1637,7 +1638,7 @@ wheels = [
 
 [[package]]
 name = "rfmesh-contracts"
-version = "1.1.0"
+version = "1.3.0"
 source = { editable = "packages/rfmesh-contracts" }
 dependencies = [
     { name = "numpy" },
@@ -1700,6 +1701,31 @@ requires-dist = [
 name = "rfmesh-dsp"
 version = "0.1.0"
 source = { editable = "packages/rfmesh-dsp" }
+dependencies = [
+    { name = "numpy" },
+    { name = "rfmesh-contracts" },
+    { name = "scipy" },
+]
+
+[package.dev-dependencies]
+test = [
+    { name = "rfmesh-sdr" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=2.1" },
+    { name = "rfmesh-contracts", editable = "packages/rfmesh-contracts" },
+    { name = "scipy", specifier = ">=1.14" },
+]
+
+[package.metadata.requires-dev]
+test = [{ name = "rfmesh-sdr", editable = "packages/rfmesh-sdr" }]
+
+[[package]]
+name = "rfmesh-dsss"
+version = "0.1.0"
+source = { editable = "packages/rfmesh-dsss" }
 dependencies = [
     { name = "numpy" },
     { name = "rfmesh-contracts" },
@@ -1853,6 +1879,7 @@ dependencies = [
     { name = "rfmesh-cot" },
     { name = "rfmesh-demo-replay" },
     { name = "rfmesh-dsp" },
+    { name = "rfmesh-dsss" },
     { name = "rfmesh-fusion" },
     { name = "rfmesh-ml" },
     { name = "rfmesh-node" },
@@ -1882,6 +1909,7 @@ requires-dist = [
     { name = "rfmesh-cot", editable = "packages/rfmesh-cot" },
     { name = "rfmesh-demo-replay", editable = "apps/demo-replay" },
     { name = "rfmesh-dsp", editable = "packages/rfmesh-dsp" },
+    { name = "rfmesh-dsss", editable = "packages/rfmesh-dsss" },
     { name = "rfmesh-fusion", editable = "packages/rfmesh-fusion" },
     { name = "rfmesh-ml", editable = "packages/rfmesh-ml" },
     { name = "rfmesh-node", editable = "packages/rfmesh-node" },

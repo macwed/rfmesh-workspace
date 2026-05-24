@@ -9,6 +9,12 @@ idf_component_register(
         "calibration.c"
         "dispatch.c"
         "shell.c"
+        # ADR-027: WiFi-station + TCP server. Replaces the USB-CDC
+        # protocol byte pipe; USB-Serial-JTAG stays as the ESP_LOG
+        # console (lets the operator read the DHCP-assigned IP on
+        # first boot).
+        "wifi_sta.c"
+        "tcp_server.c"
     INCLUDE_DIRS
         "."
         "${CMAKE_CURRENT_BINARY_DIR}"
@@ -21,6 +27,11 @@ idf_component_register(
         nvs_flash
         console
         esp_timer
+        # ADR-027: WiFi-station + TCP server transport.
+        esp_wifi
+        esp_netif
+        esp_event
+        lwip
 )
 
 # --- identity.h ----------------------------------------------------------

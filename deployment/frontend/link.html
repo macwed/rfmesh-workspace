@@ -65,12 +65,29 @@
            drawer (steering controls + link margin). -->
       <section class="panel">
         <h2>Nodes</h2>
+        <!-- ADR-024 5-state badge legend (demo-integrity rec). Ordered
+             left-to-right by operator-action-required so a jury can read
+             "what needs attention first?" at a glance. -->
+        <div class="state-legend">
+          <span class="chip"><span class="swatch fault"></span> fault</span>
+          <span class="chip"><span class="swatch manual_hold"></span> manual</span>
+          <span class="chip"><span class="swatch acquired_peer"></span> linked</span>
+          <span class="chip"><span class="swatch sweeping"></span> sweeping</span>
+          <span class="chip"><span class="swatch parked"></span> parked</span>
+        </div>
         <ul id="node-list" class="nodes"></ul>
         <p id="no-nodes-hint" class="caveat">
-          No node connected. Bring a node up with
-          <code>rfmesh-node --config &lt;cfg&gt; --servo-port &lt;port&gt;
-          --command-endpoint ws://&lt;backend&gt;:8000</code>.
+          No node connected. Check the node has power, the antenna is mounted,
+          and the operator AP / cellular link is up. The node will appear here
+          as soon as it phones home.
         </p>
+        <details id="no-nodes-hint-admin" class="caveat" hidden>
+          <summary>Admin / bench</summary>
+          On the field Pi (systemd), tail
+          <code>journalctl -u rfmesh-node -f</code>. For a bench run, copy
+          <code>field-deploy/node-config.example.yaml</code> and invoke
+          <code>rfmesh-node --config &lt;path.yaml&gt;</code>.
+        </details>
       </section>
 
       <!-- Detail drawer: shown when a node is selected. -->
@@ -99,6 +116,24 @@
           Last acquired:
           <span id="detail-last">never</span>
         </p>
+        <!-- ADR-026 §I: posterior peer bearing (likelihood + GPS prior
+             combined server-side via combine_bearing_prior). -->
+        <p>
+          Peer bearing:
+          <span id="detail-peer-bearing">&mdash;</span>
+        </p>
+        <!-- 2-node manual-sweep MVP: latest L1 amplitude-sweep peak
+             (from bench_manual_sweep.py or any l1_rssi BearingReport).
+             Soldier reads peak heading + honest 1-σ at a glance. The
+             pointing arrow on the map renders from the same data. -->
+        <p>
+          Sweep peak:
+          <span id="detail-sweep-peak">&mdash;</span>
+        </p>
+        <p>
+          Sweep SNR / age:
+          <span id="detail-sweep-snr">&mdash;</span>
+        </p>
         <hr />
         <h3>Manual steer</h3>
         <p class="caveat">
@@ -125,7 +160,45 @@
           </button>
           <button id="detail-stop" class="warning">STOP this node</button>
         </div>
+        <!-- Visible only when node.state === "fault" (ADR-024 §8). -->
+        <div id="detail-clear-fault-block" hidden>
+          <button id="detail-clear-fault" class="warning">Clear FAULT</button>
+          <p class="caveat">Two-tap. Operator ack only after underlying condition is fixed.</p>
+          <div id="detail-clear-fault-confirm" class="confirm" hidden>
+            <button id="detail-clear-fault-confirm-btn" class="warning">CONFIRM CLEAR</button>
+            <button id="detail-clear-fault-cancel-btn" class="ghost">Cancel</button>
+          </div>
+        </div>
         <p id="detail-msg" class="caveat">&nbsp;</p>
+
+        <!-- ADR-025 Iter 4: DSSS comms panel. Visible only when the
+             selected node runs comms mode (kind: comms_status frame
+             with link_up != null). Soldier-grade UX: big buttons, no
+             jargon. Send is a single text input + Send button; received
+             messages append below newest-first. -->
+        <div id="detail-comms-block" hidden>
+          <hr />
+          <h3>Messages</h3>
+          <p class="caveat">
+            Link: <span id="detail-comms-link">unknown</span>
+            &middot; Sent: <span id="detail-comms-sent">0</span>
+            &middot; Received: <span id="detail-comms-rx">0</span>
+            &middot; Dropped: <span id="detail-comms-drop">0</span>
+          </p>
+          <div class="row">
+            <input
+              type="text"
+              id="detail-comms-input"
+              maxlength="256"
+              placeholder="Type message and press Send"
+            />
+            <button id="detail-comms-send" class="primary">Send</button>
+          </div>
+          <p class="caveat">
+            Plain text, max 256 chars. Goes to the linked partner only.
+          </p>
+          <ul id="detail-comms-log" class="comms-log"></ul>
+        </div>
       </section>
     </aside>
 

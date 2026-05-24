@@ -30,6 +30,27 @@ class InvalidReadSizeError(ValueError):
     """
 
 
+class TransmitterNotOpenError(RuntimeError):
+    """Raised when ``write()`` is called before ``open()`` or after ``close()``.
+
+    Mirror of ``ReceiverNotOpenError`` on the TX side (ADR-025 Iter 3).
+    The DSSS comms loop depends on the same strict
+    ``open -> configure -> write* -> close`` ordering as the RX side;
+    a silent no-op here would let a frame drop without telling the
+    operator the link is down.
+    """
+
+
+class InvalidWriteSizeError(ValueError):
+    """Raised when ``write(iq)`` is called with a zero-length / multi-dim block.
+
+    Mirror of ``InvalidReadSizeError``. Asking a transmitter to send
+    nothing is a programming error, not a graceful no-op. Surfacing
+    it keeps the Transmitter Protocol's "exact len(iq) or raise"
+    guarantee honest (B3).
+    """
+
+
 class CalibrationFailedError(RuntimeError):
     """Raised when ``CoherentReceiver.calibrate()`` cannot establish a valid solution.
 

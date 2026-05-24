@@ -41,17 +41,28 @@ from rfmesh_contracts import (
     Capability,
     NodeConfig,
     NodeStatus,
+    PeerLink,
     Receiver,
 )
 
 from .capabilities import build_estimators, detect_active_capabilities
+from .command_channel import CommandChannel
+from .commands import (
+    AllStopCommand,
+    ClearFaultCommand,
+    ManualSteerCommand,
+    SendCommsMessageCommand,
+)
+from .controller import NodeController
 
 if TYPE_CHECKING:
     from rfmesh_contracts import BearingEstimator
     from rfmesh_servo.driver import ServoDriver
 
+    from .comms.comms_loop import CommsLoop
     from .l1_sweep import L1SweepLoop
     from .rendezvous import RendezvousLoop
+    from .runtime_config import CommandEndpointConfig
 
 
 _LOG = logging.getLogger(__name__)
@@ -76,24 +87,36 @@ class Node:
         bearer: Bearer | None = None,
         sweep_loop: L1SweepLoop | None = None,
         rendezvous_loop: RendezvousLoop | None = None,
+        comms_loop: CommsLoop | None = None,
         servo: ServoDriver | None = None,
+        command_endpoint: CommandEndpointConfig | None = None,
     ) -> None:
         """Bind the node config and the receiver (and optionally the bearer).
 
+        ``command_endpoint`` (ADR-022): when set + enabled, ``Node.run`` opens
+        a long-lived WebSocket to the backend, sends a ``node_hello`` frame
+        (capability handshake the web UI needs to clamp the manual-steer
+        slider, ADR-021 §"Manual-steer safety"), and dispatches inbound
+        commands. The dispatched-handler is a refusal stub here -- a real
+        servo-action handler ships with ``NodeController`` in a follow-up
+        ADR (the council-flagged race between mode-switch preemption and
+        in-flight ``RendezvousLoop._refine_once`` writes is unresolved).
+        B3: the stub never silently accepts; it refuses loudly.
+
         Capability mismatch is *not* checked here -- it requires the
-        receiver to be open (capabilities() is the live snapshot).
-        Construction may therefore fail later, at ``run``, with
-        ``CapabilityMismatchError``. We could open the receiver
-        eagerly in __init__, but doing so makes Node construction
-        a side-effectful operation -- the architect's preference is
-        that import / construction is side-effect-free, side
-        effects happen in ``run``.
+        receiver to be open. Construction may therefore fail later, at
+        ``run``, with ``CapabilityMismatchError``.
         """
         self._config = config
         self._receiver = receiver
         self._bearer = bearer
         self._sweep_loop = sweep_loop
         self._rendezvous_loop = rendezvous_loop
+        # ADR-025 Iter 4.5: optional DSSS comms loop. Mutually exclusive
+        # with sweep_loop / rendezvous_loop in v1.3.0 (the YAML validator
+        # NodeRuntimeConfig._coherence enforces this at config-load
+        # time); Node trusts the upstream gate and does not re-check.
+        self._comms_loop = comms_loop
         # Servo lifecycle is owned here (not in the sweep loop) so the sweep
         # and rendezvous loops can share one connected servo without
         # re-enumerating the USB-CDC link on every mode flip (ADR-019).
@@ -105,6 +128,12 @@ class Node:
         self._tasks: list[asyncio.Task[None]] = []
         self._stopping = asyncio.Event()
         self._running = False
+        # ADR-022 comms-mode command channel.
+        self._command_endpoint = command_endpoint
+        self._command_channel: CommandChannel | None = None
+        # ADR-024 NodeController -- owns servo when wired (replaces
+        # the stub _handle_command of ADR-022 + folds the _rendezvous_supervisor).
+        self._controller: NodeController | None = None
 
     async def run(self) -> None:
         """Bring the node up; run until ``shutdown`` is called."""
@@ -125,18 +154,82 @@ class Node:
                 asyncio.create_task(self._heartbeat_loop(), name="node-heartbeat"),
             ]
             # Servo-driving task: exactly one, so only one writer touches the
-            # single-outstanding-command servo at a time (ADR-019).
-            #  * rendezvous wired -> the supervisor owns the servo and
-            #    time-shares it with the jammer sweep (link-hold <-> DF sweep);
-            #  * else L1 sweep wired -> the plain blind-sweep loop;
+            # single-outstanding-command servo at a time (ADR-019/ADR-024).
+            #  * comms-mode wired (command_endpoint + servo) -> NodeController
+            #    arbitrates between SWEEPING/ACQUIRED_PEER/MANUAL_HOLD/PARKED
+            #    /FAULT modes via cancel-drained handoff (ADR-024).
+            #  * else rendezvous wired -> the legacy supervisor owns the servo
+            #    (kept one release for backwards-compat with BartekDu's path).
+            #  * else L1 sweep wired -> the plain blind-sweep loop.
             #  * else heartbeat-only (the v1.0 container behaviour).
-            if self._rendezvous_loop is not None:
+            controller_eligible = (
+                self._servo is not None
+                and self._command_endpoint is not None
+                and self._command_endpoint.backend_ws_url
+            )
+            if controller_eligible:
+                # Cached calibrated arc for manual-steer validation. v1
+                # uses the configured sweep / rendezvous arc as the
+                # source (cal_provenance="config", per ADR-022); when
+                # the firmware get_calibration round-trip is wired in,
+                # this flips to "firmware-nvs". The arc is in servo-frame
+                # degrees here -- the same numbers the slider clamps to.
+                cal_arc = self._cached_calibrated_arc()
+                self._controller = NodeController(
+                    servo=self._servo,
+                    sweep_loop=self._sweep_loop,
+                    rendezvous_loop=self._rendezvous_loop,
+                    calibrated_arc_deg=cal_arc,
+                    node_id=self._config.node_id,
+                    on_state_change=self._on_controller_state_change,
+                    comms_loop=self._comms_loop,
+                )
+                self._tasks.append(
+                    asyncio.create_task(
+                        self._controller.run(self._stopping),
+                        name="node-controller",
+                    )
+                )
+            elif self._rendezvous_loop is not None:
                 self._tasks.append(
                     asyncio.create_task(self._rendezvous_supervisor(), name="node-rendezvous")
                 )
             elif self._sweep_loop is not None:
                 self._tasks.append(
                     asyncio.create_task(self._sweep_loop.run(self._stopping), name="node-l1-sweep")
+                )
+            # ADR-025 Iter 4.5: DSSS comms supervisor. The comms loop is
+            # mutually exclusive with sweep/rendezvous (YAML validator),
+            # so we run it only when no DF loop has claimed the servo.
+            if self._comms_loop is not None and self._sweep_loop is None and (
+                self._rendezvous_loop is None
+            ):
+                # Wire the operator-facing callbacks before acquire so the
+                # link-up status frame surfaces on the dashboard the
+                # moment acquire completes.
+                self._comms_loop.on_received = self._on_comms_received
+                self._comms_loop.on_status = self._on_comms_status
+                self._comms_loop.on_frame_dropped = self._on_comms_frame_dropped
+                self._tasks.append(
+                    asyncio.create_task(self._comms_supervisor(), name="node-comms")
+                )
+            # ADR-022 comms-mode: phone the backend so link.html can see
+            # this node + clamp the manual-steer slider to the calibrated
+            # arc. Optional -- enabled iff command_endpoint was provided
+            # and command_endpoint.enabled is true (the latter checked at
+            # construction by the CLI builder).
+            if self._command_endpoint is not None and self._command_endpoint.backend_ws_url:
+                self._command_channel = CommandChannel(
+                    backend_ws_url=self._command_endpoint.backend_ws_url,
+                    node_id=self._config.node_id,
+                    handler=self._handle_command,
+                    hello_payload_fn=self._build_hello_payload,
+                )
+                self._tasks.append(
+                    asyncio.create_task(
+                        self._command_channel.run(self._stopping),
+                        name="node-command-channel",
+                    )
                 )
             await self._stopping.wait()
         finally:
@@ -253,6 +346,34 @@ class Node:
             gnss_locked=False,
             healthy=True,
             status_detail=status_detail,
+            peer_links=self._build_peer_links(),
+        )
+
+    def _build_peer_links(self) -> tuple[PeerLink, ...] | None:
+        """Build the ADR-026 ``NodeStatus.peer_links`` snapshot.
+
+        Returns ``None`` on a node with no rendezvous loop configured
+        (legacy semantics preserved). Returns an empty tuple on a 1.4.0+
+        node that has rendezvous configured but no live peer info yet
+        -- distinct from None per ADR-026 §Change E.
+
+        link_margin_db field is left as None in v1.4.0; live link margin
+        measurement is gate-5 of the soldier-grade checklist and lands
+        with ADR-025 comms-mode hardware. The peer_node_id +
+        last_lock_t_unix_ns fields are populated from RendezvousLoop's
+        last successful refine.
+        """
+        rv = self._rendezvous_loop
+        if rv is None:
+            return None
+        last_report = rv.last_report
+        last_lock_ns: int | None = last_report.t_unix_ns if last_report is not None else None
+        return (
+            PeerLink(
+                peer_node_id=rv.config.peer_node_id,
+                last_lock_t_unix_ns=last_lock_ns,
+                link_margin_db=None,
+            ),
         )
 
     async def _teardown(self) -> None:
@@ -279,6 +400,228 @@ class Node:
     # ------------------------------------------------------------------
     # Test convenience.
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # Comms-mode (ADR-022): node_hello + command handler stub.
+    # ------------------------------------------------------------------
+
+    def _cached_calibrated_arc(self) -> tuple[float, float] | None:
+        """The configured servo arc, in servo-frame degrees (B3 source).
+
+        Source of truth until the firmware ``get_calibration`` roundtrip
+        is wired in here (per memory CAL_PERSIST cosmetic quirk); then
+        flips to ``"firmware-nvs"`` in the hello's ``cal_provenance``.
+        This arc is what ``NodeController._validate_manual_angle``
+        clamps to, and what ``link.js`` clamps the slider to.
+        """
+        if self._sweep_loop is not None:
+            cfg = self._sweep_loop._cfg
+            return (float(cfg.min_deg), float(cfg.max_deg))
+        if self._rendezvous_loop is not None:
+            rv = self._rendezvous_loop.config
+            return (float(rv.min_servo_deg), float(rv.max_servo_deg))
+        return None
+
+    def _build_hello_payload(self) -> dict[str, object]:
+        """Build the ``node_hello`` capability snapshot.
+
+        Sent by ``CommandChannel`` on every (re)connect. The backend
+        caches it on ``NodeWsRegistry`` and serves it from
+        ``GET /node/{node_id}/capabilities``; ``link.html`` reads that
+        to clamp the manual-steer slider to the calibrated arc
+        (ADR-021 §"Manual-steer safety" layer 3).
+
+        ADR-024 additions: ``controller_ready`` flips to ``true`` when a
+        ``NodeController`` is wired, and the ``state`` /
+        ``manual_hold_expires_at_ns`` / ``last_commanded_angle_deg``
+        fields are populated from the controller snapshot so the UI can
+        render the 5-state badge + countdown without polling.
+
+        Calibrated-arc honesty (B3): v1 reports the *configured* arc and
+        tags ``cal_provenance`` as ``"config"``.
+        """
+        arc = self._cached_calibrated_arc()
+        rv_loop = self._rendezvous_loop
+        peer: dict[str, object] | None = None
+        if rv_loop is not None:
+            pp = rv_loop.config.peer_position
+            peer = {
+                "node_id": rv_loop.config.peer_node_id,
+                "lat_deg": pp.lat_deg,
+                "lon_deg": pp.lon_deg,
+            }
+
+        controller_snap: dict[str, object] = {}
+        if self._controller is not None:
+            controller_snap = self._controller.snapshot()
+
+        return {
+            "node_id": self._config.node_id,
+            "schema_version": self._config.schema_version,
+            "active_capabilities": [c.value for c in self._active_capabilities],
+            "heading_deg": self._config.heading_deg,
+            "position": {
+                "lat_deg": self._config.position.lat_deg,
+                "lon_deg": self._config.position.lon_deg,
+            },
+            "calibrated_geographic_arc_deg": (
+                None if arc is None else {"min": arc[0], "max": arc[1]}
+            ),
+            "cal_provenance": "config",
+            "peer": peer,
+            "controller_ready": self._controller is not None,
+            "state": controller_snap.get("state"),
+            "status_detail": controller_snap.get("status_detail", ""),
+            "manual_hold_expires_at_ns": controller_snap.get("manual_hold_expires_at_ns"),
+            "last_commanded_angle_deg": controller_snap.get("last_commanded_angle_deg"),
+        }
+
+    async def _on_controller_state_change(self, payload: dict[str, object]) -> bool:
+        """ADR-024 broadcast hook: push state-change frame back over the WS.
+
+        Routes through the same ``CommandChannel.send_response`` used by
+        the refusal-stub of ADR-022; backend's ``/ws/node/{id}`` handler
+        forwards ``kind=node_state`` frames to UI subscribers so the badge
+        flips within ~200 ms of the firmware event (per demo-integrity
+        rec — event-driven link_state, not heartbeat cadence).
+        """
+        if self._command_channel is None:
+            return False
+        return await self._command_channel.send_response(payload)
+
+    async def _comms_supervisor(self) -> None:
+        """ADR-025 Iter 4.5: drive the DSSS comms loop end-to-end.
+
+        ``acquire()`` once (points the Yagi at the peer, initialises the
+        TDD schedule), then ``run(stop)`` until the node-wide stop
+        event fires. Surfaces acquisition failures (``PeerOutOfArcError``
+        / ``RuntimeError``) loudly through the supervisor log -- the
+        comms loop's own callbacks already push WS frames for the
+        operator-facing surface.
+        """
+        loop = self._comms_loop
+        if loop is None:  # defensive -- caller already checked
+            return
+        try:
+            await loop.acquire()
+        except Exception:
+            _LOG.exception(
+                "Node %s: comms acquire() failed -- link will not come up.",
+                self._config.node_id,
+            )
+            return
+        try:
+            await loop.run(self._stopping)
+        except Exception:
+            _LOG.exception(
+                "Node %s: comms run() raised; supervisor exiting.",
+                self._config.node_id,
+            )
+
+    async def _on_comms_received(self, contents: object) -> None:
+        """Fan a decoded inbound DSSS frame to the operator dashboard.
+
+        The dashboard's ``link.js`` listens for ``kind=comms_rx``
+        frames and appends them newest-first to the message log.
+        Padding (NULs from the fixed-size frame policy) is stripped
+        so the operator sees the original text.
+        """
+        if self._command_channel is None:
+            return
+        # Late-import the FrameContents type only for the isinstance /
+        # attribute-access shape -- avoids a top-level rfmesh_dsss
+        # import on nodes that never run comms mode.
+        peer = getattr(contents, "src_node_id", None)
+        payload_bytes = getattr(contents, "payload", b"")
+        # CommsLoop.strip_padding is a staticmethod; import lazily for
+        # the same scope-hygiene reason.
+        from .comms.comms_loop import CommsLoop  # noqa: PLC0415
+
+        text_bytes = CommsLoop.strip_padding(payload_bytes)
+        try:
+            text = text_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            text = text_bytes.hex()
+        await self._command_channel.send_response(
+            {
+                "kind": "comms_rx",
+                "node_id": self._config.node_id,
+                "data": {
+                    "peer": peer,
+                    "text": text,
+                    "t_unix_ns": time.time_ns(),
+                },
+            },
+        )
+
+    async def _on_comms_status(self, snapshot: dict[str, object]) -> None:
+        """Fan a comms-link status snapshot to the operator dashboard."""
+        if self._command_channel is None:
+            return
+        await self._command_channel.send_response(
+            {
+                "kind": "comms_status",
+                "node_id": self._config.node_id,
+                "data": snapshot,
+            },
+        )
+
+    async def _on_comms_frame_dropped(self, reason: str) -> None:
+        """Log a dropped frame; surface to dashboard if WS attached.
+
+        The dashboard does not yet render dropped frames as a distinct
+        panel (Iter 5 multi-hop will add a per-link error counter
+        view); for v1.3.0 the count is visible via the comms_status
+        snapshot's ``frames_dropped`` field and this log line.
+        """
+        _LOG.warning(
+            "Node %s: comms frame dropped -- %s",
+            self._config.node_id,
+            reason,
+        )
+
+    async def _handle_command(
+        self,
+        command: (
+            ManualSteerCommand
+            | AllStopCommand
+            | ClearFaultCommand
+            | SendCommsMessageCommand
+        ),
+    ) -> None:
+        """Dispatch operator commands.
+
+        When ``NodeController`` is wired (ADR-024) the controller validates
+        + applies the command; refusals are acked back over the WS. When
+        not wired (sweep-only bench, no servo), the ADR-022 refusal stub
+        semantics apply: log + ack ``command_refused`` loudly. B3 throughout.
+        """
+        if self._controller is not None:
+            refusal = await self._controller.dispatch_command(command)
+            if refusal is not None and self._command_channel is not None:
+                refusal.setdefault("requestor_id", command.requestor_id)
+                await self._command_channel.send_response(refusal)
+            return
+
+        kind = command.kind
+        reason = "NodeController not wired on this node (sweep-only bench / no servo)."
+        _LOG.warning(
+            "Node %s: refusing %s command from %s -- %s",
+            self._config.node_id,
+            kind,
+            command.requestor_id,
+            reason,
+        )
+        if self._command_channel is not None:
+            await self._command_channel.send_response(
+                {
+                    "kind": "command_refused",
+                    "node_id": self._config.node_id,
+                    "refused_kind": kind,
+                    "requestor_id": command.requestor_id,
+                    "reason": reason,
+                }
+            )
 
     async def emit_for_test(self, report: BearingReport) -> None:
         """Send a BearingReport via the bearer (no estimator loop).

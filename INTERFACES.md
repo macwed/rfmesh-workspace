@@ -5,7 +5,7 @@ Edits only by lead architect, lockstep with contracts package.
 **Audience:** every workstream agent and reviewer. Dictionary you
 consult when need to know *what field means*, not just type.
 **Date:** 2026-05-14.
-**Mirrors contracts at:** `SCHEMA_VERSION = "1.1.0"`.
+**Mirrors contracts at:** `SCHEMA_VERSION = "1.3.0"`.
 
 Doc does not duplicate Pydantic schemas — those authoritative, read directly for field names, types, validators. Doc carries what schemas cannot: **meaning of each field, who produces, who consumes, units, validity in wider system, boundaries.** Schema vs doc disagree: schema wins, doc is bug. Two readers disagree on field meaning: doc is tiebreaker.
 
@@ -114,10 +114,64 @@ never silent downgrade.
   Implementation: `rfmesh_dsp.l2_null_steering` (WS-B-007). Same R, same array.
 - `L3_CLASSIFY` (`"l3_classify"`) — emitter classification by edge ML. Needs
   compute node (Raspberry Pi class), SDR-agnostic.
+- `L1_REFUSED_PROMINENCE` (`"l1_refused_prominence"`) — **capability state,
+  not bearing method.** Added in SCHEMA_VERSION 1.2.0 (ADR-013, G4). A
+  `BearingReport` carrying `method = L1_REFUSED_PROMINENCE` is the
+  wire-level surface for an L1 amplitude-sweep refusal: estimator
+  inspected sweep, declined to emit a bearing (prominence-gate
+  failure, saddle, vertex out of window, singular covariance,
+  non-finite variance, under-populated sweep). Free-form cause on
+  `BearingReport.refusal_reason`. Direction sentinels:
+  `azimuth_deg = 0.0`, `azimuth_sigma_deg = 180.0` (infinite-uncertainty
+  equivalent — contract requires both fields present, but consumers
+  MUST branch on `method` first). Fuser skips these reports; ops
+  dashboard renders refusal symbol + reason instead of sigma wedge.
+- `COMMS_DSSS` (`"comms_dsss"`) — DSSS directional-comms participation.
+  Added in SCHEMA_VERSION 1.3.0 (ADR-025). Requires both RX and TX paths
+  on the configured SDR (HackRF One, ADALM-Pluto+, BladeRF 2.0 micro);
+  RTL-SDR V4 is RX-only and a node declaring `COMMS_DSSS` on RTL-SDR
+  is a fatal startup error (B3). **Mutually exclusive with DF
+  capabilities** (`L1_RSSI`, `L2_MUSIC`, `L2_CAPON`, `L2_MVDR_NULL`)
+  in v1.3.0 — a node runs DF mode OR comms mode, not both
+  concurrently on one SDR/Yagi (selected by CLI flag / config).
+  `L3_CLASSIFY` may coexist with `COMMS_DSSS` (SDR-agnostic
+  classification on tapped IQ). Concurrent DF + COMMS deferred to
+  a future ADR.
 
-**Producer:** operator (via `NodeConfig`). **Consumer:** node
+**Producer:** operator (via `NodeConfig`) for declared capabilities;
+the L1 estimator path produces `L1_REFUSED_PROMINENCE` on
+`BearingReport.method` at refusal events. **Consumer:** node
 runtime (intersects with hardware), dashboard (filters/labels),
-`BearingReport.method` field (reports which capability produced bearing).
+fusion (skips `L1_REFUSED_PROMINENCE`, weights everything else),
+`BearingReport.method` field (reports which capability produced bearing
+or refusal).
+
+### `BearingPriorKind`
+
+Epistemic axis on `BearingReport.prior_kind` (ADR-026,
+SCHEMA_VERSION 1.4.0). Orthogonal to `Capability` (the
+estimator-type axis): the same L1 amplitude-sweep estimator
+produces both PEER_LINK and FLAT reports — only the prior on the
+reported azimuth differs.
+
+- `FLAT` (`"flat"`) — no prior. Unknown-emitter bearing. Fusion
+  uses these for `FixEvent` computation as usual.
+- `PEER_LINK` (`"peer_link"`) — Bayesian prior from a known peer
+  link (surveyed position + prior comms). Producer MUST also
+  populate `BearingReport.prior_mean_deg` and
+  `BearingReport.prior_sigma_deg` (the validator enforces).
+  Fusion **filters these out of emitter FixEvent computation**
+  (peer bearings belong to the link-state consumer, not the
+  emitter pipeline). The filter is **per-peak** (not per-sweep):
+  a secondary FLAT peak from a peer-refine sweep still contributes
+  to emitter geolocation.
+
+**Producer:** the L1 amplitude-sweep estimator, with the tag
+applied by the wrapping rendezvous loop
+(`RendezvousLoop._tag_peer_prior`) before emit.
+**Consumer:** fusion (filters by `prior_kind`), `link.html`
+(combines likelihood + prior into a posterior via
+`rfmesh_fusion.combine_bearing_prior` for the soldier UI).
 
 ### `EmitterClass`
 
@@ -327,6 +381,50 @@ emitter, at one instant.
   expects). Present only on Wi-Fi bearer (LoRa drops for bandwidth).
   Consumed by ops dashboard to render live pseudospectrum tile;
   fusion ignores.
+- `refusal_reason` (optional) — free-form diagnostic string when
+  `method = Capability.L1_REFUSED_PROMINENCE`. Wire-level surface
+  of L1 estimator's `last_refusal_reason` (E1). Examples:
+  `"prominence-gate failure (1.96 dB front-back < 6 dB)"`,
+  `"saddle"`, `"vertex out of sweep window"`,
+  `"singular covariance"`, `"non-finite variance"`,
+  `"sweep underpopulated"`. `None` on every healthy bearing.
+  Consumers (ops dashboard `BearingsPanel` / `BearingScanPanel`)
+  render alongside refusal symbol; fusion ignores
+  (already skipped by `method` filter). Added in
+  SCHEMA_VERSION 1.2.0 (ADR-013 G4).
+- `prior_kind` (optional, `BearingPriorKind | None`) — epistemic
+  axis (ADR-026, SCHEMA_VERSION 1.4.0). `FLAT` for unknown-emitter
+  bearings (no prior). `PEER_LINK` for bearings produced by the
+  rendezvous loop's peer-acquisition path (GPS prior on bearing
+  from surveyed peer position). `None` on legacy producers
+  (pre-1.4.0); consumers treat `None` as `FLAT`. **Fusion uses
+  this — NOT `method` — for the emitter-FixEvent filter**:
+  `PEER_LINK` bearings are dropped from emitter fixes (they
+  belong to the link-state consumer, not the emitter pipeline);
+  `FLAT` bearings contribute normally. Filter is **per-peak**, not
+  per-sweep: a secondary peak from a peer-refine sweep tagged
+  `FLAT` still contributes to emitter geolocation (Advantage #1
+  density preserved). The estimator-type axis (`method`) stays
+  orthogonal; future L2 peer-acquisition does NOT need new
+  `Capability` members.
+- `prior_mean_deg` (optional) — prior mean azimuth in geographic
+  degrees CW from north, populated when `prior_kind = PEER_LINK`
+  (the great-circle bearing to the surveyed peer position).
+  MUST be `None` otherwise. Added in SCHEMA_VERSION 1.4.0
+  (ADR-026).
+- `prior_sigma_deg` (optional) — prior 1-σ uncertainty in degrees
+  when `prior_kind = PEER_LINK`. **CRITICAL B2 invariant:** the
+  wire's `azimuth_sigma_deg` stays as the **likelihood** σ
+  (raw parabola peak-fit residual, no prior folded in); the
+  prior travels here separately. Downstream consumers combine
+  likelihood + prior via
+  `rfmesh_fusion.combine_bearing_prior` to derive the posterior.
+  This split keeps the MC sigma-honesty test
+  (`test_sigma_honesty.py`, ±20% band) coherent — it tests the
+  likelihood σ exclusively. MUST be `None` when
+  `prior_kind != PEER_LINK`. Added in SCHEMA_VERSION 1.4.0
+  (ADR-026). The validator `_prior_fields_coherent` refuses
+  PEER_LINK-without-prior + FLAT/None-with-prior (B3).
 
 **Acceptance rules for `BearingReport` to be useful to fusion:**
 
@@ -414,6 +512,15 @@ ellipse polygon in ATAK), ops dashboard.
   node classified; `EmitterClass.UNKNOWN` means nodes classified but did
   not agree or individually unsure. **Geolocation never depends on
   this** — classification is metadata overlay, not gate on fix.
+- `gdop_uncomputable_reason` (optional) — free-form reason `gdop`
+  is sentinel placeholder rather than measured dilution. `None` on
+  healthy fix; populated by fusion solver when `compute_gdop()` raises
+  `DegenerateGeometryError` (collinear nodes through emitter, parallel
+  bearing lines). Ops dashboard renders `"GDOP: uncomputable (<reason>)"`
+  instead of `gdop:.2f`. `gdop` field still carries a strictly-positive
+  sentinel (`> gdop_warn_threshold * 10`) only to satisfy contract
+  validator; `confidence_level` forced LOW on this path per ADR-005 D4.
+  Added in SCHEMA_VERSION 1.2.0 (ADR-013 G3).
 
 ### `NodeStatus`
 
@@ -448,6 +555,33 @@ silent node excluded from new fixes), ops dashboard.
 - `status_detail` — short human-readable elaboration, especially when
   `healthy` is False, e.g. `"SDR overflow"`, `"LoRa bearer down, Wi-Fi only"`.
   Empty string when nothing to add. Free-form but conventionally < 80 chars.
+- `peer_links` (optional, `tuple[PeerLink, ...] | None`) — live
+  peer-link state, one entry per known peer (ADR-026,
+  SCHEMA_VERSION 1.4.0). **`None` vs empty tuple is meaningful:**
+    - `None`: legacy node, predates 1.4.0. Consumer renders no
+      peer-link surface.
+    - `()` (empty tuple): 1.4.0+ node has rendezvous configured but
+      no peers yet, OR rendezvous is disabled. Consumer renders
+      "no peers configured" honestly.
+  `link.html`'s peer-link panel renders one row per `PeerLink`
+  with `"linked Ns ago · +M dB margin"` and a `⚠` glyph when
+  `link_margin_db < 10.0` (ADR-026 §I).
+
+### `PeerLink` (value object in `rfmesh_contracts.messages`)
+
+One entry per known peer in `NodeStatus.peer_links` (ADR-026,
+SCHEMA_VERSION 1.4.0).
+
+- `peer_node_id` — peer's stable `node_id`; matches peer's
+  `NodeConfig.node_id`. Required, non-empty.
+- `last_lock_t_unix_ns` (optional) — timestamp of the most recent
+  successful directional lock with this peer. `None` when the link
+  has never come up since boot.
+- `link_margin_db` (optional) — link margin in dB above local
+  noise floor. **NEVER absolute dBm** (no SDR in scope is
+  power-calibrated, B.2). `None` when the link is not currently
+  locked OR when comms-mode hardware (ADR-025) is not yet wired
+  to measure live margin.
 
 ---
 
@@ -580,6 +714,52 @@ solver accepts whatever bearings arrive and cross-fixes any N ≥ 2.
   `"tcp://10.0.0.2:8087"` for FreeTAKServer). `None` disables CoT output,
   useful for headless bench runs that only watch ops dashboard.
 
+### `CommsConfig`
+
+DSSS directional-comms physical-layer configuration. Required when
+`NodeConfig.capabilities` contains `Capability.COMMS_DSSS`. Added in
+SCHEMA_VERSION 1.3.0 (ADR-025). Carries **cross-workstream** parameters
+only — node-layer concerns (peer roster, routing table, TDD slot
+assignment) live in `rfmesh-node/comms/comms_config.py` as
+RendezvousConfig-style helpers, not in frozen contracts.
+
+- `carrier_freq_hz` — RF carrier frequency, Hz, strictly > 0. The
+  ATK-10 Yagi covers 868–915 MHz; typical European deployment
+  value is 868e6 or 915e6. Independent of any DF carrier (DF and
+  COMMS modes are mutually exclusive in v1.3.0).
+- `chip_rate_hz` — DSSS chip rate, Hz. Target ~10e6 for the
+  BoTH3 build. Cross-checked against `actual_sample_rate_hz` from
+  Receiver/Transmitter capabilities at node startup (not here —
+  realised rate may differ from requested).
+- `spreading_factor` — chips per data symbol; default 1023.
+  Must equal `2**n - 1` for the LFSR polynomial (validator
+  enforces). 1023 = `2**10 - 1` gives processing gain
+  `10*log10(1023) ≈ 30 dB`.
+- `lfsr_taps` — feedback-tap tuple (1-indexed, smallest first)
+  for the m-sequence LFSR. Validator: `max(taps) == log2(spreading_factor + 1)`,
+  `min(taps) >= 1`, `len(taps) >= 1`. Canonical length-10
+  polynomial: `(10, 3)` (i.e. `x^10 + x^3 + 1`).
+- `lfsr_seed` — non-zero initial LFSR state. Zero is a fixed-point
+  (would produce all-zero output, not an m-sequence). All mesh
+  nodes in v1.3.0 share the **same** PN sequence (single shared
+  spreading code; per-link codes deferred); operator-set value is
+  the mesh-wide secret.
+- `tdd_slot_ms` — TDD half-duplex slot width, ms, strictly > 0.
+  Typical 100–500 ms for v1.3.0's ~10 kbit/s throughput.
+- `tdd_guard_ms` — guard interval between slots, ms, >= 0. Must
+  comfortably exceed worst-case NTP skew (~10 ms) plus RF settling
+  on retune. Generous default (20–50 ms) trades throughput for
+  robustness.
+- `frame_payload_max_bytes` — max DSSS-frame payload bytes,
+  strictly > 0. Set so one frame fits inside one TDD slot at the
+  configured chip rate / spreading / coding. Framing module
+  enforces; oversize payloads must fragment at application layer.
+
+**Producer:** operator (via YAML), when node declares `COMMS_DSSS`.
+**Consumer:** `rfmesh-dsss` DSP (carrier, chips, PN), `rfmesh-sdr`
+TX/RX drivers (sample-rate validation), `rfmesh-node` comms loop
+(TDD scheduling, framing).
+
 ---
 
 ## §5 Behavioural contracts (`rfmesh_contracts.protocols`)
@@ -626,6 +806,40 @@ that has happened. **L2 DSP code refuses to emit bearings from
 uncalibrated coherent stream.** Calibration not implicit and never
 silently bypassed.
 
+### `Transmitter`
+
+Sink for single-channel baseband IQ. DSSS comms TX contract.
+Symmetric to `Receiver`. Added in SCHEMA_VERSION 1.3.0 (ADR-025).
+
+- **Implementers (`rfmesh-sdr`, Iter 3+):** `BladeRFTransmitter` /
+  `HackRFTransmitter` / `PlutoTransmitter` (whichever hardware
+  on-site), and `SyntheticTransmitter` (simulator — same Protocol,
+  IQ written to in-process `loopback_channel` that one or more
+  `SyntheticReceiver`s read; full comms protocol testable with
+  zero hardware).
+- **Consumers (`rfmesh-dsss` framing/modulation output, via
+  `rfmesh-node`):** write IQ blocks, ship DSSS frames.
+
+Hard guarantee `Transmitter` makes — consumer may rely on:
+`write(iq)` returns exactly `len(iq)` samples transmitted or raises.
+No silent short-write fallback (B3, mirror of `Receiver.read`).
+Partial DSSS frame is worse than no frame because despreader syncs
+on garbage. `TransmitterCapabilities` exposes `driver`,
+`n_tx_channels`, `actual_sample_rate_hz`, `max_tx_power_normalized`
+(no dBm — same B.2 honesty rule as RX).
+
+### `CoherentTransmitter` (extends `Transmitter`)
+
+Sink for phase-coherent multi-channel IQ. Reserved for future
+transmit-beamforming / TX-null-steering. Added in SCHEMA_VERSION
+1.3.0 (ADR-025) for symmetry; **no implementation in v1.3.0**.
+DSSS BPSK needs one TX chain. A `CoherentTransmitter` declaration
+is a no-op until a future ADR adds operational semantics.
+
+Hard guarantee: `write_coherent(n_channels, n)` returns samples per
+channel transmitted or raises. Phase coherence across channels
+relies on RX-side `calibrate()` via reciprocity (paired device).
+
 ### `BearingEstimator`
 
 Turns IQ into `BearingReport`. Contract DSP exposes to node.
@@ -659,6 +873,16 @@ means "cannot responsibly solve" (below `min_bearings_for_fix`, or
 geometry so degenerate that even `fallback_centroid` is undefensible).
 Returned `FixEvent` always carries its honesty payload; weak-but-real
 fixes *labelled* weak (`confidence_level = LOW`), not withheld.
+
+**ADR-013 G4 — `L1_REFUSED_PROMINENCE` filter.** Input
+`BearingReport`s with `method = Capability.L1_REFUSED_PROMINENCE`
+are SKIPPED at `fuse()` entry, not weighted as
+`1/azimuth_sigma_deg²`. The sentinel `azimuth_sigma_deg = 180.0`
+on a refusal report would otherwise contribute trivially-low
+weight but still occupy a slot in the `contributing_nodes` tuple
+and shift the centroid — both incorrect. The filter runs before
+the time-window + min-count check, so a batch of all-refusals
+returns `None`.
 
 ### `CotPublisher`
 

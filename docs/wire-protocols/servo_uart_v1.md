@@ -12,11 +12,13 @@ The protocol is **MCU-port-invariant**: the C3 salvage baseline, the S2 port (WS
 
 ## 1. Physical layer
 
-- **Transport:** USB-CDC (ESP32-C6 native USB-Serial-JTAG peripheral, not external USB-UART bridge)
-- **Baud rate:** 115200 (CDC framing makes this nominal — actual is bulk USB)
+- **Transport:** **TCP/IP over WiFi (current, per ADR-027)** or USB-CDC (legacy bench path). The frame layer (§2 onwards) is transport-agnostic — COBS+TLV+CRC-16/CCITT-FALSE byte-for-byte either way.
+  - **TCP:** ESP32-C6 in WiFi-station mode (SSID `"rfmesh"`, PSK `"karasie01"`, hardcoded in `firmware/main/wifi_sta.c`), TCP server on port 5555. Laptop side: `TcpTransport` in `packages/rfmesh-servo/src/rfmesh_servo/transport.py`. `TCP_NODELAY` on. SO_KEEPALIVE 30s/5s/3 probes.
+  - **USB-CDC (legacy):** ESP32-C6 native USB-Serial-JTAG peripheral. Stays wired in firmware as the `ESP_LOG` console path (operator reads the WiFi DHCP IP off boot log). Selectable per-node on the laptop via YAML `servo_port: "/dev/ttyACM0"` vs `"tcp://host:port"`.
+- **Baud rate (USB only):** 115200 (CDC framing makes this nominal — actual is bulk USB). N/A for TCP.
 - **Byte order:** little-endian for all multi-byte integers
 - **Flow control:** none
-- **Encoding:** UTF-8 (only relevant in `linenoise` shell mode, not in protocol mode — see §6)
+- **Encoding:** UTF-8 (only relevant in `linenoise` shell mode, not in protocol mode — see §6; shell mode is not reachable in the current ADR-027 firmware build, only in legacy USB-CDC builds)
 
 ---
 

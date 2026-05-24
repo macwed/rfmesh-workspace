@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
+from rfmesh_contracts import BearingPriorKind
 from rfmesh_dsp.l1 import L1AmplitudeSweepEstimator
 
 if TYPE_CHECKING:
@@ -71,6 +72,49 @@ class DuplicateNodeIdError(ValueError):
 def _wrap180(angle_deg: float) -> float:
     """Wrap to (-180, 180]."""
     return (angle_deg + _DEG_HALF_CIRCLE) % _DEG_FULL_CIRCLE - _DEG_HALF_CIRCLE
+
+
+def _mode_cancelled(cancel: asyncio.Event | None) -> bool:
+    """ADR-024 cancel-event helper -- ``cancel`` may be ``None`` for callers
+    that have not opted into mode-handoff semantics (legacy/test path)."""
+    return cancel is not None and cancel.is_set()
+
+
+_R_EARTH_M: float = 6_371_000.0
+_PEER_PRIOR_SIGMA_CAP_DEG: float = 90.0
+
+
+def great_circle_distance_m(a: GeodeticPosition, b: GeodeticPosition) -> float:
+    """Great-circle distance between two WGS-84 points, metres.
+
+    Spherical Haversine -- at the few-km inter-node ranges in scope the
+    ellipsoidal correction is far below the antenna HPBW, so a sphere is
+    honest here (same posture as ``geodesic_initial_bearing_deg``).
+    """
+    lat1 = math.radians(a.lat_deg)
+    lat2 = math.radians(b.lat_deg)
+    dlat = math.radians(b.lat_deg - a.lat_deg)
+    dlon = math.radians(b.lon_deg - a.lon_deg)
+    h = math.sin(dlat / 2.0) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2.0) ** 2
+    return float(2.0 * _R_EARTH_M * math.asin(math.sqrt(h)))
+
+
+def peer_prior_sigma_deg(peer_position_sigma_m: float, range_m: float) -> float:
+    """Fold peer-position uncertainty + LOS geometry into prior sigma on bearing.
+
+    Small-angle linearisation of ``arctan(sigma_pos / range)``: at v1 typical
+    ranges 1-5 km with sigma_pos 5-10 m the linearisation is exact to <1e-5°.
+    Capped at 90° (the servo arc) as a sanity bound -- when range
+    approaches sigma_pos the linearisation under-predicts and the operational
+    case is pathological anyway (peers nearly co-located cannot DF each
+    other). ADR-026 §H + RF-DSP NOTE 1 (linearisation defensible for
+    v1 ranges).
+
+    ``max(range_m, 1.0)`` avoids div-by-zero for the degenerate
+    co-located case; the 90° cap then saturates the result.
+    """
+    rad = peer_position_sigma_m / max(range_m, 1.0)
+    return min(math.degrees(rad), _PEER_PRIOR_SIGMA_CAP_DEG)
 
 
 def geodesic_initial_bearing_deg(origin: GeodeticPosition, target: GeodeticPosition) -> float:
@@ -247,12 +291,21 @@ class RendezvousLoop:
             max_servo_deg=self._cfg.max_servo_deg,
         )
 
-    async def acquire(self, stopping: asyncio.Event) -> bool:
+    async def acquire(  # noqa: PLR0911
+        self, stopping: asyncio.Event, cancel: asyncio.Event | None = None
+    ) -> bool:
         """Point at the peer and (if SCANNER) refine to a lock.
 
         Returns True on lock, False on out-of-arc / refine-ladder exhaustion /
-        stop. On failure, :attr:`last_status` carries the loud reason. Motion is
-        bidirectional (connection mode): point directly, no same-side approach.
+        stop / cancel. On failure, :attr:`last_status` carries the loud reason.
+        Motion is bidirectional (connection mode): point directly, no same-side
+        approach.
+
+        ``cancel`` (ADR-024) is the NodeController mode-handoff signal. Checked
+        at the top of each escalation iteration and inside ``_refine_once``;
+        when set, returns False after the next safe checkpoint between two
+        ``servo.move`` calls (the in-flight ``to_thread`` always completes
+        first; see ADR-024 §2 binding clause).
         """
         try:
             target = self.target_servo_angle()
@@ -261,6 +314,8 @@ class RendezvousLoop:
             _LOG.warning("%s", self._last_status)
             return False
 
+        if _mode_cancelled(cancel):
+            return False
         await self._point(target)
 
         if self._role == "STARER":
@@ -272,12 +327,20 @@ class RendezvousLoop:
 
         # SCANNER: refine across a widening ladder until a peak clears the gate.
         for half_arc in self._cfg.escalation_half_arcs:
-            if stopping.is_set():
+            if stopping.is_set() or _mode_cancelled(cancel):
                 return False
-            report = await self._refine_once(stopping, half_arc)
+            report = await self._refine_once(stopping, half_arc, cancel)
             if report is not None:
+                # ADR-026 §H: tag the peer-acquired bearing with PEER_LINK
+                # prior. The wire's ``azimuth_sigma_deg`` stays as the
+                # likelihood sigma (raw parabola peak-fit residual); the prior
+                # mean + sigma travel on the new optional fields. Downstream
+                # consumers combine via ``combine_bearing_prior``.
+                report = self._tag_peer_prior(report)
                 self._last_report = report
                 # Re-point onto the refined peak (bidirectional, within arc).
+                if _mode_cancelled(cancel):
+                    return False
                 await self._point(_wrap180(report.azimuth_deg - self._boresight))
                 self._last_status = (
                     f"rendezvous: SCANNER locked, peer bearing {report.azimuth_deg:.1f} "
@@ -294,10 +357,56 @@ class RendezvousLoop:
         _LOG.warning("%s", self._last_status)
         return False
 
-    async def hold(self, stopping: asyncio.Event, duration_s: float) -> None:
-        """Keep the antenna on the peer for ``duration_s`` (servo already pointed)."""
+    async def hold(
+        self,
+        stopping: asyncio.Event,
+        duration_s: float,
+        cancel: asyncio.Event | None = None,
+    ) -> None:
+        """Keep the antenna on the peer for ``duration_s`` (servo already pointed).
+
+        ``cancel`` lets ``NodeController`` preempt the hold immediately; a
+        manual_steer arriving during a 30s link-hold should not wait for the
+        hold to expire.
+        """
+        wait_targets = [stopping.wait()]
+        if cancel is not None:
+            wait_targets.append(cancel.wait())
         with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(stopping.wait(), timeout=duration_s)
+            _done, pending = await asyncio.wait(
+                [asyncio.create_task(t) for t in wait_targets],
+                timeout=duration_s,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+
+    def reset(self) -> None:
+        """Drop the estimator's accumulator (ADR-024 mode-exit reset)."""
+        self._estimator.begin_sweep(time.time_ns())
+
+    def _tag_peer_prior(self, report: BearingReport) -> BearingReport:
+        """Return a copy of ``report`` with ADR-026 PEER_LINK prior fields.
+
+        Mean = great-circle bearing self->peer (the GPS prior).
+        Sigma = ``peer_prior_sigma_deg(peer.sigma_m, range_m)`` --
+        small-angle fold of peer-position uncertainty.
+
+        The wire's ``azimuth_sigma_deg`` is NOT touched: it stays as the
+        likelihood sigma (raw peak-fit residual) so the MC sigma-honesty
+        test (B2) remains coherent (ADR-026 §G).
+        """
+        peer_pos = self._cfg.peer_position
+        bearing_to_peer = geodesic_initial_bearing_deg(self._node_position, peer_pos)
+        rng_m = great_circle_distance_m(self._node_position, peer_pos)
+        p_sigma = peer_prior_sigma_deg(peer_pos.sigma_m, rng_m)
+        return report.model_copy(
+            update={
+                "prior_kind": BearingPriorKind.PEER_LINK,
+                "prior_mean_deg": bearing_to_peer,
+                "prior_sigma_deg": p_sigma,
+            }
+        )
 
     async def _point(self, angle_deg: float) -> None:
         """Move directly to ``angle_deg`` and settle (no same-side approach)."""
@@ -305,12 +414,17 @@ class RendezvousLoop:
         await asyncio.sleep(self._cfg.settle_s)
 
     async def _refine_once(
-        self, stopping: asyncio.Event, half_arc_deg: float
+        self,
+        stopping: asyncio.Event,
+        half_arc_deg: float,
+        cancel: asyncio.Event | None = None,
     ) -> BearingReport | None:
         """One refine mini-sweep across ±``half_arc_deg`` around the peer target.
 
         Bidirectional motion, clamped to the servo arc. Reuses the L1 estimator
         for the peak fit; returns its ``BearingReport`` or ``None``.
+
+        Safe checkpoint (ADR-024 §2 binding): BETWEEN two ``servo.move`` calls.
         """
         target = self.target_servo_angle()
         lo = max(target - half_arc_deg, self._cfg.min_servo_deg)
@@ -325,7 +439,7 @@ class RendezvousLoop:
 
         self._estimator.begin_sweep(time.time_ns())
         for angle in angles:
-            if stopping.is_set():
+            if stopping.is_set() or _mode_cancelled(cancel):
                 return None
             await self._point(angle)
             iq = await asyncio.to_thread(self._receiver.read, self._cfg.dwell_samples)
@@ -342,5 +456,7 @@ __all__ = [
     "Role",
     "expected_servo_angle",
     "geodesic_initial_bearing_deg",
+    "great_circle_distance_m",
+    "peer_prior_sigma_deg",
     "role",
 ]

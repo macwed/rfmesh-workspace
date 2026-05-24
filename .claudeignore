@@ -1,0 +1,11 @@
+revert __pycache__/
+*.pyc
+.venv/
+.uv/
+*.iq
+*.bin
+captures/
+data/raw/
+.git/
+/docs/deprecated/
+/docs/archive/

@@ -1,0 +1,77 @@
+# Single-YAML node runtime config (ADR-022).
+#
+# Copy to configs/node-<pi-serial>.yaml and edit the operator-supplied
+# values (node_id, position, heading_deg, fusion_endpoint, peer if
+# rendezvous is enabled, backend_ws_url if comms-mode is enabled).
+#
+# Validation: pydantic with extra="forbid" everywhere -- a typo'd key
+# is a loud error at startup (B3). See
+# packages/rfmesh-node/src/rfmesh_node/runtime_config.py for the schema.
+
+# -- contracts-frozen NodeConfig (verbatim from rfmesh_contracts.config) --
+node:
+  # schema_version is pinned by the contracts package; do not edit.
+  schema_version: "1.4.0"
+  node_id: "node-rtl-01"
+  position:
+    lat_deg: 50.33000
+    lon_deg: 5.00000
+    hae_m: 200.0
+    sigma_m: 5.0
+  heading_deg: 142.0   # antenna boresight, true degrees CW from north
+  sdr:
+    driver: "rtlsdr"
+    sample_rate_hz: 2048000
+    center_freq_hz: 868000000
+    gain_db: "auto"
+  capabilities:
+    - l1_rssi
+  bearer:
+    kind: "wifi"
+    heartbeat_interval_s: 2.0
+  fusion_endpoint: "http://10.0.0.1:8000/bearings"
+
+# -- node-runtime helpers (live in rfmesh-node, not in contracts) --
+
+servo_port: "/dev/ttyACM0"   # null disables servo (heartbeat-only)
+
+# L1SweepConfig overrides; omit any key to keep the dataclass default.
+sweep:
+  axis: 0
+  min_deg: -90.0
+  max_deg: 90.0
+  step_deg: 2.0
+  settle_s: 0.20
+  dwell_samples: 1024
+  inter_sweep_s: 1.0
+  peak_prominence_db_min: 6.0
+
+# ADR-019 directional rendezvous. Set to null to disable; populate for
+# soldier-facing comms-first operation. The peer's lat/lon is the only
+# other-node knowledge this node carries (star topology preserved).
+rendezvous: null
+# rendezvous:
+#   peer_node_id: "node-rtl-02"
+#   peer:
+#     lat_deg: 50.34000
+#     lon_deg: 5.00500
+#   refine_half_arc_deg: 20.0
+#   link_hold_s: 30.0
+
+# ADR-021 + ADR-022 comms-mode command channel. Enable for soldier-facing
+# deployments so link.html can see + (eventually) steer this node.
+command_endpoint:
+  enabled: false
+  backend_ws_url: null
+# command_endpoint:
+#   enabled: true
+#   backend_ws_url: "ws://10.0.0.1:8000"
+
+# servo_motion.MotionConfig overrides for the trapezoidal ramp.
+motion:
+  max_vel_dps: 25.0
+  accel_time_s: 0.40
+  motion_step_deg: 1.0
+  fast_threshold_deg: 10.0
+  fast_settle_s: 0.10
+  invert_direction: false

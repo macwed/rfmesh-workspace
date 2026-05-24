@@ -73,6 +73,25 @@ class Store:
                 latest[b.node_id] = b
         return list(latest.values())
 
+    def latest_peer_bearing(self, node_id: str) -> BearingReport | None:
+        """Most recent PEER_LINK-prior bearing for ``node_id`` (ADR-026 §I).
+
+        Used by ``GET /node/{id}/peer_bearing`` to combine likelihood +
+        prior into a posterior for the soldier UI. Returns ``None`` if
+        the node has not yet emitted any peer-acquired bearing.
+        """
+        from rfmesh_contracts import BearingPriorKind  # noqa: PLC0415
+
+        latest: BearingReport | None = None
+        for b in self._bearings.values():
+            if b.node_id != node_id:
+                continue
+            if b.prior_kind is not BearingPriorKind.PEER_LINK:
+                continue
+            if latest is None or b.t_unix_ns > latest.t_unix_ns:
+                latest = b
+        return latest
+
     def counts(self) -> tuple[int, int]:
         return len(self._fixes), len(self._bearings)
 

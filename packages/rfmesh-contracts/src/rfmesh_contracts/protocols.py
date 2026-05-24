@@ -222,6 +222,163 @@ class CoherentReceiver(Receiver, Protocol):
         ...
 
 
+class TransmitterCapabilities(Protocol):
+    """Read-only description of what a concrete Transmitter can actually do.
+
+    Symmetric to ``ReceiverCapabilities``. Returned by
+    ``Transmitter.capabilities()`` so the node runtime can validate
+    declared comms capability against the live device -- a node
+    declaring ``Capability.COMMS_DSSS`` whose backing SDR cannot
+    transmit (e.g. RTL-SDR V4) is a fatal startup error (B3, no
+    silent downgrade). Added in SCHEMA_VERSION 1.3.0 (ADR-025).
+
+    DSP code never inspects this; it is consumed by the node runtime
+    and the comms loop only.
+    """
+
+    @property
+    def driver(self) -> str:
+        """The SDR driver/family backing this transmitter, e.g. 'bladerf', 'hackrf', 'pluto'."""
+        ...
+
+    @property
+    def n_tx_channels(self) -> int:
+        """How many independent TX channels this device provides.
+
+        1 for HackRF One / Pluto / single-chain BladeRF. 2+ for a
+        coherent multi-channel device (BladeRF 2.0 micro in 2x2
+        mode). DSSS v1.3.0 needs only 1; the field exists so a
+        future coherent-TX feature (e.g. transmit beamforming) can
+        validate the device at startup.
+        """
+        ...
+
+    @property
+    def actual_sample_rate_hz(self) -> float:
+        """The TX sample rate the device truly settled on, Hz.
+
+        Same honesty rule as ``ReceiverCapabilities.actual_sample_rate_hz``:
+        may differ from the requested rate. Surfaced so the comms loop
+        can validate ``CommsConfig.chip_rate_hz <= actual_sample_rate_hz``
+        against the realised hardware capability, not the requested one.
+        """
+        ...
+
+    @property
+    def max_tx_power_normalized(self) -> float:
+        """Maximum TX gain/power as a normalised float in ``[0.0, 1.0]``.
+
+        Deliberately NOT in dBm. None of the SDRs in scope (HackRF,
+        Pluto, BladeRF) is absolute-power-calibrated on transmit,
+        same as the RX side (see ``ReceiverCapabilities``). The
+        normalised float is the honest unit each driver's TX API
+        actually exposes; the comms layer maps a desired link
+        operating point to a normalised value through
+        ``link_budget.py`` and the operator-tuned scenario, not
+        through a dBm assumption.
+        """
+        ...
+
+
+@runtime_checkable
+class Transmitter(Protocol):
+    """A sink for single-channel baseband IQ. The DSSS comms TX contract.
+
+    Symmetric to ``Receiver``. Implemented by the SDR workstream:
+    ``BladeRFTransmitter`` / ``HackRFTransmitter`` / ``PlutoTransmitter``
+    (whichever hardware is on-site) and by ``SyntheticTransmitter``
+    (the simulator -- same Protocol, IQ written to an in-process
+    ``loopback_channel`` that one or more ``SyntheticReceiver`` s
+    read, so the *entire* comms protocol runs and is tested with
+    zero hardware -- ARCHITECTURE.md §4 simulator-first).
+
+    Consumed by the ``rfmesh-dsss`` workstream's framing/modulation
+    output and, via the node runtime, wired to whatever
+    ``SDRConfig.driver`` names. The DSP/DSSS code depends on this
+    Protocol and nothing else from the SDR side -- it cannot tell,
+    and must not care, whether it is writing to a real BladeRF or
+    a synthetic loopback.
+
+    Lifecycle: ``open()`` -> ``configure()`` -> ``write(iq)``
+    repeatedly -> ``close()``. Implementations should tolerate
+    ``close()`` being called more than once and from a teardown path.
+
+    Added in SCHEMA_VERSION 1.3.0 (ADR-025).
+    """
+
+    def open(self) -> None:
+        """Acquire the TX device (or initialise the simulator). Idempotent-friendly."""
+        ...
+
+    def configure(self, config: NodeConfig) -> None:
+        """Apply tuning from the node config (sample rate, freq, gain).
+
+        Takes the whole ``NodeConfig`` for symmetry with
+        ``Receiver.configure``; a single-channel ``Transmitter``
+        will use only ``config.sdr`` and (when present)
+        ``config.comms``.
+        """
+        ...
+
+    def write(self, iq: IQBlock) -> int:
+        """Send a block of 1-D complex64 IQ samples; return the number transmitted.
+
+        Blocking. Returns ``len(iq)`` on success. If the device
+        underflows / TX FIFO refuses the full block, the
+        implementation raises rather than silently transmitting a
+        truncated buffer (B3, mirror of ``Receiver.read``'s hard
+        guarantee). A producer that requires all samples on-air
+        MUST check the return value and treat any shortfall as a
+        loud failure -- a partial DSSS frame is worse than no frame
+        because the despreader will sync on garbage.
+        """
+        ...
+
+    def capabilities(self) -> TransmitterCapabilities:
+        """Describe what this live TX device can do (see ``TransmitterCapabilities``)."""
+        ...
+
+    def close(self) -> None:
+        """Release the TX device. Safe to call multiple times; safe in teardown."""
+        ...
+
+
+@runtime_checkable
+class CoherentTransmitter(Transmitter, Protocol):
+    """A sink for phase-coherent *multi-channel* IQ. Reserved for future TX beamforming.
+
+    Extends ``Transmitter``: a ``CoherentTransmitter`` is also a
+    valid single-channel ``Transmitter`` (channel 0), symmetric to
+    ``CoherentReceiver`` vs ``Receiver``. Adds the coherent write
+    that future transmit-beamforming / null-steering-on-TX features
+    will depend on.
+
+    v1.3.0 DSSS does NOT need this -- one transmit chain is enough
+    for BPSK. The Protocol is present in 1.3.0 so the contract
+    surface is symmetric (every RX Protocol has a TX twin); the
+    implementation is deferred. A ``CoherentTransmitter``
+    implementation does not yet ship with v1.3.0; declaring this
+    capability is a no-op until a future ADR adds the operational
+    semantics.
+
+    Added in SCHEMA_VERSION 1.3.0 (ADR-025).
+    """
+
+    def write_coherent(self, iq: CoherentIQBlock) -> int:
+        """Send ``(n_channels, n_samples)`` complex64 coherent IQ; return samples per channel.
+
+        Same blocking / no-silent-short-write contract as
+        ``Transmitter.write``. Channels are phase-coherent to the
+        extent the last RX-side ``calibrate()`` on the matching
+        ``CoherentReceiver`` (paired device) established -- transmit
+        beamforming reuses the receive calibration via reciprocity.
+        Calling this with an uncalibrated coherent stream is allowed
+        but the result is incoherent across channels and any
+        beamforming intent is lost.
+        """
+        ...
+
+
 @runtime_checkable
 class BearingEstimator(Protocol):
     """Turns IQ into a ``BearingReport``. The contract DSP exposes to the node.

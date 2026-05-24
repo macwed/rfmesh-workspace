@@ -1,6 +1,6 @@
 """Runtime half of the SCHEMA_VERSION tripwire (mypy half lives in ADR-012).
 
-ADR-012 introduced `type SchemaVersionT = Literal["1.1.0"]`. Two complementary
+ADR-012 introduced `type SchemaVersionT = Literal["<current>"]`. Two complementary
 checks fire:
 
 * **At type-check time (mypy):** a producer constructing `BearingReport(
@@ -48,14 +48,14 @@ def test_stale_schema_version_rejected_bearing(
 ) -> None:
     """A producer claiming an older SCHEMA_VERSION fails validation."""
     dumped = sample_bearing_report.model_dump()
-    dumped["schema_version"] = "1.0.0"
+    dumped["schema_version"] = "1.3.0"
     with pytest.raises(ValidationError, match="schema_version"):
         BearingReport.model_validate(dumped)
 
 
 def test_stale_schema_version_rejected_fix(sample_fix_event: FixEvent) -> None:
     dumped = sample_fix_event.model_dump()
-    dumped["schema_version"] = "1.0.0"
+    dumped["schema_version"] = "1.3.0"
     with pytest.raises(ValidationError, match="schema_version"):
         FixEvent.model_validate(dumped)
 
@@ -64,7 +64,7 @@ def test_stale_schema_version_rejected_node_status(
     sample_node_status: NodeStatus,
 ) -> None:
     dumped = sample_node_status.model_dump()
-    dumped["schema_version"] = "1.0.0"
+    dumped["schema_version"] = "1.3.0"
     with pytest.raises(ValidationError, match="schema_version"):
         NodeStatus.model_validate(dumped)
 

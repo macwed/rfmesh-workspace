@@ -33,10 +33,12 @@ WHAT IS EXPORTED
 * Messages (the wire format) -- ``BearingReport``, ``FixEvent``,
   ``NodeStatus``.
 * Config schemas -- ``SDRConfig``, ``ArrayConfig``, ``BearerConfig``,
-  ``NodeConfig``, ``FusionConfig``.
+  ``NodeConfig``, ``FusionConfig``, ``CommsConfig``.
 * Protocols (behavioural contracts) -- ``Receiver``, ``CoherentReceiver``,
-  ``ReceiverCapabilities``, ``BearingEstimator``, ``Fuser``, ``CotPublisher``,
-  ``Bearer``, and the IQ type aliases ``IQBlock`` / ``CoherentIQBlock``.
+  ``ReceiverCapabilities``, ``Transmitter``, ``CoherentTransmitter``,
+  ``TransmitterCapabilities``, ``BearingEstimator``, ``Fuser``,
+  ``CotPublisher``, ``Bearer``, and the IQ type aliases
+  ``IQBlock`` / ``CoherentIQBlock``.
 """
 
 from __future__ import annotations
@@ -44,6 +46,7 @@ from __future__ import annotations
 from .config import (
     ArrayConfig,
     BearerConfig,
+    CommsConfig,
     FusionConfig,
     NodeConfig,
     SDRConfig,
@@ -51,22 +54,26 @@ from .config import (
 from .enums import (
     ArrayGeometry,
     BearerKind,
+    BearingPriorKind,
     Capability,
     ConfidenceLevel,
     EmitterClass,
 )
 from .geospatial import EllipseENU, GeodeticPosition
-from .messages import BearingReport, FixEvent, NodeStatus
+from .messages import BearingReport, FixEvent, NodeStatus, PeerLink
 from .protocols import (
     Bearer,
     BearingEstimator,
     CoherentIQBlock,
     CoherentReceiver,
+    CoherentTransmitter,
     CotPublisher,
     Fuser,
     IQBlock,
     Receiver,
     ReceiverCapabilities,
+    Transmitter,
+    TransmitterCapabilities,
 )
 from .version import SCHEMA_VERSION
 
@@ -78,10 +85,13 @@ __all__ = [
     "BearerConfig",
     "BearerKind",
     "BearingEstimator",
+    "BearingPriorKind",
     "BearingReport",
     "Capability",
     "CoherentIQBlock",
     "CoherentReceiver",
+    "CoherentTransmitter",
+    "CommsConfig",
     "ConfidenceLevel",
     "CotPublisher",
     "EllipseENU",
@@ -93,7 +103,10 @@ __all__ = [
     "IQBlock",
     "NodeConfig",
     "NodeStatus",
+    "PeerLink",
     "Receiver",
     "ReceiverCapabilities",
     "SDRConfig",
+    "Transmitter",
+    "TransmitterCapabilities",
 ]

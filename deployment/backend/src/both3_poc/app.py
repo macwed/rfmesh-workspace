@@ -16,6 +16,7 @@ the PyTAKCotPublisher lifecycle constraints. See cot_send.py.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from contextlib import asynccontextmanager
 from functools import partial
@@ -27,8 +28,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
-from rfmesh_contracts import BearingReport
+from rfmesh_contracts import BearingReport, FixEvent, FusionConfig, NodeStatus
 from rfmesh_cot import CotError, OperatorMarker
+from rfmesh_node.dashboard_pubsub import DashboardPubSub, DashboardSubscriber
+from rfmesh_node.fusion_service import FusionService
 
 from .config import Settings
 from .cot_send import CotSender
@@ -47,6 +50,34 @@ from .seed import load_seed_bearings, load_seed_fixes_with_freq, parse_fix_and_f
 from .store import Store
 from .ws import init_registries, push_to_ui_subscribers
 from .ws import router as ws_router
+
+
+class _FixToStoreAndUiSubscriber:
+    """DashboardPubSub subscriber: upsert FixEvent into Store + push to UI WS.
+
+    The FusionService publishes BearingReport / FixEvent / NodeStatus via
+    DashboardPubSub; bearings + status are already fanned out via their
+    own ingest paths (POST /bearings, POST /status), so this subscriber
+    only acts on FixEvent. Mirrors the drop-slow-subscriber discipline of
+    push_to_ui_subscribers -- failure to push UI never blocks the fuse loop.
+    """
+
+    def __init__(self, app: FastAPI) -> None:
+        self._app = app
+
+    async def send(self, message: BearingReport | FixEvent | NodeStatus) -> None:
+        if not isinstance(message, FixEvent):
+            return
+        store: Store = self._app.state.store
+        store.upsert_fix(message)
+        await push_to_ui_subscribers(
+            self._app,
+            {
+                "kind": "fix",
+                "fix_id": str(message.fix_id),
+                "data": message.model_dump(mode="json"),
+            },
+        )
 
 
 @asynccontextmanager
@@ -95,9 +126,50 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
     # app.state; the `ws_router` mounted below exposes /ws/node/{id},
     # /ws/ui, /command/{id}, /command_broadcast.
     init_registries(app)
+
+    # ----- Auto-fuse-on-/bearings pipeline (Phase 3, 2-node MVP) -----
+    # FusionService batches BearingReports off its inbox every
+    # batch_window_ms, calls StansfieldMLEFuser, and publishes the
+    # resulting FixEvent via DashboardPubSub. The
+    # _FixToStoreAndUiSubscriber upserts the fix into the Store + fans
+    # it out to UI WS subscribers as kind="fix". The /bearings POST
+    # handler pushes each accepted report into the FusionService inbox
+    # via push_for_test (sync put_nowait -- never blocks the request).
+    app.state.fusion_service = None
+    app.state.fusion_task = None
+    if settings.fusion_enabled:
+        from rfmesh_fusion import StansfieldMLEFuser  # noqa: PLC0415
+
+        fusion_config = FusionConfig(
+            listen_url="udp://127.0.0.1:0",  # unused (we feed inbox directly)
+            batch_window_ms=settings.fusion_batch_window_ms,
+            min_bearings_for_fix=settings.fusion_min_bearings,
+            node_stale_after_s=settings.fusion_node_stale_after_s,
+            gdop_warn_threshold=settings.fusion_gdop_warn_threshold,
+        )
+        fuser = StansfieldMLEFuser(fusion_config)
+        dashboard_pubsub = DashboardPubSub()
+        ui_subscriber: DashboardSubscriber = _FixToStoreAndUiSubscriber(app)
+        dashboard_pubsub.add_subscriber(ui_subscriber)
+        fusion_service = FusionService(
+            fusion_config,
+            fuser=fuser,
+            cot_publisher=None,  # backend has its own CotSender for /fixes/{id}/send
+            dashboard_pubsub=dashboard_pubsub,
+        )
+        app.state.fusion_service = fusion_service
+        app.state.fusion_task = asyncio.create_task(
+            fusion_service.run(), name="backend-fusion-service"
+        )
+
     try:
         yield
     finally:
+        if app.state.fusion_service is not None:
+            await app.state.fusion_service.shutdown()
+            if app.state.fusion_task is not None:
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await app.state.fusion_task
         await sender.aclose()
 
 
@@ -223,12 +295,14 @@ async def ingest_bearings(payload: Any = Body(...)) -> dict[str, Any]:
     accepted = 0
     errors: list[str] = []
     pushed: list[dict[str, Any]] = []
+    fused_reports: list[BearingReport] = []
     for i, rec in enumerate(_as_list(payload)):
         try:
             report = BearingReport.model_validate(rec)
             store.upsert_bearing(report)
             accepted += 1
             pushed.append(report.model_dump(mode="json"))
+            fused_reports.append(report)
         except (ValidationError, ValueError, KeyError, TypeError) as exc:
             errors.append(f"[{i}] {exc}")
     # ADR-018: fan accepted bearings out to live UI subscribers. Wrapped
@@ -237,6 +311,17 @@ async def ingest_bearings(payload: Any = Body(...)) -> dict[str, Any]:
     # state is the source of truth, push is best-effort live overlay.
     for record in pushed:
         await push_to_ui_subscribers(app, {"kind": "bearing", "data": record})
+    # Phase 3 (2-node MVP): push each accepted BearingReport into the
+    # FusionService inbox; the fuse_loop batches by batch_window_ms,
+    # calls StansfieldMLEFuser, and publishes the FixEvent via
+    # DashboardPubSub -> _FixToStoreAndUiSubscriber -> store + UI push
+    # as kind="fix". Non-blocking (put_nowait via push_for_test); the
+    # FusionService is None when settings.fusion_enabled=false.
+    fusion_service: FusionService | None = getattr(app.state, "fusion_service", None)
+    if fusion_service is not None:
+        for report in fused_reports:
+            with contextlib.suppress(asyncio.QueueFull):
+                fusion_service.push_for_test(report)
     if accepted == 0 and errors:
         raise HTTPException(status_code=422, detail=errors)
     return {"accepted": accepted, "errors": errors}
@@ -254,6 +339,43 @@ async def get_fixes() -> JSONResponse:
         seed_as_fresh=settings.seed_as_fresh,
     )
     return JSONResponse(fc)
+
+
+@app.get("/node/{node_id}/peer_bearing")
+async def get_peer_bearing(node_id: str) -> dict[str, Any]:
+    """Most recent PEER_LINK posterior bearing for ``node_id`` (ADR-026 §I).
+
+    Combines the wire's likelihood sigma + the prior fields server-side
+    via ``combine_bearing_prior`` so ``link.html`` does not reimplement
+    the circular-mean wrap in JS (one helper, every consumer keys off it
+    -- RF-DSP NOTE 2 on ADR-026).
+
+    404 when the node has not yet emitted any peer-acquired bearing.
+    """
+    from rfmesh_fusion import combine_bearing_prior  # noqa: PLC0415
+
+    bearing = _store(app).latest_peer_bearing(node_id)
+    if bearing is None:
+        msg = f"node {node_id!r}: no PEER_LINK bearing on record yet."
+        raise HTTPException(status_code=404, detail=msg)
+    assert bearing.prior_mean_deg is not None
+    assert bearing.prior_sigma_deg is not None
+    post_mean, post_sigma = combine_bearing_prior(
+        likelihood_mean_deg=bearing.azimuth_deg,
+        likelihood_sigma_deg=bearing.azimuth_sigma_deg,
+        prior_mean_deg=bearing.prior_mean_deg,
+        prior_sigma_deg=bearing.prior_sigma_deg,
+    )
+    return {
+        "node_id": node_id,
+        "t_unix_ns": bearing.t_unix_ns,
+        "likelihood_mean_deg": bearing.azimuth_deg,
+        "likelihood_sigma_deg": bearing.azimuth_sigma_deg,
+        "prior_mean_deg": bearing.prior_mean_deg,
+        "prior_sigma_deg": bearing.prior_sigma_deg,
+        "posterior_mean_deg": post_mean,
+        "posterior_sigma_deg": post_sigma,
+    }
 
 
 @app.get("/bearings")

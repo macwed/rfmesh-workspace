@@ -47,13 +47,48 @@
 .nodes .callsign { font-weight: 600; }
 .nodes .badge { font-size: 11px; padding: 2px 6px; border-radius: 3px; }
 
-/* State-coloured badges. Defaults to muted; per-state class overrides. */
+/* State-coloured badges. Defaults to muted; per-state class overrides.
+   ADR-024 5-state enum: sweeping | acquired_peer | manual_hold | parked
+   | fault. Legacy classes (acquired/searching/stale) retained because
+   bearing-driven UI (`mergeBearing` in link.js) still sets them when the
+   node has not yet sent a node_hello with a controller state. */
 .badge { background: var(--panel-2); color: var(--muted); }
 .badge.acquired { background: var(--high); color: #062; }
 .badge.searching { background: var(--medium); color: #5a4500; }
 .badge.stale { background: var(--low); color: #fff; }
 .badge.parked { background: var(--accent); color: #053a6e; }
-.badge.fault { background: #444; color: #fff; }
+.badge.fault { background: #c0392b; color: #fff; font-weight: 700; }
+.badge.sweeping { background: var(--medium); color: #5a4500; }
+.badge.acquired_peer { background: var(--high); color: #062; }
+.badge.manual_hold { background: #f5a623; color: #5a3500; font-weight: 700; }
+
+/* Legend strip above the node list -- soldier-grade 5-state at a glance. */
+.state-legend {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin: 6px 0 10px 0;
+  font-size: 11px;
+}
+.state-legend .chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px;
+  border-radius: 3px;
+  background: var(--panel-2);
+}
+.state-legend .swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.state-legend .swatch.sweeping { background: var(--medium); }
+.state-legend .swatch.acquired_peer { background: var(--high); }
+.state-legend .swatch.manual_hold { background: #f5a623; }
+.state-legend .swatch.parked { background: var(--accent); }
+.state-legend .swatch.fault { background: #c0392b; }
 
 .cal-prov { color: var(--muted); font-size: 12px; }
 

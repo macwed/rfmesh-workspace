@@ -284,9 +284,19 @@ def fix_event_to_cot_xml(
         fix.position.lon_deg,
         len(fix.contributing_nodes),
     )
+    # ADR-013 §G3 + demo-integrity rec on 53140df: render
+    # gdop_uncomputable_reason instead of the sentinel float when the
+    # geometry is degenerate, so an ATAK operator does not read a
+    # fabricated number. Field is optional on FixEvent (None => normal
+    # GDOP rendering).
+    gdop_text = (
+        f"GDOP=uncomputable({fix.gdop_uncomputable_reason})"
+        if getattr(fix, "gdop_uncomputable_reason", None)
+        else f"GDOP={fix.gdop:.{_METRE_PRECISION}f}"
+    )
     remarks_text = (
         f"method={fix.method} "
-        f"GDOP={fix.gdop:.{_METRE_PRECISION}f} "
+        f"{gdop_text} "
         f"range_m={range_m_text} "
         f"classification={classification_str} "
         f"confidence={fix.confidence_level.value} "

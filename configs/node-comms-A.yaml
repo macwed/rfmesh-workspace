@@ -1,0 +1,73 @@
+# ADR-025 Iter 4.6 demo — node A in a two-node DSSS loopback link.
+#
+# Pair with configs/node-comms-B.yaml (complementary tx_first / rx_first
+# roles). Both nodes use driver=sim for the loopback test; on hardware
+# both flip to driver=bladerf (or hackrf / pluto) once Iter 6 lands.
+#
+# Soldier flow:
+#   1. systemd starts the node with this YAML (no CLI flags).
+#   2. Comms loop points the Yagi at the peer (GPS-prior).
+#   3. Backend at ws://10.0.0.1:8000 sees comms_status frames.
+#   4. Operator opens link.html, types text, presses Enter -> peer
+#      sees the message on its dashboard. End to end, no IT skills.
+
+node:
+  schema_version: "1.4.0"
+  node_id: "node-comms-A"
+  position:
+    lat_deg: 50.33000
+    lon_deg: 5.00000
+    hae_m: 200.0
+    sigma_m: 5.0
+  heading_deg: 90.0   # antenna pointing roughly toward node B (east)
+  sdr:
+    driver: "sim"
+    sample_rate_hz: 10000000
+    center_freq_hz: 868000000
+    gain_db: 0.0
+  capabilities:
+    - comms_dsss
+  bearer:
+    kind: "wifi"
+    heartbeat_interval_s: 2.0
+  fusion_endpoint: "http://10.0.0.1:8000/bearings"
+
+servo_port: "/dev/ttyACM0"
+
+# rendezvous block intentionally absent (mutex with comms per
+# NodeRuntimeConfig._coherence, ADR-025 Decision B).
+
+comms:
+  carrier_freq_hz: 868000000
+  chip_rate_hz: 10000000
+  spreading_factor: 1023
+  lfsr_taps: [10, 3]
+  lfsr_seed: 1
+  tdd_slot_ms: 200.0
+  tdd_guard_ms: 30.0
+  frame_payload_max_bytes: 64
+  peer_node_id: "node-comms-B"
+  peer:
+    lat_deg: 50.33050
+    lon_deg: 5.00500
+    hae_m: 200.0
+    sigma_m: 5.0
+  link_role: "tx_first"
+  refine_half_arc_deg: 20.0
+  settle_s: 0.20
+  min_servo_deg: -90.0
+  max_servo_deg: 90.0
+  link_hold_s: 30.0
+  initial_outbox_message_text: "node-A hello"
+
+command_endpoint:
+  enabled: true
+  backend_ws_url: "ws://10.0.0.1:8000"
+
+motion:
+  max_vel_dps: 25.0
+  accel_time_s: 0.40
+  motion_step_deg: 1.0
+  fast_threshold_deg: 10.0
+  fast_settle_s: 0.10
+  invert_direction: false

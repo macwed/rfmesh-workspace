@@ -18,6 +18,7 @@ import math
 
 from matplotlib.axes import Axes
 from rfmesh_contracts import BearingReport, FixEvent
+from rfmesh_contracts.enums import Capability
 
 from rfmesh_ops.panels.base import DashboardMessage, Panel
 
@@ -122,7 +123,18 @@ class BearingsPanel(Panel):
         report: BearingReport,
         node_id: str,
     ) -> None:
-        """Draw one node's bearing ray + sigma wedge."""
+        """Draw one node's bearing ray + sigma wedge.
+
+        L1 refusal events (method = L1_REFUSED_PROMINENCE, ADR-013
+        G4) draw a red X over the node marker plus an inline reason
+        label instead of a bearing ray + wedge -- the sentinel
+        azimuth / sigma values on a refusal report are not real
+        directions and rendering them as a wedge would mislead the
+        operator.
+        """
+        if report.method is Capability.L1_REFUSED_PROMINENCE:
+            self._draw_refusal(east_m, north_m, report, node_id)
+            return
         # Azimuth: true north = 0, clockwise positive. Translate to
         # ENU plotting frame: east = sin(az), north = cos(az).
         az_rad = math.radians(report.azimuth_deg)
@@ -158,3 +170,41 @@ class BearingsPanel(Panel):
                 alpha=0.4,
                 linestyle="--",
             )
+
+    def _draw_refusal(
+        self,
+        east_m: float,
+        north_m: float,
+        report: BearingReport,
+        node_id: str,
+    ) -> None:
+        """Render an L1 refusal event (no ray, red X + reason label)."""
+        self.ax.plot(
+            [east_m],
+            [north_m],
+            marker="x",
+            color="red",
+            markersize=8,
+            markeredgewidth=2,
+        )
+        # demo-integrity rec on 53140df: 7pt is unreadable in field sun;
+        # use a "REFUSED" badge (bold, 10pt) + the reason at a legible
+        # 9pt below it so the jury reads the failure at 2 seconds.
+        reason = report.refusal_reason or "L1 refused"
+        self.ax.annotate(
+            f"REFUSED  {node_id}",
+            (east_m, north_m),
+            xytext=(6, 8),
+            textcoords="offset points",
+            fontsize=10,
+            color="red",
+            fontweight="bold",
+        )
+        self.ax.annotate(
+            reason,
+            (east_m, north_m),
+            xytext=(6, -8),
+            textcoords="offset points",
+            fontsize=9,
+            color="red",
+        )

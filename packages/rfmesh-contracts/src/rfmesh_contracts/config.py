@@ -478,3 +478,146 @@ class FusionConfig(BaseModel):
             "dashboard is watched."
         ),
     )
+
+
+class CommsConfig(BaseModel):
+    """DSSS directional-comms physical-layer configuration (ADR-025).
+
+    Carries only **cross-workstream** parameters: every value below is
+    referenced by at least two of {``rfmesh-dsss`` DSP, ``rfmesh-sdr``
+    drivers, ``rfmesh-node`` comms loop}. Node-layer concerns (peer
+    roster, routing table, per-link policy, TDD slot assignment) live
+    in ``rfmesh-node/comms/comms_config.py`` as a ``RendezvousConfig``-
+    style helper -- they do not touch frozen contracts (mirror of how
+    Rendezvous is structured).
+
+    Required when ``NodeConfig.capabilities`` contains
+    ``Capability.COMMS_DSSS``. Cross-validation against ``SDRConfig``
+    (``chip_rate_hz`` <= ``sdr.sample_rate_hz``) is performed at node
+    startup, not here, because the realised SDR sample rate may
+    differ from the requested one (see
+    ``ReceiverCapabilities.actual_sample_rate_hz`` /
+    ``TransmitterCapabilities.actual_sample_rate_hz``).
+
+    Added in SCHEMA_VERSION 1.3.0.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    carrier_freq_hz: float = Field(
+        gt=0.0,
+        description=(
+            "RF carrier frequency for the DSSS link, Hz. Independent of "
+            "any DF carrier configured on the same node -- DF and COMMS "
+            "modes are mutually exclusive in v1.3.0 so the same SDR LO "
+            "serves whichever mode is active. The ATK-10 Yagi covers "
+            "868-915 MHz; a typical European deployment value is "
+            "868e6 or 915e6."
+        ),
+    )
+    chip_rate_hz: float = Field(
+        gt=0.0,
+        description=(
+            "DSSS chip rate, Hz. Target ~10e6 (10 Mchip/s) over a "
+            "BPSK spread of length 1023 yields a payload symbol rate "
+            "of ~9.77 ksym/s and a processing gain of 10*log10(1023) "
+            "~= 30 dB. Must not exceed the SDR's actual sample rate; "
+            "cross-checked at node startup against "
+            "ReceiverCapabilities/TransmitterCapabilities."
+        ),
+    )
+    spreading_factor: int = Field(
+        default=1023,
+        ge=3,
+        description=(
+            "Number of chips per data symbol. Must equal 2**n - 1 for "
+            "the LFSR-tap polynomial that produces a maximal-length "
+            "m-sequence; validated against lfsr_taps. Default 1023 = "
+            "2**10 - 1, the canonical length-10 m-sequence used by "
+            "the BoTH3 build."
+        ),
+    )
+    lfsr_taps: tuple[int, ...] = Field(
+        description=(
+            "Tap positions for the LFSR generating the m-sequence "
+            "(1-indexed feedback taps, smallest tap first). For "
+            "length-10 (spreading_factor=1023) the canonical "
+            "primitive polynomial is x^10 + x^3 + 1, encoded as "
+            "(10, 3). The set of valid tap tuples for each register "
+            "length is documented in rfmesh_dsss.pn_sequence; the "
+            "validator below checks only that the maximum tap "
+            "matches log2(spreading_factor + 1)."
+        ),
+    )
+    lfsr_seed: int = Field(
+        gt=0,
+        description=(
+            "Non-zero initial LFSR state (a zero seed is a fixed-point "
+            "of the LFSR -- it produces an all-zero sequence, which is "
+            "not an m-sequence). Different nodes in the same mesh use "
+            "the SAME PN sequence (single shared spreading code in "
+            "v1.3.0; per-link codes are deferred); the operator-set "
+            "value is the mesh-wide secret."
+        ),
+    )
+    tdd_slot_ms: float = Field(
+        gt=0.0,
+        description=(
+            "Width of one TDD half-duplex slot, milliseconds. The TDD "
+            "scheduler assigns TX-on/RX-on slots per link; loose NTP "
+            "synchronisation (~10 ms) is hidden inside the guard "
+            "interval below. Typical value: 100-500 ms for the v1.3.0 "
+            "skirmishing throughput (~10 kbit/s)."
+        ),
+    )
+    tdd_guard_ms: float = Field(
+        ge=0.0,
+        description=(
+            "Guard interval between adjacent TDD slots, milliseconds. "
+            "Must comfortably exceed the worst-case inter-node clock "
+            "skew (NTP on the rfmesh mesh: ~10 ms) plus RF "
+            "settling-time on retune. A generous default (20-50 ms) "
+            "trades throughput for robustness; the v1.3.0 link runs "
+            "happily on loose timing because the bitrate is modest."
+        ),
+    )
+    frame_payload_max_bytes: int = Field(
+        gt=0,
+        description=(
+            "Maximum payload bytes per DSSS frame. Set so that one "
+            "frame fits inside one TDD slot at the configured "
+            "chip_rate / spreading_factor / coding overhead. The "
+            "framing module enforces this on encode; oversize "
+            "payloads must be fragmented at the application layer."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _spreading_consistency(self) -> CommsConfig:
+        """Validate spreading_factor + lfsr_taps shape together.
+
+        Required because the relationship (2**n - 1, max tap position
+        == n) is not expressible in single-field Field() constraints.
+        """
+        sf = self.spreading_factor
+        if sf <= 0 or (sf & (sf + 1)) != 0:
+            msg = (
+                f"spreading_factor must equal 2**n - 1 for some n >= 2 "
+                f"(LFSR m-sequence length); got {sf}."
+            )
+            raise ValueError(msg)
+        n_register = (sf + 1).bit_length() - 1
+        if not self.lfsr_taps:
+            msg = "lfsr_taps must be non-empty."
+            raise ValueError(msg)
+        if max(self.lfsr_taps) != n_register:
+            msg = (
+                f"max(lfsr_taps) must equal log2(spreading_factor + 1) "
+                f"= {n_register} for an m-sequence of length {sf}; "
+                f"got max tap {max(self.lfsr_taps)}."
+            )
+            raise ValueError(msg)
+        if min(self.lfsr_taps) < 1:
+            msg = "lfsr_taps are 1-indexed; smallest tap must be >= 1."
+            raise ValueError(msg)
+        return self
