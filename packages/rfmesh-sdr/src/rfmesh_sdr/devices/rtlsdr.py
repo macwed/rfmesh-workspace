@@ -277,24 +277,45 @@ class RTLSDRDevice:
         Probes indices 0..``_MAX_DEVICE_PROBE - 1`` until an attached
         dongle reports the matching ``Serial number:`` field. Raises
         ``HardwareError`` with the enumeration list if no match.
+
+        NOTE: ``rtl_eeprom`` on some distros (Fedora 44, librtlsdr
+        package builds against rtl-sdr-blog fork) **returns exit code 1
+        even on successful read** -- the operative signal is whether
+        the output parses, NOT the exit code. We stop probing when the
+        output stops mentioning a dongle at all (kernel ran out of
+        indices), not on the first nonzero exit.
         """
         found_serials: list[str] = []
+        empty_streak = 0
         for idx in range(_MAX_DEVICE_PROBE):
             result = subprocess.run(  # noqa: S603 -- argv list, no shell
                 ["rtl_eeprom", "-d", str(idx)],  # noqa: S607 -- intentional PATH lookup
                 capture_output=True,
                 check=False,
             )
-            if result.returncode != 0:
-                break
             stdout = result.stdout.decode(errors="replace")
             stderr = result.stderr.decode(errors="replace")
+            combined = stdout + stderr
             serial = _parse_serial(stdout) or _parse_serial(stderr)
-            if serial is None:
+            if serial is not None:
+                empty_streak = 0
+                found_serials.append(serial)
+                if serial == target_serial:
+                    return idx
                 continue
-            found_serials.append(serial)
-            if serial == target_serial:
-                return idx
+            # No serial parsed. If the output also doesn't reference an
+            # active device, count it as an empty probe; stop after two
+            # consecutive empties (kernel ran out of indices). This
+            # tolerates rtl_eeprom's odd nonzero-exit-on-success habit
+            # AND its occasional empty stderr on a missing index.
+            if (
+                "Found" not in combined
+                and "device" not in combined.lower()
+                and "Serial" not in combined
+            ):
+                empty_streak += 1
+                if empty_streak >= 2:
+                    break
         msg = f"no RTL-SDR with serial {target_serial!r} found, available: {found_serials}"
         raise HardwareError(msg)
 
