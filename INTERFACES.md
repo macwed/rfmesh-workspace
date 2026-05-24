@@ -146,6 +146,33 @@ fusion (skips `L1_REFUSED_PROMINENCE`, weights everything else),
 `BearingReport.method` field (reports which capability produced bearing
 or refusal).
 
+### `BearingPriorKind`
+
+Epistemic axis on `BearingReport.prior_kind` (ADR-026,
+SCHEMA_VERSION 1.4.0). Orthogonal to `Capability` (the
+estimator-type axis): the same L1 amplitude-sweep estimator
+produces both PEER_LINK and FLAT reports — only the prior on the
+reported azimuth differs.
+
+- `FLAT` (`"flat"`) — no prior. Unknown-emitter bearing. Fusion
+  uses these for `FixEvent` computation as usual.
+- `PEER_LINK` (`"peer_link"`) — Bayesian prior from a known peer
+  link (surveyed position + prior comms). Producer MUST also
+  populate `BearingReport.prior_mean_deg` and
+  `BearingReport.prior_sigma_deg` (the validator enforces).
+  Fusion **filters these out of emitter FixEvent computation**
+  (peer bearings belong to the link-state consumer, not the
+  emitter pipeline). The filter is **per-peak** (not per-sweep):
+  a secondary FLAT peak from a peer-refine sweep still contributes
+  to emitter geolocation.
+
+**Producer:** the L1 amplitude-sweep estimator, with the tag
+applied by the wrapping rendezvous loop
+(`RendezvousLoop._tag_peer_prior`) before emit.
+**Consumer:** fusion (filters by `prior_kind`), `link.html`
+(combines likelihood + prior into a posterior via
+`rfmesh_fusion.combine_bearing_prior` for the soldier UI).
+
 ### `EmitterClass`
 
 Output label of L3 classifier. *Open, extensible threat library* —
@@ -365,6 +392,39 @@ emitter, at one instant.
   render alongside refusal symbol; fusion ignores
   (already skipped by `method` filter). Added in
   SCHEMA_VERSION 1.2.0 (ADR-013 G4).
+- `prior_kind` (optional, `BearingPriorKind | None`) — epistemic
+  axis (ADR-026, SCHEMA_VERSION 1.4.0). `FLAT` for unknown-emitter
+  bearings (no prior). `PEER_LINK` for bearings produced by the
+  rendezvous loop's peer-acquisition path (GPS prior on bearing
+  from surveyed peer position). `None` on legacy producers
+  (pre-1.4.0); consumers treat `None` as `FLAT`. **Fusion uses
+  this — NOT `method` — for the emitter-FixEvent filter**:
+  `PEER_LINK` bearings are dropped from emitter fixes (they
+  belong to the link-state consumer, not the emitter pipeline);
+  `FLAT` bearings contribute normally. Filter is **per-peak**, not
+  per-sweep: a secondary peak from a peer-refine sweep tagged
+  `FLAT` still contributes to emitter geolocation (Advantage #1
+  density preserved). The estimator-type axis (`method`) stays
+  orthogonal; future L2 peer-acquisition does NOT need new
+  `Capability` members.
+- `prior_mean_deg` (optional) — prior mean azimuth in geographic
+  degrees CW from north, populated when `prior_kind = PEER_LINK`
+  (the great-circle bearing to the surveyed peer position).
+  MUST be `None` otherwise. Added in SCHEMA_VERSION 1.4.0
+  (ADR-026).
+- `prior_sigma_deg` (optional) — prior 1-σ uncertainty in degrees
+  when `prior_kind = PEER_LINK`. **CRITICAL B2 invariant:** the
+  wire's `azimuth_sigma_deg` stays as the **likelihood** σ
+  (raw parabola peak-fit residual, no prior folded in); the
+  prior travels here separately. Downstream consumers combine
+  likelihood + prior via
+  `rfmesh_fusion.combine_bearing_prior` to derive the posterior.
+  This split keeps the MC sigma-honesty test
+  (`test_sigma_honesty.py`, ±20% band) coherent — it tests the
+  likelihood σ exclusively. MUST be `None` when
+  `prior_kind != PEER_LINK`. Added in SCHEMA_VERSION 1.4.0
+  (ADR-026). The validator `_prior_fields_coherent` refuses
+  PEER_LINK-without-prior + FLAT/None-with-prior (B3).
 
 **Acceptance rules for `BearingReport` to be useful to fusion:**
 
@@ -495,6 +555,33 @@ silent node excluded from new fixes), ops dashboard.
 - `status_detail` — short human-readable elaboration, especially when
   `healthy` is False, e.g. `"SDR overflow"`, `"LoRa bearer down, Wi-Fi only"`.
   Empty string when nothing to add. Free-form but conventionally < 80 chars.
+- `peer_links` (optional, `tuple[PeerLink, ...] | None`) — live
+  peer-link state, one entry per known peer (ADR-026,
+  SCHEMA_VERSION 1.4.0). **`None` vs empty tuple is meaningful:**
+    - `None`: legacy node, predates 1.4.0. Consumer renders no
+      peer-link surface.
+    - `()` (empty tuple): 1.4.0+ node has rendezvous configured but
+      no peers yet, OR rendezvous is disabled. Consumer renders
+      "no peers configured" honestly.
+  `link.html`'s peer-link panel renders one row per `PeerLink`
+  with `"linked Ns ago · +M dB margin"` and a `⚠` glyph when
+  `link_margin_db < 10.0` (ADR-026 §I).
+
+### `PeerLink` (value object in `rfmesh_contracts.messages`)
+
+One entry per known peer in `NodeStatus.peer_links` (ADR-026,
+SCHEMA_VERSION 1.4.0).
+
+- `peer_node_id` — peer's stable `node_id`; matches peer's
+  `NodeConfig.node_id`. Required, non-empty.
+- `last_lock_t_unix_ns` (optional) — timestamp of the most recent
+  successful directional lock with this peer. `None` when the link
+  has never come up since boot.
+- `link_margin_db` (optional) — link margin in dB above local
+  noise floor. **NEVER absolute dBm** (no SDR in scope is
+  power-calibrated, B.2). `None` when the link is not currently
+  locked OR when comms-mode hardware (ADR-025) is not yet wired
+  to measure live margin.
 
 ---
 
