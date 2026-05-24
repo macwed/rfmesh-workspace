@@ -5,7 +5,7 @@ Edits only by lead architect, lockstep with contracts package.
 **Audience:** every workstream agent and reviewer. Dictionary you
 consult when need to know *what field means*, not just type.
 **Date:** 2026-05-14.
-**Mirrors contracts at:** `SCHEMA_VERSION = "1.2.0"`.
+**Mirrors contracts at:** `SCHEMA_VERSION = "1.3.0"`.
 
 Doc does not duplicate Pydantic schemas — those authoritative, read directly for field names, types, validators. Doc carries what schemas cannot: **meaning of each field, who produces, who consumes, units, validity in wider system, boundaries.** Schema vs doc disagree: schema wins, doc is bug. Two readers disagree on field meaning: doc is tiebreaker.
 
@@ -126,6 +126,17 @@ never silent downgrade.
   equivalent — contract requires both fields present, but consumers
   MUST branch on `method` first). Fuser skips these reports; ops
   dashboard renders refusal symbol + reason instead of sigma wedge.
+- `COMMS_DSSS` (`"comms_dsss"`) — DSSS directional-comms participation.
+  Added in SCHEMA_VERSION 1.3.0 (ADR-025). Requires both RX and TX paths
+  on the configured SDR (HackRF One, ADALM-Pluto+, BladeRF 2.0 micro);
+  RTL-SDR V4 is RX-only and a node declaring `COMMS_DSSS` on RTL-SDR
+  is a fatal startup error (B3). **Mutually exclusive with DF
+  capabilities** (`L1_RSSI`, `L2_MUSIC`, `L2_CAPON`, `L2_MVDR_NULL`)
+  in v1.3.0 — a node runs DF mode OR comms mode, not both
+  concurrently on one SDR/Yagi (selected by CLI flag / config).
+  `L3_CLASSIFY` may coexist with `COMMS_DSSS` (SDR-agnostic
+  classification on tapped IQ). Concurrent DF + COMMS deferred to
+  a future ADR.
 
 **Producer:** operator (via `NodeConfig`) for declared capabilities;
 the L1 estimator path produces `L1_REFUSED_PROMINENCE` on
@@ -616,6 +627,52 @@ solver accepts whatever bearings arrive and cross-fixes any N ≥ 2.
   `"tcp://10.0.0.2:8087"` for FreeTAKServer). `None` disables CoT output,
   useful for headless bench runs that only watch ops dashboard.
 
+### `CommsConfig`
+
+DSSS directional-comms physical-layer configuration. Required when
+`NodeConfig.capabilities` contains `Capability.COMMS_DSSS`. Added in
+SCHEMA_VERSION 1.3.0 (ADR-025). Carries **cross-workstream** parameters
+only — node-layer concerns (peer roster, routing table, TDD slot
+assignment) live in `rfmesh-node/comms/comms_config.py` as
+RendezvousConfig-style helpers, not in frozen contracts.
+
+- `carrier_freq_hz` — RF carrier frequency, Hz, strictly > 0. The
+  ATK-10 Yagi covers 868–915 MHz; typical European deployment
+  value is 868e6 or 915e6. Independent of any DF carrier (DF and
+  COMMS modes are mutually exclusive in v1.3.0).
+- `chip_rate_hz` — DSSS chip rate, Hz. Target ~10e6 for the
+  BoTH3 build. Cross-checked against `actual_sample_rate_hz` from
+  Receiver/Transmitter capabilities at node startup (not here —
+  realised rate may differ from requested).
+- `spreading_factor` — chips per data symbol; default 1023.
+  Must equal `2**n - 1` for the LFSR polynomial (validator
+  enforces). 1023 = `2**10 - 1` gives processing gain
+  `10*log10(1023) ≈ 30 dB`.
+- `lfsr_taps` — feedback-tap tuple (1-indexed, smallest first)
+  for the m-sequence LFSR. Validator: `max(taps) == log2(spreading_factor + 1)`,
+  `min(taps) >= 1`, `len(taps) >= 1`. Canonical length-10
+  polynomial: `(10, 3)` (i.e. `x^10 + x^3 + 1`).
+- `lfsr_seed` — non-zero initial LFSR state. Zero is a fixed-point
+  (would produce all-zero output, not an m-sequence). All mesh
+  nodes in v1.3.0 share the **same** PN sequence (single shared
+  spreading code; per-link codes deferred); operator-set value is
+  the mesh-wide secret.
+- `tdd_slot_ms` — TDD half-duplex slot width, ms, strictly > 0.
+  Typical 100–500 ms for v1.3.0's ~10 kbit/s throughput.
+- `tdd_guard_ms` — guard interval between slots, ms, >= 0. Must
+  comfortably exceed worst-case NTP skew (~10 ms) plus RF settling
+  on retune. Generous default (20–50 ms) trades throughput for
+  robustness.
+- `frame_payload_max_bytes` — max DSSS-frame payload bytes,
+  strictly > 0. Set so one frame fits inside one TDD slot at the
+  configured chip rate / spreading / coding. Framing module
+  enforces; oversize payloads must fragment at application layer.
+
+**Producer:** operator (via YAML), when node declares `COMMS_DSSS`.
+**Consumer:** `rfmesh-dsss` DSP (carrier, chips, PN), `rfmesh-sdr`
+TX/RX drivers (sample-rate validation), `rfmesh-node` comms loop
+(TDD scheduling, framing).
+
 ---
 
 ## §5 Behavioural contracts (`rfmesh_contracts.protocols`)
@@ -661,6 +718,40 @@ sample-aligned, phase-coherent block, *to extent last successful
 that has happened. **L2 DSP code refuses to emit bearings from
 uncalibrated coherent stream.** Calibration not implicit and never
 silently bypassed.
+
+### `Transmitter`
+
+Sink for single-channel baseband IQ. DSSS comms TX contract.
+Symmetric to `Receiver`. Added in SCHEMA_VERSION 1.3.0 (ADR-025).
+
+- **Implementers (`rfmesh-sdr`, Iter 3+):** `BladeRFTransmitter` /
+  `HackRFTransmitter` / `PlutoTransmitter` (whichever hardware
+  on-site), and `SyntheticTransmitter` (simulator — same Protocol,
+  IQ written to in-process `loopback_channel` that one or more
+  `SyntheticReceiver`s read; full comms protocol testable with
+  zero hardware).
+- **Consumers (`rfmesh-dsss` framing/modulation output, via
+  `rfmesh-node`):** write IQ blocks, ship DSSS frames.
+
+Hard guarantee `Transmitter` makes — consumer may rely on:
+`write(iq)` returns exactly `len(iq)` samples transmitted or raises.
+No silent short-write fallback (B3, mirror of `Receiver.read`).
+Partial DSSS frame is worse than no frame because despreader syncs
+on garbage. `TransmitterCapabilities` exposes `driver`,
+`n_tx_channels`, `actual_sample_rate_hz`, `max_tx_power_normalized`
+(no dBm — same B.2 honesty rule as RX).
+
+### `CoherentTransmitter` (extends `Transmitter`)
+
+Sink for phase-coherent multi-channel IQ. Reserved for future
+transmit-beamforming / TX-null-steering. Added in SCHEMA_VERSION
+1.3.0 (ADR-025) for symmetry; **no implementation in v1.3.0**.
+DSSS BPSK needs one TX chain. A `CoherentTransmitter` declaration
+is a no-op until a future ADR adds operational semantics.
+
+Hard guarantee: `write_coherent(n_channels, n)` returns samples per
+channel transmitted or raises. Phase coherence across channels
+relies on RX-side `calibrate()` via reciprocity (paired device).
 
 ### `BearingEstimator`
 

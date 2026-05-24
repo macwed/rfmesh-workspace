@@ -33,10 +33,12 @@ WHAT IS EXPORTED
 * Messages (the wire format) -- ``BearingReport``, ``FixEvent``,
   ``NodeStatus``.
 * Config schemas -- ``SDRConfig``, ``ArrayConfig``, ``BearerConfig``,
-  ``NodeConfig``, ``FusionConfig``.
+  ``NodeConfig``, ``FusionConfig``, ``CommsConfig``.
 * Protocols (behavioural contracts) -- ``Receiver``, ``CoherentReceiver``,
-  ``ReceiverCapabilities``, ``BearingEstimator``, ``Fuser``, ``CotPublisher``,
-  ``Bearer``, and the IQ type aliases ``IQBlock`` / ``CoherentIQBlock``.
+  ``ReceiverCapabilities``, ``Transmitter``, ``CoherentTransmitter``,
+  ``TransmitterCapabilities``, ``BearingEstimator``, ``Fuser``,
+  ``CotPublisher``, ``Bearer``, and the IQ type aliases
+  ``IQBlock`` / ``CoherentIQBlock``.
 """
 
 from __future__ import annotations
@@ -44,6 +46,7 @@ from __future__ import annotations
 from .config import (
     ArrayConfig,
     BearerConfig,
+    CommsConfig,
     FusionConfig,
     NodeConfig,
     SDRConfig,
@@ -62,11 +65,14 @@ from .protocols import (
     BearingEstimator,
     CoherentIQBlock,
     CoherentReceiver,
+    CoherentTransmitter,
     CotPublisher,
     Fuser,
     IQBlock,
     Receiver,
     ReceiverCapabilities,
+    Transmitter,
+    TransmitterCapabilities,
 )
 from .version import SCHEMA_VERSION
 
@@ -82,6 +88,8 @@ __all__ = [
     "Capability",
     "CoherentIQBlock",
     "CoherentReceiver",
+    "CoherentTransmitter",
+    "CommsConfig",
     "ConfidenceLevel",
     "CotPublisher",
     "EllipseENU",
@@ -96,4 +104,6 @@ __all__ = [
     "Receiver",
     "ReceiverCapabilities",
     "SDRConfig",
+    "Transmitter",
+    "TransmitterCapabilities",
 ]

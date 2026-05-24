@@ -35,7 +35,7 @@ from __future__ import annotations
 from typing import Final, Literal
 
 #: The frozen contract version. Bumped only by the lead, only via an accepted ADR.
-SCHEMA_VERSION: Final = "1.2.0"
+SCHEMA_VERSION: Final = "1.3.0"
 
 #: Type alias for ``Literal[SCHEMA_VERSION]``. Used in every message/config
 #: model's ``schema_version`` field so mypy can enforce the tripwire.
@@ -48,4 +48,4 @@ SCHEMA_VERSION: Final = "1.2.0"
 #: alias everywhere else. Bumping the version requires updating *both*
 #: ``SCHEMA_VERSION`` and ``SchemaVersionT`` in lockstep — caught by
 #: workspace mypy if the two ever desynchronise.
-type SchemaVersionT = Literal["1.2.0"]
+type SchemaVersionT = Literal["1.3.0"]

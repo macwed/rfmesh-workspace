@@ -5,7 +5,7 @@
 Code workers, and Maciej as project owner.
 **Date:** 2026-05-14 (last amended 2026-05-23 for ADR-021 directional-comms
 reframing; the geolocation framing remains as a side-effect feature).
-**Mirrors contracts at:** `SCHEMA_VERSION = "1.2.0"`.
+**Mirrors contracts at:** `SCHEMA_VERSION = "1.3.0"`.
 
 This document is the *why*. It explains the small number of decisions that
 every layer depends on, and the reasoning behind each. The *what* of any

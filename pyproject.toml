@@ -24,6 +24,7 @@ dependencies = [
     "rfmesh-sdr",
     "rfmesh-servo",
     "rfmesh-dsp",
+    "rfmesh-dsss",
     "rfmesh-ml",
     "rfmesh-fusion",
     "rfmesh-cot",
@@ -40,6 +41,7 @@ rfmesh-contracts   = { workspace = true }
 rfmesh-sdr         = { workspace = true }
 rfmesh-servo       = { workspace = true }
 rfmesh-dsp         = { workspace = true }
+rfmesh-dsss        = { workspace = true }
 rfmesh-ml          = { workspace = true }
 rfmesh-fusion      = { workspace = true }
 rfmesh-cot         = { workspace = true }
@@ -176,6 +178,7 @@ root_packages = [
     "rfmesh_sdr",
     "rfmesh_servo",
     "rfmesh_dsp",
+    "rfmesh_dsss",
     "rfmesh_ml",
     "rfmesh_fusion",
     "rfmesh_cot",
@@ -190,14 +193,18 @@ modules = [
     "rfmesh_sdr",
     "rfmesh_servo",
     "rfmesh_dsp",
+    "rfmesh_dsss",
     "rfmesh_ml",
     "rfmesh_fusion",
     "rfmesh_cot",
     "rfmesh_ops",
     # NOTE: rfmesh_node is the composition root and is intentionally
     # NOT in this list -- it imports from every sibling above by design
-    # (Receiver / BearingEstimator / Bearer / Fuser / CotPublisher).
-    # See ADR-011 D1 and docs/design/ops-architecture.md §1.3.
+    # (Receiver / BearingEstimator / Transmitter / Bearer / Fuser /
+    # CotPublisher; the DSSS comms loop in rfmesh_node imports
+    # rfmesh_dsss directly per the same composition-root pattern).
+    # See ADR-011 D1 and docs/design/ops-architecture.md §1.3; ADR-025
+    # extends the composition-root carve-out to rfmesh_dsss.
 ]
 # WS-B-005 exception (ticket criterion 9): the L3 modulation classifier
 # in rfmesh_ml consumes the salvaged STFT primitive from rfmesh_dsp as
@@ -267,4 +274,14 @@ forbidden_modules = ["requests", "httpx", "aiohttp", "socket", "subprocess"]
 name = "ML is pure"
 type = "forbidden"
 source_modules = ["rfmesh_ml"]
+forbidden_modules = ["requests", "httpx", "aiohttp", "socket", "subprocess"]
+
+# ADR-025 — DSSS is pure (mirror of DSP / Fusion / ML). The directional
+# comms DSP runs end-to-end against rfmesh-sdr's SyntheticTransmitter +
+# loopback_channel; reaching for the network / a subprocess from this
+# package breaks the simulator-first model (ARCHITECTURE.md §4).
+[[tool.importlinter.contracts]]
+name = "DSSS is pure"
+type = "forbidden"
+source_modules = ["rfmesh_dsss"]
 forbidden_modules = ["requests", "httpx", "aiohttp", "socket", "subprocess"]

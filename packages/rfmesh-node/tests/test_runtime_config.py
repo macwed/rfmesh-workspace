@@ -18,7 +18,7 @@ from rfmesh_node.runtime_config import (
 def _minimal_node_payload(node_id: str = "node-test") -> dict:
     """Return a NodeConfig YAML payload that satisfies the contract validators."""
     return {
-        "schema_version": "1.2.0",
+        "schema_version": "1.3.0",
         "node_id": node_id,
         "position": {"lat_deg": 50.33, "lon_deg": 5.0, "hae_m": 200.0, "sigma_m": 5.0},
         "heading_deg": 142.0,

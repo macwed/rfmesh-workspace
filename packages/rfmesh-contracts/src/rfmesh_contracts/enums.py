@@ -76,6 +76,16 @@ class Capability(StrEnum):
       because the contract requires both to be present. Consumers MUST
       branch on ``method`` first and not interpret those sentinels as a
       real bearing.
+    * ``COMMS_DSSS`` -- the node participates in the DSSS directional mesh
+      (ADR-025). Requires *both* an RX path and a TX path on the
+      configured SDR (HackRF One, ADALM-Pluto+, BladeRF 2.0 micro);
+      RTL-SDR V4 is RX-only and a node declaring ``COMMS_DSSS`` on
+      RTL-SDR hardware is a fatal startup error (B3). Mutually
+      exclusive with the DF capabilities (``L1_RSSI``, ``L2_MUSIC``,
+      ``L2_CAPON``, ``L2_MVDR_NULL``) in v1.3.0 -- a node runs DF mode
+      OR comms mode, never both concurrently on one SDR/Yagi.
+      ``L3_CLASSIFY`` may coexist with ``COMMS_DSSS`` (SDR-agnostic
+      classification on tapped IQ). Added in SCHEMA_VERSION 1.3.0.
     """
 
     L1_RSSI = "l1_rssi"
@@ -84,6 +94,7 @@ class Capability(StrEnum):
     L2_MVDR_NULL = "l2_mvdr_null"
     L3_CLASSIFY = "l3_classify"
     L1_REFUSED_PROMINENCE = "l1_refused_prominence"
+    COMMS_DSSS = "comms_dsss"
 
 
 class EmitterClass(StrEnum):
