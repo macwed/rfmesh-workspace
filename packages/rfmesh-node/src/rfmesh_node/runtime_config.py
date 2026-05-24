@@ -57,6 +57,16 @@ class SweepOverrideConfig(BaseModel):
     dwell_samples: int = Field(default=1024, gt=0)
     inter_sweep_s: float = Field(default=1.0, ge=0.0)
     peak_prominence_db_min: float = Field(default=6.0, gt=0.0)
+    hold_on_peak: bool = Field(
+        default=False,
+        description=(
+            "MVP scan-and-hold mode. After the first sweep produces a "
+            "BearingReport the servo points at the peak heading and STAYS "
+            "there until shutdown; subsequent iterations re-emit the same "
+            "bearing every inter_sweep_s with a refreshed timestamp so the "
+            "fusion ellipse stays fresh on the operator UI."
+        ),
+    )
 
     @model_validator(mode="after")
     def _arc_order(self) -> SweepOverrideConfig:
@@ -78,6 +88,7 @@ class SweepOverrideConfig(BaseModel):
             dwell_samples=self.dwell_samples,
             inter_sweep_s=self.inter_sweep_s,
             peak_prominence_db_min=self.peak_prominence_db_min,
+            hold_on_peak=self.hold_on_peak,
         )
 
 

@@ -37,6 +37,7 @@ sweep:
   dwell_samples: 1024
   inter_sweep_s: 1.0
   peak_prominence_db_min: 6.0
+  hold_on_peak: true
 
 rendezvous: null
 

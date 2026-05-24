@@ -44,12 +44,20 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
-from rfmesh_contracts import Capability
+from rfmesh_contracts import BearingReport, Capability
 from rfmesh_dsp.l1 import L1AmplitudeSweepEstimator
 
 if TYPE_CHECKING:
     from rfmesh_contracts import Bearer, GeodeticPosition, Receiver
     from rfmesh_servo.driver import ServoDriver
+
+_DEG_HALF_CIRCLE: float = 180.0
+_DEG_FULL_CIRCLE: float = 360.0
+
+
+def _wrap180(angle_deg: float) -> float:
+    """Wrap to (-180, 180]."""
+    return (angle_deg + _DEG_HALF_CIRCLE) % _DEG_FULL_CIRCLE - _DEG_HALF_CIRCLE
 
 _LOG = logging.getLogger(__name__)
 
@@ -62,8 +70,6 @@ _MIN_OBSERVATIONS: int = 7
 # per-heading accumulator and ignores this argument (it only exists to
 # satisfy the frozen ``BearingEstimator.estimate`` signature).
 _EMPTY_IQ = np.empty(0, dtype=np.complex64)
-
-_DEG_FULL_CIRCLE: float = 360.0
 
 
 @dataclass(frozen=True)
@@ -87,6 +93,14 @@ class L1SweepConfig:
     dwell_samples: int = 1024
     inter_sweep_s: float = 1.0
     peak_prominence_db_min: float = 6.0
+    # MVP scan-and-hold: after the first sweep produces a BearingReport,
+    # point the servo at the peak heading and STAY there until stopping
+    # (or cancel) fires. Subsequent sweeps are skipped. If the first
+    # sweep refuses (prominence-gate failure, no peak), the loop keeps
+    # retrying sweeps until either a peak fires or the operator stops.
+    # Use this for the 2-node MVP demo where the operator wants
+    # "scan once, point at source, stay" behaviour.
+    hold_on_peak: bool = False
 
     def angles(self) -> list[float]:
         """Servo angles across the arc, low -> high (same-side approach)."""
@@ -138,6 +152,12 @@ class L1SweepLoop:
             sweep_dwell_samples=self._cfg.dwell_samples,
             peak_prominence_db_min=self._cfg.peak_prominence_db_min,
         )
+        # MVP scan-and-hold state (set when hold_on_peak=True and the
+        # first sweep emits a successful bearing). After this is set,
+        # the run loop stops sweeping and just re-emits the same
+        # BearingReport every inter_sweep_s with updated t_unix_ns so
+        # the fusion ellipse stays fresh on the operator UI.
+        self._held_report: BearingReport | None = None
 
     async def run(self, stopping: asyncio.Event, cancel: asyncio.Event | None = None) -> None:
         """Sweep repeatedly until ``stopping`` or ``cancel`` is set.
@@ -159,7 +179,14 @@ class L1SweepLoop:
             self._boresight_heading_deg,
         )
         while not stopping.is_set() and not (cancel is not None and cancel.is_set()):
-            await self._one_sweep(stopping, cancel)
+            # MVP scan-and-hold: once we have a held report, the servo
+            # is already on the peak heading. Skip the sweep, just
+            # re-emit the same bearing with updated timestamp so the
+            # fusion ellipse stays fresh on the UI.
+            if self._cfg.hold_on_peak and self._held_report is not None:
+                await self._resend_held()
+            else:
+                await self._one_sweep(stopping, cancel)
             if cancel is not None and cancel.is_set():
                 return
             with contextlib.suppress(TimeoutError):
@@ -225,6 +252,38 @@ class L1SweepLoop:
         )
         if self._bearer is not None:
             await asyncio.to_thread(self._bearer.send_bearing, report)
+        # MVP scan-and-hold: park the servo on the peak heading and
+        # remember the report; the next iteration of run() will skip
+        # the sweep + re-emit instead. If the peak maps outside the
+        # configured arc, refuse loudly (B3) and stay in continuous
+        # sweep mode -- the operator's heading_deg survey was wrong.
+        if self._cfg.hold_on_peak:
+            servo_angle = _wrap180(report.azimuth_deg - self._boresight_heading_deg)
+            if self._cfg.min_deg <= servo_angle <= self._cfg.max_deg:
+                _LOG.info(
+                    "L1 hold_on_peak: parking servo at %.1f deg (peak az %.1f deg)",
+                    servo_angle,
+                    report.azimuth_deg,
+                )
+                await asyncio.to_thread(self._servo.move, self._cfg.axis, servo_angle)
+                await asyncio.sleep(self._cfg.settle_s)
+                self._held_report = report
+            else:
+                _LOG.warning(
+                    "L1 hold_on_peak: peak az %.1f deg maps to servo %.1f deg, outside "
+                    "arc [%.1f, %.1f] -- check heading_deg survey. Staying in continuous sweep.",
+                    report.azimuth_deg,
+                    servo_angle,
+                    self._cfg.min_deg,
+                    self._cfg.max_deg,
+                )
+
+    async def _resend_held(self) -> None:
+        """MVP scan-and-hold re-emit. Bearing payload kept, timestamp refreshed."""
+        if self._held_report is None or self._bearer is None:
+            return
+        fresh = self._held_report.model_copy(update={"t_unix_ns": time.time_ns()})
+        await asyncio.to_thread(self._bearer.send_bearing, fresh)
 
     @staticmethod
     def _mode_cancelled(cancel: asyncio.Event | None) -> bool:

@@ -54,6 +54,10 @@ sweep:
   dwell_samples: 1024
   inter_sweep_s: 1.0
   peak_prominence_db_min: 6.0
+  # MVP demo: scan once → point at peak → stay. Re-emits same bearing
+  # every inter_sweep_s with fresh t_unix_ns so the ellipse stays live
+  # on locate.html.
+  hold_on_peak: true
 
 rendezvous: null
 
