@@ -1037,6 +1037,8 @@ function renderPosterior(fcOverride) {
 
 function render() {
   const f = activeFilters();
+  const sidebar = $("#sidebar");
+  const sidebarScrollTop = sidebar.scrollTop;
   ellipseLayer.clearLayers();
   centerLayer.clearLayers();
   bearingLayer.clearLayers();
@@ -1107,6 +1109,8 @@ function render() {
   renderDetail();
   renderInvestigation();
   updateRfStatus();
+  // Polling rebuilds the list and selected details; retain the operator's scroll position.
+  sidebar.scrollTop = sidebarScrollTop;
 
   if (!state.firstFit && state.centers.size > 0) {
     const pts = [...state.centers.values()];
@@ -1159,10 +1163,18 @@ function renderDetail() {
   if (!p) {
     dl.hidden = true; btn.hidden = true; confirm.hidden = true; empty.hidden = false;
     if (wall) wall.hidden = true;
-    if (gfTools) gfTools.hidden = true;
+    if (gfTools) {
+      gfTools.hidden = false;
+      $("#geofence-btn").disabled = true;
+      $("#geofence-btn").hidden = false;
+      $("#geofence-hint").hidden = false;
+      $("#geofence-hint").textContent = "Select a fix to preview/send geofence.";
+      $("#geofence-confirm").hidden = true;
+    }
     state.armed = false;
     state.gfArmed = false;
     gfClearPreview();
+    gfUpdateLabel();
     return;
   }
   empty.hidden = true; dl.hidden = false;
@@ -1186,7 +1198,10 @@ function renderDetail() {
     const gfConfirm = $("#geofence-confirm");
     const gfHint = $("#geofence-hint");
     if (gfBtn) { gfBtn.disabled = !ready; gfBtn.hidden = state.gfArmed; }
-    if (gfHint) gfHint.hidden = ready;
+    if (gfHint) {
+      gfHint.textContent = "Enable Terrain refinement detail and pick a fix; if there's no magenta area, lower the cutoff.";
+      gfHint.hidden = ready;
+    }
     if (gfConfirm) gfConfirm.hidden = !state.gfArmed;
     gfUpdateLabel();
     if (state.gfArmed) {

@@ -23,9 +23,10 @@ body {
 
 #app { display: flex; height: 100vh; }
 #sidebar {
-  width: 320px; min-width: 320px; height: 100%;
+  width: 320px; min-width: 320px; max-width: 320px; flex: 0 0 320px; height: 100%;
   background: var(--panel); border-right: 1px solid var(--line);
   display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden;
+  scrollbar-gutter: stable;
 }
 #map { flex: 1; height: 100%; background: #0b0e12; }
 
@@ -75,6 +76,7 @@ button.ghost { background: transparent; color: var(--text); border: 1px solid va
 .settings-toggle-wrap { padding: 10px 16px; border-bottom: 1px solid var(--line); }
 #settings-toggle { width: 100%; text-align: left; }
 #settings-toggle[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
+#settings-drawer { min-width: 0; overflow-x: hidden; }
 .sidebar-legend { margin: 10px 16px; max-width: none; box-shadow: none; }
 .sidebar-legend .lg-body { max-height: none; }
 #send-btn { width: 100%; margin-top: 10px; }

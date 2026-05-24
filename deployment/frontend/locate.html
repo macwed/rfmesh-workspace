@@ -6,7 +6,7 @@
   <title>both3 — Locate emitter</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <link rel="stylesheet" href="style.css?v=20260524c" />
+  <link rel="stylesheet" href="style.css?v=20260524d" />
 </head>
 <body data-page="locate">
   <div id="app">
@@ -29,6 +29,27 @@
       </nav>
 
       <section id="sidebar-legend" class="map-legend sidebar-legend" aria-label="Map legend"></section>
+
+      <section class="panel" id="geofence-tools">
+        <div class="gf-row">
+          <label for="gf-band">Cutoff</label>
+          <input id="gf-band" type="range" min="1" max="100" step="1" value="10" />
+          <span id="gf-band-val" class="gf-band-val">≥10% of peak</span>
+        </div>
+        <p class="confirm-note small" style="margin:0 0 6px">Fences where estimated-area score ≥ cutoff (% of peak).</p>
+        <button id="geofence-btn" disabled>Send jamming geofence (Jx) →</button>
+        <p class="confirm-note small" id="geofence-hint">Select a fix to preview/send geofence.</p>
+        <div id="geofence-confirm" hidden role="group" aria-label="Confirm geofence send">
+          <p class="confirm-note">Publishes a CoT/TAK <b>geofence</b> (Jx) from the
+            displayed estimated emitter area — not a precise target location. Deliberate
+            action — Esc to defer.</p>
+          <p class="confirm-note small" id="gf-confirm-target"></p>
+          <div class="confirm-actions">
+            <button id="gf-cancel" class="ghost">Cancel</button>
+            <button id="gf-confirm-send">Confirm send</button>
+          </div>
+        </div>
+      </section>
 
       <div class="settings-toggle-wrap">
         <button id="settings-toggle" class="ghost" type="button" aria-controls="settings-drawer" aria-expanded="false">&#9881; Settings</button>
@@ -103,28 +124,6 @@
           </div>
         </div>
 
-        <div id="geofence-tools" hidden>
-          <div class="gf-row">
-            <label for="gf-band">Cutoff</label>
-            <input id="gf-band" type="range" min="1" max="100" step="1" value="10" />
-            <span id="gf-band-val" class="gf-band-val">≥10% of peak</span>
-          </div>
-          <p class="confirm-note small" style="margin:0 0 6px">Fences where estimated-area score ≥ cutoff
-            (% of peak). Lower = wider; raise to drop the faint fringe. Magenta dashes preview it.</p>
-          <button id="geofence-btn">Send jamming geofence (Jx) →</button>
-          <p class="confirm-note small" id="geofence-hint" hidden>Enable Terrain refinement detail and pick a fix;
-            if there's no magenta area, lower the cutoff.</p>
-          <div id="geofence-confirm" hidden role="group" aria-label="Confirm geofence send">
-            <p class="confirm-note">Publishes a CoT/TAK <b>geofence</b> (Jx) from the
-              displayed estimated emitter area — not a precise target location. Deliberate
-              action — Esc to defer.</p>
-            <p class="confirm-note small" id="gf-confirm-target"></p>
-            <div class="confirm-actions">
-              <button id="gf-cancel" class="ghost">Cancel</button>
-              <button id="gf-confirm-send">Confirm send</button>
-            </div>
-          </div>
-        </div>
       </section>
       </div>
     </aside>
@@ -136,6 +135,6 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="app.js?v=20260524d"></script>
+  <script src="app.js?v=20260524f"></script>
 </body>
 </html>
