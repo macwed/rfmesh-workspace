@@ -71,7 +71,7 @@ rtl_test -t | grep -i serial
 Already done if `1761266` is on your branch; verify:
 
 ```bash
-cd deployment/backend
+cd deployment/bacrtl_eeprom -d 0 -s 00000002kend
 uv sync
 cd -
 ```
@@ -96,6 +96,70 @@ flagged with `# CHANGE:` in the YAML comments:
 should be **~0.5 – 2 km apart**, with the emitter ~1 km from both, forming
 a triangle (not a straight line). The default templates put node-02 ~1 km
 east of node-01.
+
+---
+
+## 2b. No-servo fast-path (hand-rotated Yagi, manual sweep)
+
+If the servo + ESP32-C6 are not on the bench (or you want the
+fastest path to a fix on the map), skip §3-onwards and use
+`scripts/bench_manual_sweep.py`. The script samples IQ from the
+RTL-SDR, prompts the operator to point the Yagi at each commanded
+geographic azimuth, finds the peak, refines it with a 3-point
+parabolic fit, computes an honest 1-σ from the amplitude-DF CRLB,
+and POSTs a `BearingReport` to the backend.
+
+From three terminals at the repo root:
+
+```bash
+# Terminal 1 — backend (same as §3, no servo dep)
+bash scripts/bench-2-nodes.sh backend
+```
+
+```bash
+# Terminal 2 — node 1, hand-rotate Yagi #1
+uv run python scripts/bench_manual_sweep.py \
+    --sdr-serial 00000001 --center-freq-hz 915.0e6 \
+    --start-deg 0 --end-deg 360 --step-deg 30 \
+    --fusion-url http://127.0.0.1:8000 \
+    --node-id node-manual-01 \
+    --lat <node1-lat> --lon <node1-lon> \
+    --node-label N1
+```
+
+```bash
+# Terminal 3 — node 2, hand-rotate Yagi #2
+uv run python scripts/bench_manual_sweep.py \
+    --sdr-serial 00000002 --center-freq-hz 915.0e6 \
+    --start-deg 0 --end-deg 360 --step-deg 30 \
+    --fusion-url http://127.0.0.1:8000 \
+    --node-id node-manual-02 \
+    --lat <node2-lat> --lon <node2-lon> \
+    --node-label N2
+```
+
+Per node: the script prints the prompt for each angle. Operator
+rotates the Yagi to that angle (eyeball off the compass / map),
+holds it steady, presses Enter. After the full arc the script
+prints the table + peak + sigma, then POSTs.
+
+Open both UI pages:
+
+- <http://127.0.0.1:8000/link.html> — pointing arrow on each node
+  plus the **Sweep peak** + **Sweep SNR / age** rows in the detail
+  drawer (click a node in the sidebar). Updates on every POST.
+- <http://127.0.0.1:8000/locate.html> — LOB ray per node + **fix
+  ellipse** (Stansfield+MLE) once both peaks land within the same
+  500 ms fusion-batch window. Click the marker for GDOP, semi-major,
+  residuals — the full demo-honesty payload (B4).
+
+Both operators can sweep again to refine — each new POST replaces
+the previous bearing for that node_id. The ellipse shrinks visibly
+as sigma drops (finer `--step-deg`) or the geometry improves
+(operators move the nodes apart).
+
+For one-shot stdout-only (no UI push): drop `--fusion-url` + position
+flags.
 
 ---
 

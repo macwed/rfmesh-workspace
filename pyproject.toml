@@ -118,6 +118,10 @@ ignore = [
 "packages/rfmesh-servo/src/rfmesh_servo/protocol.py" = ["PLR2004", "RUF001", "RUF002"]
 "packages/rfmesh-servo/src/rfmesh_servo/transport.py" = ["PLC0415"]
 "packages/rfmesh-servo/src/rfmesh_servo/cli/servo_calibrate.py" = ["PLR0911"]
+# 2-node MVP manual-sweep CLI: σ in docstrings (B2 honesty notation
+# is canonical project-wide); urllib.request.Request to a CLI-supplied
+# fusion URL is the whole point of the script (S310 false positive).
+"scripts/bench_manual_sweep.py" = ["RUF001", "RUF002", "S310", "PLR0911", "PLR0915"]
 
 [tool.mypy]
 python_version = "3.12"

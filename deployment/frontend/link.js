@@ -157,6 +157,8 @@
   const detailStopBtn = document.getElementById("detail-stop");
   const detailMsgEl = document.getElementById("detail-msg");
   const detailPeerBearingEl = document.getElementById("detail-peer-bearing");
+  const detailSweepPeakEl = document.getElementById("detail-sweep-peak");
+  const detailSweepSnrEl = document.getElementById("detail-sweep-snr");
   const detailClearFaultBlock = document.getElementById("detail-clear-fault-block");
   const detailClearFaultBtn = document.getElementById("detail-clear-fault");
   const detailClearFaultConfirm = document.getElementById("detail-clear-fault-confirm");
@@ -276,6 +278,27 @@
     detailPeerBearingEl.textContent = n.peer_bearing_text || "—";
     detailPeerBearingEl.title = n.peer_bearing_tooltip || "";
     detailLastEl.textContent = n.last_acquired_age || "never";
+
+    // 2-node manual-sweep MVP: render the last L1 peak with its honest
+    // 1-σ. The pointing arrow on the map uses the same numbers; this
+    // panel is the soldier's textual readout (compass heading + uncertainty).
+    if (typeof n.azimuth_deg === "number") {
+      const sigma = typeof n.azimuth_sigma_deg === "number" ? n.azimuth_sigma_deg : null;
+      const sigmaTxt = sigma !== null ? ` ± ${sigma.toFixed(1)}°` : "";
+      detailSweepPeakEl.textContent = `${n.azimuth_deg.toFixed(1)}°${sigmaTxt}`;
+    } else {
+      detailSweepPeakEl.textContent = "—";
+    }
+    if (typeof n.snr_db === "number" || n.last_bearing_t) {
+      const snrTxt = typeof n.snr_db === "number" ? `+${n.snr_db.toFixed(1)} dB` : "—";
+      const ageS = n.last_bearing_t
+        ? Math.max(0, Math.round((Date.now() - n.last_bearing_t) / 1000))
+        : null;
+      const ageTxt = ageS !== null ? `${ageS}s ago` : "—";
+      detailSweepSnrEl.textContent = `${snrTxt} · ${ageTxt}`;
+    } else {
+      detailSweepSnrEl.textContent = "—";
+    }
 
     // ADR-022 manual-steer slider clamp: if the node has reported a
     // calibrated_geographic_arc_deg in its node_hello, clamp the slider
