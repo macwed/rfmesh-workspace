@@ -122,6 +122,46 @@ _AMBER_FILL = 0x40FFFF00 - (1 << 32)
 _BLUE = -16737844  # 0xFF00A0CC-ish cyan-blue
 _BLUE_FILL = 0x4000A0CC - (1 << 32)
 
+
+@dataclass(frozen=True)
+class GeofenceSpec:
+    """ATAK geofence monitoring parameters for a polygon marker.
+
+    When attached to a polygon :class:`OperatorMarker`, the encoder emits a
+    ``<__geofence>`` child of the shape's ``<detail>`` so ATAK treats the drawn
+    ``u-d-f`` shape as a *monitored* geofence (entry/exit alerting). The tag,
+    attribute keys, and value vocabulary are taken verbatim from ATAK's own
+    parser, ``com.atakmap.android.geofence.data.GeoFence.fromCot`` (ATAK-CIV):
+    it reads ``trigger``, ``monitored``, ``boundingSphere``, ``minElevation``,
+    ``maxElevation`` from a ``__geofence`` sibling of the shape's ``<link>``
+    ring. (Note the attribute is ``monitored``, not ``monitor``.)
+
+    Parameters
+    ----------
+    monitor:
+        Which affiliations ATAK watches crossing the boundary; emitted as the
+        ``monitored`` attribute. ATAK's set is
+        ``"All" | "Friendly" | "Hostile" | "TAKUsers" | "Custom"``. Default
+        ``"All"`` -- warn on anyone entering a suspected-jammer zone.
+    trigger:
+        Boundary event that fires the alert: ``"Entry" | "Exit" | "Both"``.
+        Default ``"Entry"``.
+    bounding_sphere_m:
+        Radius (m) of the monitored sphere. ATAK reads this; callers should
+        supply it (e.g. the max distance from the shape centroid to a vertex).
+        ``None`` omits the attribute.
+    min_elevation_m / max_elevation_m:
+        Elevation gate bounds (m HAE). Defaults are ATAK's wide sentinels so a
+        2-D ground fence never clips on elevation.
+    """
+
+    monitor: str = "All"
+    trigger: str = "Entry"
+    bounding_sphere_m: float | None = None
+    min_elevation_m: float = -25000.0
+    max_elevation_m: float = 25000.0
+
+
 #: The operator's message catalogue. Keep small and tactical -- this is
 #: the BoTH3 demo vocabulary, not a full 2525 set. Adding a template is a
 #: one-line change here; consumers (CLI, future map UI) read the registry
@@ -143,6 +183,13 @@ TEMPLATES: dict[str, MessageTemplate] = {
     ),
     "search_area": MessageTemplate(
         "search_area", "Search area", "u-d-f", "polygon", 86400.0, _BLUE, _BLUE_FILL
+    ),
+    # --- monitored geofence (TAK drawing shape + <__geofence> detail) --
+    # Red, like no-go: a geofence built from an RF-plausibility outline marks a
+    # threat / suspected-jammer caution zone. Attach a GeofenceSpec to the marker
+    # to make ATAK monitor entry/exit; without one it renders as a plain area.
+    "geofence": MessageTemplate(
+        "geofence", "Geofence", "u-d-f", "polygon", 86400.0, _RED, _RED_FILL
     ),
     # --- custom: operator supplies the CoT type via cot_type_override --
     "custom": MessageTemplate("custom", "Custom marker", "a-u-G", "point", 86400.0),
@@ -218,6 +265,10 @@ class OperatorMarker:
     #: template's ``cot_type``. Lets the operator drop, e.g., an air
     #: track (``a-h-A``) or any 2525 designator without a new template.
     cot_type_override: str | None = None
+    #: Optional ATAK geofence monitoring. When set (polygon templates only),
+    #: the encoder emits a ``<__geofence>`` detail so ATAK monitors the shape
+    #: for entry/exit rather than drawing a passive area. ``None`` = plain area.
+    geofence: GeofenceSpec | None = None
     # Internal: extra <detail> children are out of scope for v1; field
     # kept so future templates (chat recipients, links) extend without a
     # signature change.
@@ -246,6 +297,12 @@ def _validate(marker: OperatorMarker, tmpl: MessageTemplate) -> None:
     """Fail loud (B3) on geometry that does not match the template."""
     if tmpl.geometry == "point" and marker.vertices is not None:
         msg = f"template {tmpl.key!r} is a point template; vertices must be None"
+        raise CotEncodingError(msg)
+    if marker.geofence is not None and tmpl.geometry != "polygon":
+        msg = (
+            f"template {tmpl.key!r} is a {tmpl.geometry} template; a geofence needs "
+            f"a polygon (use the 'geofence' template or another u-d-f area)"
+        )
         raise CotEncodingError(msg)
     if tmpl.geometry == "polygon":
         verts = marker.vertices or ()
@@ -304,6 +361,8 @@ def operator_marker_to_cot_xml(marker: OperatorMarker) -> bytes:
 
     if tmpl.geometry == "polygon":
         _append_polygon(detail, marker, tmpl)
+        if marker.geofence is not None:
+            _append_geofence(detail, marker.geofence)
 
     if marker.remarks:
         remarks = ET.SubElement(detail, "remarks")
@@ -350,6 +409,25 @@ def _append_polygon(
         ET.SubElement(detail, "fillColor", attrib={"value": str(tmpl.fill_argb)})
     # Tell ATAK the shape is a closed area, label it, keep it on screen.
     ET.SubElement(detail, "labels_on", attrib={"value": "true"})
+
+
+def _append_geofence(detail: ET.Element, spec: GeofenceSpec) -> None:
+    """Append the ``<__geofence>`` monitoring detail to a polygon shape.
+
+    Matches ATAK's parser exactly (``GeoFence.fromCot``, ATAK-CIV): the keys
+    ATAK reads are ``trigger``, ``monitored``, ``boundingSphere``,
+    ``minElevation``, ``maxElevation`` -- so we emit those and nothing else
+    (extra keys are ignored by ATAK; we keep to the spec).
+    """
+    attrib: dict[str, str] = {
+        "monitored": spec.monitor,
+        "trigger": spec.trigger,
+        "minElevation": f"{spec.min_elevation_m:.{_METRE_PRECISION}f}",
+        "maxElevation": f"{spec.max_elevation_m:.{_METRE_PRECISION}f}",
+    }
+    if spec.bounding_sphere_m is not None:
+        attrib["boundingSphere"] = f"{spec.bounding_sphere_m:.{_METRE_PRECISION}f}"
+    ET.SubElement(detail, "__geofence", attrib=attrib)
 
 
 def build_self_sa_xml(

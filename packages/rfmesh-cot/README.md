@@ -13,6 +13,14 @@ CoT/ATAK adapter for rfmesh. Owned by Workstream C+D. Two directions:
 Both render the same CoT wire format and ship over the same
 `PyTAKCotPublisher` (TCP/UDP/TLS via PyTAK).
 
+There is also a **third transport** for operator point updates: the
+FreeTAKServer **REST API** (`FreeTakServerRestClient`), ported from the
+`drupal/atak` module. Instead of holding a CoT socket open, it makes one
+authenticated HTTP call and lets FTS fan the marker out to every client —
+no self-SA keepalive, no persistent connection. It models **points only**
+(no polygons, no CoT delete); use the `PyTAKCotPublisher` path for those.
+See "REST API path" below.
+
 ## Operator messaging — quick start
 
 The endpoint defaults to the BoTH3 hackathon TAK server
@@ -67,6 +75,72 @@ async with PyTAKCotPublisher("tcp://35.206.145.140:8087") as pub:
 `publish_marker` / `delete_marker` are safe to call from a non-asyncio
 thread (a map-click handler, a CLI thread): the encode runs on the caller's
 thread and the queue hand-off is marshalled onto the publisher's loop.
+
+## REST API path (`FreeTakServerRestClient`)
+
+A Python port of the `drupal/atak` module: push point markers to
+FreeTAKServer over its REST API with a `Authorization: Bearer <token>`
+header. The token is a FreeTAKServer **System-User token** (FTS Web UI →
+User → give a user token); the `Bearer` prefix is not part of the token.
+The default REST port is `19023` (distinct from the CoT streaming port
+`8087`).
+
+```bash
+# Connectivity + auth smoke test (prints API version + endpoints)
+rfmesh-cot-rest --base-url http://tak.example.com:19023 --token "$FTS_API_TOKEN" --help-api
+
+# Drop a hostile contact (point templates only)
+rfmesh-cot-rest --base-url http://tak.example.com:19023 --token "$FTS_API_TOKEN" \
+    --template hostile --lat 50.066 --lon 4.866 --callsign "Jammer A"
+
+# Move it: re-send the same uid
+rfmesh-cot-rest --base-url http://tak.example.com:19023 --token "$FTS_API_TOKEN" \
+    --template hostile --lat 50.07 --lon 4.87 --uid rfmesh.op.hostile.jammer-a
+
+# REST has no delete; stale it now (re-PUT with a 1 s timeout)
+rfmesh-cot-rest --base-url http://tak.example.com:19023 --token "$FTS_API_TOKEN" \
+    --template hostile --lat 50.07 --lon 4.87 --uid rfmesh.op.hostile.jammer-a --expire
+```
+
+The token can be passed with `--token` or the `FTS_API_TOKEN` env var.
+
+### Programmatic use
+
+```python
+from rfmesh_cot import FreeTakServerRestClient, OperatorMarker
+
+client = FreeTakServerRestClient("http://tak.example.com:19023", api_token="...")
+client.get_help()                                  # connectivity + auth check
+
+uid = client.post_geo_object(                       # low-level: the FTS fields
+    name="Jammer A", latitude=50.066, longitude=4.866, attitude="hostile",
+)
+client.put_geo_object(uid=uid, latitude=50.07, longitude=4.87, attitude="hostile")
+
+# or reuse the operator vocabulary (point/affiliation templates only):
+client.publish_marker(OperatorMarker(
+    template_key="hostile", uid="rfmesh.op.hostile.jammer-a",
+    lat_deg=50.066, lon_deg=4.866, callsign="Jammer A",
+))
+```
+
+`publish_marker` raises `CotRestError` for polygon templates or any CoT
+type with no FTS affiliation (e.g. `waypoint`), pointing you at the
+`PyTAKCotPublisher` path rather than guessing — REST models points only.
+Every HTTP failure surfaces as `CotRestError` carrying `.status_code` and
+`.body` (401/403 → bad token; 500 → bad payload; `None` → unreachable).
+
+### REST vs. streaming CoT — which to use
+
+| | `PyTAKCotPublisher` (CoT) | `FreeTakServerRestClient` (REST) |
+| --- | --- | --- |
+| transport | long-lived TCP/UDP/TLS socket | one HTTP call per update |
+| relay to clients | needs self-SA keepalive | FTS fans out for you |
+| points | ✅ | ✅ |
+| polygons / areas | ✅ | ❌ |
+| delete | ✅ (`t-x-d-d`) | ❌ (stale via `timeout`) |
+| high-rate `FixEvent` flow | ✅ | not intended |
+| best for | machine fixes, areas, deletes | occasional operator markers |
 
 ## Viewing the markers
 

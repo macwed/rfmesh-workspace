@@ -16,6 +16,7 @@ dependencies = [
 
 [project.scripts]
 rfmesh-cot-send = "rfmesh_cot.cli.send:main"
+rfmesh-cot-rest = "rfmesh_cot.cli.rest_send:main"
 
 [build-system]
 requires = ["hatchling"]

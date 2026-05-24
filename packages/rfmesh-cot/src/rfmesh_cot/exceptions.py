@@ -13,10 +13,17 @@ The hierarchy is intentionally shallow:
 * ``CotTransportError``  -- failure to ship an already-encoded CoT blob
                             over PyTAK's TCP/UDP transport (connection
                             refused, broken pipe, write timeout).
+* ``CotRestError``       -- failure to push a point update over the
+                            FreeTAKServer REST API (HTTP non-2xx, a
+                            connection error, or an unparseable response).
 
-Both subclasses exist so callers can distinguish "the message was
+The first two subclasses let callers distinguish "the message was
 unshippable" from "the transport was broken" -- the former is a code
-bug, the latter is operational and may be retried. Neither is ever
+bug, the latter is operational and may be retried. ``CotRestError`` is
+the REST-path analogue of ``CotTransportError`` (the publisher uses raw
+CoT over a socket; the REST client uses HTTP), and it carries the HTTP
+``status_code`` and response ``body`` so a caller can tell a 401 (bad
+token) from a 500 (bad payload) from a dead connection. None is ever
 silently swallowed (Invariant B3, ``AGENTS.md`` §1 Invariant 4).
 """
 
@@ -45,3 +52,32 @@ class CotTransportError(CotError):
     surfacing the failure is the operational layer's call -- the
     publisher's only contract is "do not silently swallow it".
     """
+
+
+class CotRestError(CotError):
+    """Raised when a FreeTAKServer REST API call failed.
+
+    The REST-path analogue of :class:`CotTransportError`. Carries the
+    HTTP ``status_code`` (``None`` if the request never got a response --
+    DNS failure, connection refused, timeout) and the response ``body``
+    text (empty string when there was none), so the caller can tell apart:
+
+    * ``status_code == 401 / 403`` -- the Bearer token is missing or wrong;
+    * ``status_code == 500`` -- the payload was rejected (FTS is strict and
+      case-sensitive about ``geoObject`` / ``attitude`` values);
+    * ``status_code is None`` -- the server was unreachable.
+
+    Like every other error in this package it is never silently
+    swallowed (Invariant B3).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        body: str = "",
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.body = body

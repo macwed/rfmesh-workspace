@@ -16,6 +16,7 @@ from xml.etree import ElementTree as ET
 
 import pytest
 from rfmesh_cot import (
+    GeofenceSpec,
     OperatorMarker,
     build_self_sa_xml,
     operator_delete_to_cot_xml,
@@ -147,6 +148,56 @@ def test_self_sa_is_friendly_with_group() -> None:
     assert contact is not None and contact.attrib["callsign"] == "13-cj-console"
     grp = ev.find("./detail/__group")
     assert grp is not None and grp.attrib["name"] == "Cyan"
+
+
+def test_geofence_emits_geofence_detail_with_ring() -> None:
+    verts = ((50.0, 4.0), (50.0, 4.1), (50.1, 4.1), (50.1, 4.0))
+    m = OperatorMarker(
+        template_key="geofence",
+        uid="rfmesh.op.geofence.j1",
+        callsign="J1",
+        vertices=verts,
+        geofence=GeofenceSpec(monitor="All", trigger="Entry"),
+    )
+    ev = _parse(operator_marker_to_cot_xml(m))
+    assert ev.attrib["type"] == "u-d-f"
+    # the closed ring + drawing styling are still present (it is a real shape)
+    links = ev.findall("./detail/link")
+    assert len(links) == len(verts) + 1
+    assert ev.find("./detail/strokeColor") is not None
+    gf = ev.find("./detail/__geofence")
+    assert gf is not None
+    # ATAK reads "monitored" (not "monitor") — GeoFence.fromCot, ATAK-CIV
+    assert gf.attrib["monitored"] == "All"
+    assert gf.attrib["trigger"] == "Entry"
+    assert "monitor" not in gf.attrib  # the wrong key must not leak
+    # boundingSphere omitted when not supplied
+    assert "boundingSphere" not in gf.attrib
+
+
+def test_geofence_bounding_sphere_emitted_when_set() -> None:
+    verts = ((50.0, 4.0), (50.0, 4.1), (50.1, 4.0))
+    m = OperatorMarker(
+        template_key="geofence",
+        uid="u-gf-bs",
+        vertices=verts,
+        geofence=GeofenceSpec(bounding_sphere_m=1500.0),
+    )
+    gf = _parse(operator_marker_to_cot_xml(m)).find("./detail/__geofence")
+    assert gf is not None
+    assert float(gf.attrib["boundingSphere"]) == pytest.approx(1500.0, abs=1e-6)
+
+
+def test_geofence_on_point_template_raises() -> None:
+    m = OperatorMarker(
+        template_key="hostile",
+        uid="u-gf-bad",
+        lat_deg=50.0,
+        lon_deg=4.0,
+        geofence=GeofenceSpec(),
+    )
+    with pytest.raises(CotEncodingError, match="geofence needs"):
+        operator_marker_to_cot_xml(m)
 
 
 def test_stale_override_applies() -> None:
