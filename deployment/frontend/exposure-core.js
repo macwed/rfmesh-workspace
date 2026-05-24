@@ -20,6 +20,7 @@ function bootExposurePage(cfg) {
     placing: false, placeRole: cfg.placeRoles[0].role, placeErp: cfg.placeRoles[0].defErp || "medium",
     asset: null, reach: 3000, assetH: cfg.assetH || 2.0, includeAuto: !!cfg.autoSource,
     drawn: [], fcProps: {}, probeTok: 0, probeTimer: null,
+    settingsOpen: false,
   };
   S.map = RFCore.makeMap("map");
   S.heat = L.layerGroup().addTo(S.map);
@@ -70,6 +71,14 @@ function buildSidebar(S) {
       <div><h1>both3</h1><p class="sub">${cfg.title}</p></div>
     </header>
     ${navHtml(cfg.key)}
+    <section class="panel">
+      ${legendHtml(cfg)}
+      <p class="muted small">${cfg.disclaimer || "Relative terrain cover (diffraction). Colour shows team/exposure; never a guarantee — power isn't modelled, shadows never zero."}</p>
+    </section>
+    <div class="settings-toggle-wrap">
+      <button id="settings-toggle" class="ghost" type="button" aria-controls="settings-drawer" aria-expanded="${S.settingsOpen}">&#9881; Settings</button>
+    </div>
+    <div id="settings-drawer"${S.settingsOpen ? "" : " hidden"}>
     <section class="panel step"><div class="step-n">1</div><div class="step-b">
       <h2>Place red team</h2>
       <div class="row ex-place">${roleSel}
@@ -98,10 +107,7 @@ function buildSidebar(S) {
       <button id="ex-run" type="button" class="ex-run">Run ${cfg.title.toLowerCase()}</button>
       <div id="ex-status" class="ex-status"></div>
     </div></section>
-    <section class="panel">
-      ${legendHtml(cfg)}
-      <p class="muted small">${cfg.disclaimer || "Relative terrain cover (diffraction). Colour shows team/exposure; never a guarantee — power isn't modelled, shadows never zero."}</p>
-    </section>`;
+    </div>`;
   wireSidebar(S);
 }
 
@@ -117,6 +123,11 @@ function legendHtml(cfg) {
 
 function wireSidebar(S) {
   const q = (s) => document.querySelector(s);
+  q("#settings-toggle").onclick = (e) => {
+    S.settingsOpen = !S.settingsOpen;
+    q("#settings-drawer").hidden = !S.settingsOpen;
+    e.currentTarget.setAttribute("aria-expanded", String(S.settingsOpen));
+  };
   q("#ex-erp").onchange = (e) => { S.placeErp = e.target.value; };
   const role = q("#ex-role"); if (role.tagName === "SELECT") role.onchange = (e) => { S.placeRole = e.target.value; };
   q("#ex-place").onclick = () => { S.placing = S.placing === "red" ? false : "red"; reflectArm(S); };

@@ -116,20 +116,27 @@ const rfHelpChip = document.createElement("button");
 rfHelpChip.id = "rf-help-chip";
 rfHelpChip.type = "button";
 rfHelpChip.hidden = true;
-rfHelpChip.innerHTML = "ⓘ how to read these numbers";
+rfHelpChip.innerHTML = "ⓘ how to read this area";
 document.getElementById("map").appendChild(rfHelpChip);
 
 const rfHelpCard = document.createElement("div");
 rfHelpCard.id = "rf-help-card";
 rfHelpCard.hidden = true;
 rfHelpCard.innerHTML = `
-  <div class="hc-head"><span>Reading the RF-plausibility numbers</span>
+  <div class="hc-head"><span>95% estimated emitter area</span>
     <button class="hc-x" type="button" aria-label="close">×</button></div>
   <div class="hc-body">
-    <p><b>Plausibility</b> = how strongly <i>this spot</i> fits <b>both</b> the sensor
-    bearings <b>and</b> the terrain, compared to the most-likely spot on the map
-    (which scores <b>1.0</b>). A relative cue — not a probability of a hit.</p>
-    <p>It multiplies two things, for every contributing sensor:</p>
+    <p>Estimated area where the emitter is likely located based on crossed sensor
+    bearings and terrain refinement.</p>
+    <ul>
+      <li><b>Brighter inner area</b> = most likely location.</li>
+      <li><b>Outer area</b> = still possible.</li>
+      <li><b>Smaller area</b> = greater certainty.</li>
+      <li><b>Long/thin shape</b> = weak sensor geometry (check GDOP).</li>
+    </ul>
+    <p><b>Use as a search/prioritization area.</b></p>
+    <p class="hc-h">How the area is refined</p>
+    <p>Each spot is compared with the contributing sensor bearings and terrain paths:</p>
     <p class="hc-h">1 · AoA — bearing geometry</p>
     <ul>
       <li><b>meas</b> — the direction the sensor actually measured to the emitter (°).</li>
@@ -153,11 +160,11 @@ rfHelpCard.innerHTML = `
     <p class="hc-h">Putting it together</p>
     <ul>
       <li><b>Π AoA × RF</b> — multiply every sensor's L and w together = the raw score.</li>
-      <li><b>plausibility</b> = raw ÷ the peak score on the map.</li>
+      <li><b>relative score</b> = raw ÷ the peak score on the map; this determines the inner brightness.</li>
     </ul>
-    <p class="hc-foot">Terrain never fully blocks a signal, so shadowed spots are
-    down-weighted, not erased. It's a <b>cue, not a target</b> — confirm with a second
-    sensor / PID before acting. Power is not measured (no dBm).</p>
+    <p class="hc-foot"><b>Not a precise target location.</b> The emitter may still be
+    outside the area. Always confirm with additional sensors/intelligence. Terrain
+    never fully blocks a signal, and power is not measured (no dBm).</p>
   </div>`;
 document.getElementById("map").appendChild(rfHelpCard);
 rfHelpChip.onclick = () => { rfHelpCard.hidden = !rfHelpCard.hidden; };
@@ -190,22 +197,13 @@ const POSTERIOR_STYLE = {
 // keyboard-friendly, localStorage-persistable.
 const LEGEND_ROWS = [
   {
-    k: "ellipse",
-    swatch: '<span class="lg-line" style="border-top:2px dashed #f1c40f"></span>',
+    k: "area",
+    swatch: '<span class="lg-box lg-box-grad"></span><span class="lg-line" style="border-top:2px dashed #f1c40f"></span>',
     label: "95% estimated emitter area",
-    means: "Where the emitter likely is, from crossed sensor bearings alone.",
-    read: "Smaller = more certain; long & thin = sensors nearly in a line (weak geometry — check GDOP).",
-    act: "Treat as the search area.",
-    but: "95% — it can still be outside. Not a target box.",
-  },
-  {
-    k: "rf",
-    swatch: '<span class="lg-box lg-box-grad"></span>',
-    label: "RF-plausible (LIKELY-HERE)",
-    means: "The bearing area refined by terrain (a soft prior).",
-    read: "Brightest inner band = most likely ground; outer bands = still possible.",
-    act: "Start your search in the bright core.",
-    but: "A cue, NOT a hit — never act on the glow alone (radio bends around hills). Confirm via PID + 2nd sensor.",
+    means: "Estimated area where the emitter is likely located based on crossed sensor bearings and terrain refinement.",
+    read: "Brighter inner area = most likely location; outer area = still possible; smaller area = greater certainty; long/thin shape = weak sensor geometry (check GDOP).",
+    act: "Use as a search/prioritization area.",
+    but: "Not a precise target location. The emitter may still be outside the area. Always confirm with additional sensors/intelligence.",
   },
   {
     k: "node",
@@ -249,7 +247,7 @@ const legend = document.getElementById("sidebar-legend");
     <div class="lg-body">
       <div class="lg-title">Selected emitter</div>
       ${LEGEND_ROWS.map(legendRowHtml).join("")}
-      <div class="lg-note">soft cue · not a target point</div>
+      <div class="lg-note">Search/prioritization area · not a precise target location</div>
     </div></details>`;
   d.querySelector(".lg-shell").addEventListener("toggle", () => {
     localStorage.setItem("legend.seen", "1");
@@ -429,10 +427,10 @@ function updateRfStatus() {
   el.className = "";
   rfHelpChip.hidden = true;  // shown only once a real posterior is present (below)
 
-  if (sp.loading) { el.innerHTML = '<span class="rf-bar"></span> Computing RF-plausibility…'; el.classList.add("rf-loading"); return; }
-  if (sp.error) { el.textContent = "RF-plausibility unavailable"; el.classList.add("rf-warn"); return; }
+  if (sp.loading) { el.innerHTML = '<span class="rf-bar"></span> Refining estimated emitter area…'; el.classList.add("rf-loading"); return; }
+  if (sp.error) { el.textContent = "Terrain refinement unavailable"; el.classList.add("rf-warn"); return; }
   const p = sp.props || {};
-  if ((p.rf_model || "").startsWith("none")) { el.textContent = "RF-plausibility: no terrain data"; el.classList.add("rf-warn"); return; }
+  if ((p.rf_model || "").startsWith("none")) { el.textContent = "Estimated emitter area: no terrain data"; el.classList.add("rf-warn"); return; }
   rfHelpChip.hidden = false;  // real terrain-aware posterior -> the help chip applies
 
   // Which FC properties are live right now (enhanced override wins for the label).
@@ -442,7 +440,7 @@ function updateRfStatus() {
   el.classList.add("rf-eff-" + (p.rf_effect_label || "na"));
 
   // Primary line.
-  const line1 = `<div class="rf-line1">RF terrain effect: ${lab}${ghz ? " · " + ghz : ""}</div>`;
+  const line1 = `<div class="rf-line1">Area terrain refinement: ${lab}${ghz ? " · " + ghz : ""}</div>`;
 
   // Secondary line: state machine — running > applied(enhanced/degraded) > default.
   let line2 = "";
@@ -764,7 +762,7 @@ function probeMathHtml(p) {
     <div class="ins-math-h">why this value</div>
     ${nodeRows}
     <div class="ins-prod">Π AoA ${p.aoa_product}${rfp} = ${p.raw}</div>
-    <div class="ins-plaus">plausibility <b>${p.plausibility}</b> of local peak</div>
+    <div class="ins-plaus">relative score <b>${p.plausibility}</b> of local peak</div>
   </div>`;
 }
 
@@ -820,7 +818,7 @@ function updateInspector(latlng) {
     <div class="ins-row"><span class="ins-k">Terrain height</span><span class="ins-v">${terr}</span></div>
     <div class="ins-row"><span class="ins-k">Diffraction loss</span><span class="ins-v ins-loss-${bp.loss_label || "na"}">${lossLabel}${lossModel}</span></div>
     <div class="ins-math-slot">${probeMathHtml(_lastProbe)}</div>
-    <div class="ins-foot">cue, not a hit · power not measured</div>`;
+    <div class="ins-foot">not a precise target location · confirm with additional sensors/intelligence</div>`;
   fetchProbe(latlng); // debounced; fills the math slot with live per-node numbers
 }
 
@@ -1023,7 +1021,7 @@ function renderPosterior(fcOverride) {
     L.geoJSON(feat, {
       style: { ...st, fillColor: st.color, className: computing ? "posterior-dim" : "" },
     })
-      .bindTooltip(`RF-plausible area · ${pct}% of probability`, { sticky: true })
+      .bindTooltip(`${pct}% band within estimated emitter area`, { sticky: true })
       .addTo(posteriorLayer);
     renderedBands.push({ p_band: feat.properties.p_band, props: feat.properties, geometry: feat.geometry });
   }

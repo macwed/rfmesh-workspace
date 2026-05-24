@@ -55,11 +55,11 @@
           <label class="toggle"><input id="show-bearings" type="checkbox" checked> nodes/LOBs</label>
         </div>
         <div class="row">
-          <label class="toggle"><input id="show-posterior" type="checkbox" checked> RF-plausibility</label>
-          <span class="info-i" data-tip="Bearing area refined by terrain (knife-edge diffraction). Brightest inner band = most likely. A soft cue, not a target — confirm before acting." tabindex="0" role="button" aria-label="explain">ⓘ</span>
-          <span class="legend"><span class="swatch-threat"></span>threat-likelihood heat</span>
+          <label class="toggle"><input id="show-posterior" type="checkbox" checked> Terrain refinement detail</label>
+          <span class="info-i" data-tip="Estimated area where the emitter is likely located based on crossed sensor bearings and terrain refinement. Brighter inner area = most likely location; outer area = still possible. Not a precise target location; always confirm with additional sensors/intelligence." tabindex="0" role="button" aria-label="explain">ⓘ</span>
+          <span class="legend"><span class="swatch-threat"></span>estimated emitter area</span>
         </div>
-        <p class="muted small" style="margin:2px 0 0">Soft cue (knife-edge diffraction) — red = likely emitter ground, green = your sensors. Not a target point.</p>
+        <p class="muted small" style="margin:2px 0 0">Use as a search/prioritization area. Not a precise target location; always confirm with additional sensors/intelligence.</p>
       </section>
 
       <section class="panel" id="marks">
@@ -109,14 +109,14 @@
             <input id="gf-band" type="range" min="1" max="100" step="1" value="10" />
             <span id="gf-band-val" class="gf-band-val">≥10% of peak</span>
           </div>
-          <p class="confirm-note small" style="margin:0 0 6px">Fences where plausibility ≥ cutoff
+          <p class="confirm-note small" style="margin:0 0 6px">Fences where estimated-area score ≥ cutoff
             (% of peak). Lower = wider; raise to drop the faint fringe. Magenta dashes preview it.</p>
           <button id="geofence-btn">Send jamming geofence (Jx) →</button>
-          <p class="confirm-note small" id="geofence-hint" hidden>Enable RF-plausibility and pick a fix;
+          <p class="confirm-note small" id="geofence-hint" hidden>Enable Terrain refinement detail and pick a fix;
             if there's no magenta area, lower the cutoff.</p>
           <div id="geofence-confirm" hidden role="group" aria-label="Confirm geofence send">
             <p class="confirm-note">Publishes a CoT/TAK <b>geofence</b> (Jx) from the
-              displayed RF-plausibility outline — a cue, not a target. Deliberate
+              displayed estimated emitter area — not a precise target location. Deliberate
               action — Esc to defer.</p>
             <p class="confirm-note small" id="gf-confirm-target"></p>
             <div class="confirm-actions">
@@ -136,6 +136,6 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="app.js?v=20260524c"></script>
+  <script src="app.js?v=20260524d"></script>
 </body>
 </html>
