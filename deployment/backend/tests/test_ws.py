@@ -184,6 +184,50 @@ def test_ui_ws_subscriber_receives_pushed_bearing(app: FastAPI) -> None:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# ADR-022 /status ingest + node_status fan-out
+# ---------------------------------------------------------------------------
+
+
+_VALID_STATUS_PAYLOAD = {
+    "schema_version": "1.3.0",
+    "node_id": "node-a",
+    "t_unix_ns": 1_700_000_000_000_000_000,
+    "position": {
+        "lat_deg": 50.85,
+        "lon_deg": 4.35,
+        "hae_m": 50.0,
+        "sigma_m": 5.0,
+    },
+    "active_capabilities": ["l1_rssi"],
+    "gnss_locked": True,
+    "healthy": True,
+    "status_detail": "",
+}
+
+
+def test_post_status_accepts_single_payload(client: TestClient) -> None:
+    resp = client.post("/status", json=_VALID_STATUS_PAYLOAD)
+    assert resp.status_code == 200
+    assert resp.json() == {"accepted": 1, "errors": []}
+
+
+def test_post_status_422_on_invalid_payload(client: TestClient) -> None:
+    resp = client.post("/status", json={"node_id": "node-a"})
+    assert resp.status_code == 422
+
+
+def test_post_status_fans_node_status_to_ui_subscribers(app: FastAPI) -> None:
+    test_client = TestClient(app)
+    with test_client.websocket_connect("/ws/ui") as ui_ws:
+        resp = test_client.post("/status", json=_VALID_STATUS_PAYLOAD)
+        assert resp.status_code == 200
+        received = json.loads(ui_ws.receive_text())
+        assert received["kind"] == "node_status"
+        assert received["node_id"] == "node-a"
+        assert received["data"]["gnss_locked"] is True
+
+
 def test_clear_fault_pushes_to_registered_node(client: TestClient) -> None:
     """POST /node/{id}/clear_fault forwards the JSON to the node WS."""
     with client.websocket_connect("/ws/node/node-a") as node_ws:

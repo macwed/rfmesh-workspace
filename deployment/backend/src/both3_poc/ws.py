@@ -39,8 +39,9 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Body, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from rfmesh_contracts import NodeStatus
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -397,6 +398,44 @@ async def post_command(
             detail=f"node {node_id!r}: WS send failed ({exc!r})",
         ) from exc
     return {"delivered_to": node_id, "kind": command.kind}
+
+
+@router.post("/status")
+async def ingest_status(
+    request: Request,
+    payload: Any = Body(...),  # noqa: B008 -- FastAPI parameter dependency
+) -> dict[str, Any]:
+    """Ingest one or more ``NodeStatus`` heartbeats; fan to UI as ``node_status``.
+
+    ADR-022 + demo-integrity rec on item 3: NodeStatus heartbeat (2s
+    cadence, contract-bound) is one of two push payload kinds the UI
+    listens for. The other -- ``node_state`` -- is event-driven from the
+    NodeController on every mode transition (~200ms latency, ADR-024).
+    Splitting the two decouples badge-flip latency from the heartbeat
+    cadence.
+
+    Accepts a single ``NodeStatus`` JSON or a list. 422 on schema-invalid
+    payloads (B3, never silently accept-and-drop).
+    """
+    accepted = 0
+    errors: list[str] = []
+    pushed: list[dict[str, Any]] = []
+    items = payload if isinstance(payload, list) else [payload]
+    for i, rec in enumerate(items):
+        try:
+            status = NodeStatus.model_validate(rec)
+            accepted += 1
+            pushed.append(status.model_dump(mode="json"))
+        except (ValidationError, ValueError, KeyError, TypeError) as exc:
+            errors.append(f"[{i}] {exc}")
+    for record in pushed:
+        await push_to_ui_subscribers(
+            request.app,
+            {"kind": "node_status", "node_id": record.get("node_id"), "data": record},
+        )
+    if accepted == 0 and errors:
+        raise HTTPException(status_code=422, detail=errors)
+    return {"accepted": accepted, "errors": errors}
 
 
 @router.post("/node/{node_id}/clear_fault")

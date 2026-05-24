@@ -450,11 +450,37 @@
       // ADR-024: NodeController emitted a state transition. Update the
       // badge + countdown without waiting for the next heartbeat.
       mergeControllerState(payload.node_id, payload.data || {});
+    } else if (payload.kind === "node_status") {
+      // ADR-022 heartbeat fan-out: NodeStatus arrived (~2s cadence).
+      // Carries position + gnss_locked + healthy + status_detail.
+      mergeNodeStatus(payload.node_id, payload.data || {});
     } else if (payload.kind === "command_refused") {
       // Node-side refusal (B3). Surface red toast on the detail panel.
       showRefusal(payload.node_id, payload.data || {});
     }
     // Future kinds. Schema additive; unknown kinds ignored honestly.
+  }
+
+  function mergeNodeStatus(nodeId, status) {
+    if (!nodeId) return;
+    const n = state.nodes.get(nodeId) || { node_id: nodeId };
+    if (status.position) {
+      n.lat = status.position.lat_deg;
+      n.lon = status.position.lon_deg;
+    }
+    n.gnss_locked = !!status.gnss_locked;
+    n.healthy = !!status.healthy;
+    // Only overwrite status_detail when the heartbeat carries one --
+    // the controller's node_state push is the more current source for
+    // mode-specific reasons (e.g. mode_drain_timeout).
+    if (status.status_detail) {
+      n.status_detail = status.status_detail;
+    }
+    n.last_heartbeat_t = Date.now();
+    state.nodes.set(nodeId, n);
+    renderNode(n);
+    renderNodeList();
+    if (state.selectedNodeId === nodeId) renderDetail();
   }
 
   function mergeControllerState(nodeId, snap) {
