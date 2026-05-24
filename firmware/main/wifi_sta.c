@@ -84,13 +84,17 @@ void wifi_sta_init_and_connect(void) {
             sizeof(wifi_config.sta.ssid) - 1);
     strncpy((char *)wifi_config.sta.password, WIFI_PSK,
             sizeof(wifi_config.sta.password) - 1);
-    // Accept WPA2 OR WPA3 mixed-mode: nmcli's `wifi-sec.key-mgmt
-    // wpa-psk` provisions WPA2 on older NetworkManager builds and
-    // WPA2-or-WPA3 transition mode on newer ones. Either way the
-    // C6 association succeeds. PMF capable but not required so the
-    // station can still associate with the bench AP if the AP has
-    // PMF off (defaults vary across NM releases).
-    wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_WPA3_PSK;
+    // threshold.authmode is a MINIMUM-strength gate, evaluated by
+    // enum-value ordinal. Setting it to WIFI_AUTH_WPA2_WPA3_PSK
+    // rejects single-mode WPA2-PSK APs (lower enum value), causing
+    // reason=211 (NO_AP_FOUND_IN_AUTHMODE_THRESHOLD) on bench
+    // hotspots that advertise plain WPA2-PSK. Drop the floor to
+    // WPA_PSK -- the actual auth runs with the configured PSK
+    // regardless, so the threshold change does not weaken security,
+    // it just stops pre-filtering the AP out. The bench AP is
+    // operator-controlled (B6); a real-EW deployment would set this
+    // tighter via a separate ADR.
+    wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA_PSK;
     wifi_config.sta.pmf_cfg.capable = true;
     wifi_config.sta.pmf_cfg.required = false;
 
