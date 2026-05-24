@@ -1,28 +1,31 @@
 # --- IDF target -----------------------------------------------------------
-# ESP32-C6 has the same USB-Serial-JTAG peripheral as the C3 (D+/D- on
-# GPIO12/GPIO13). No TinyUSB stack needed — the JTAG peripheral exposes a
-# CDC-ACM endpoint to the host directly. Console + protocol RX/TX both ride
-# the usb_serial_jtag driver in main.c.
-CONFIG_IDF_TARGET="esp32c6"
+# ESP32-S2 has native USB-OTG (D+/D- on GPIO19/GPIO20), no USB-Serial-JTAG
+# peripheral. Console + the protocol-mode RX/TX path both go through
+# TinyUSB CDC; main.c does the stdio routing via esp_tusb_init_console().
+CONFIG_IDF_TARGET="esp32s2"
 
-# --- Console / USB-Serial-JTAG --------------------------------------------
-# Route stdio (printf, ESP_LOG) through the USB-Serial-JTAG peripheral.
-CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+# --- Console / USB-OTG TinyUSB CDC ----------------------------------------
+# Disable the standard UART/JTAG console wiring; TinyUSB CDC owns stdio.
+CONFIG_ESP_CONSOLE_NONE=y
 CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
 
-# RX/TX ringbuf sizes are set at runtime via usb_serial_jtag_driver_config_t
-# in firmware/main/main.c (USB_RX_BUF_BYTES / USB_TX_BUF_BYTES). No Kconfig
-# knob exists for the driver-installed buffers in IDF v5.4.
+# TinyUSB stack (managed component espressif/esp_tinyusb, pinned in
+# main/idf_component.yml). CDC interface 0 carries everything.
+CONFIG_USB_OTG_SUPPORTED=y
+CONFIG_TINYUSB_CDC_ENABLED=y
+CONFIG_TINYUSB_CDC_COUNT=1
+# Match the JTAG-driver buffer sizes the C3 salvage used (USB_RX_BUF_BYTES /
+# USB_TX_BUF_BYTES in main.c). The host-side driver assumes at least these.
+CONFIG_TINYUSB_CDC_RX_BUFSIZE=1024
+CONFIG_TINYUSB_CDC_TX_BUFSIZE=1024
 
 # --- Radios off (saves flash, removes coexistence headaches) --------------
-# The C6 has Wi-Fi 6 / BLE 5 / 802.15.4 (Thread/Zigbee). For the servo node
-# we use none of them — disable everything to keep the binary small and
-# remove the coexistence layer entirely.
+# Identical to the C3 salvage. The S2 has no Bluetooth radio anyway, but the
+# Wi-Fi disable keeps the binary small and removes the coexistence layer
+# from the build entirely.
 CONFIG_BT_ENABLED=n
 CONFIG_ESP_WIFI_ENABLED=n
 CONFIG_ESP_COEX_SW_COEXIST_ENABLE=n
-CONFIG_OPENTHREAD_ENABLED=n
-CONFIG_IEEE802154_ENABLED=n
 
 # --- Scheduler / NVS ------------------------------------------------------
 CONFIG_FREERTOS_HZ=1000

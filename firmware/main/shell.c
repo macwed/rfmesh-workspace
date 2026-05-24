@@ -8,7 +8,6 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
-#include "esp_vfs_usb_serial_jtag.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "linenoise/linenoise.h"
@@ -210,18 +209,20 @@ static void register_cmds(void) {
 void shell_run(void) {
     s_exit_requested = false;
 
-    // ESP32-C6 has the USB-Serial-JTAG peripheral, so the IDF helper
-    // esp_console_new_repl_usb_serial_jtag fits cleanly: it installs its
-    // own VFS over the JTAG driver, wires linenoise to it, and returns a
-    // REPL handle. This is the same pattern the original C3 salvage used.
-    esp_console_repl_t *repl = NULL;
-    esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
-    repl_config.prompt              = "servo> ";
-    repl_config.max_cmdline_length  = 128;
-    esp_console_dev_usb_serial_jtag_config_t hw_config =
-        ESP_CONSOLE_DEV_USB_SERIAL_JTAG_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_console_new_repl_usb_serial_jtag(&hw_config,
-                                                         &repl_config, &repl));
+    // The C3 salvage used esp_console_new_repl_usb_serial_jtag, which
+    // internally installs its own USB-Serial-JTAG driver. The S2 has no
+    // such peripheral; there's no symmetric esp_console_new_repl_usb_cdc
+    // for TinyUSB CDC either. Pattern instead: stdio is already routed
+    // to CDC by main.c (esp_tusb_init_console), so we drive linenoise
+    // directly against stdin and use esp_console_run() to dispatch each
+    // line. This matches the IDF `system/console/advanced` example minus
+    // the UART-specific init.
+    esp_console_config_t console_config = {
+        .max_cmdline_length = 128,
+        .max_cmdline_args   = 8,
+        .hint_color         = 0,   // terminal-agnostic: no ANSI hints
+    };
+    ESP_ERROR_CHECK(esp_console_init(&console_config));
 
     linenoiseSetMultiLine(1);
     linenoiseHistorySetMaxLen(16);  // RAM only; spec §6 — no NVS history
@@ -230,19 +231,26 @@ void shell_run(void) {
 
     ESP_LOGI(TAG, "linenoise shell active; type `proto` to return to protocol mode");
 
-    ESP_ERROR_CHECK(esp_console_start_repl(repl));
-
     while (!s_exit_requested) {
-        vTaskDelay(pdMS_TO_TICKS(100));
+        char *line = linenoise("servo> ");
+        if (line == NULL) {
+            // EOF / read error — don't busy-spin; the user can re-attach.
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
+        if (strlen(line) > 0) {
+            linenoiseHistoryAdd(line);
+            int ret = 0;
+            const esp_err_t err = esp_console_run(line, &ret);
+            if (err == ESP_ERR_NOT_FOUND) {
+                printf("error: unrecognised command\r\n");
+            } else if (err != ESP_OK && err != ESP_ERR_INVALID_ARG) {
+                printf("error: %s\r\n", esp_err_to_name(err));
+            }
+        }
+        linenoiseFree(line);
     }
 
-    // cmd_proto sets s_exit_requested = true from inside the REPL task.
-    // We must tear the REPL down BEFORE returning, otherwise its task
-    // keeps reading USB-Serial-JTAG and races protocol_main_loop for
-    // incoming bytes. repl->del(repl) is the canonical cleanup per IDF
-    // v5.4 esp_console_start_repl docs.
-    if (repl != NULL && repl->del != NULL) {
-        ESP_ERROR_CHECK(repl->del(repl));
-    }
+    esp_console_deinit();
     ESP_LOGI(TAG, "shell exited");
 }
