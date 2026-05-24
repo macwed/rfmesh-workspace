@@ -7,10 +7,10 @@
 const PAGES = [
   { key: "link", href: "link.html", label: "Connect nodes" },
   { key: "locate", href: "locate.html", label: "Locate jammer" },
-  { key: "jam", href: "jam.html", label: "Avoid jam" },
+  { key: "jam", href: "jam.html", label: "Avoid jam", expertOnly: true },
   { key: "hide", href: "hide.html", label: "Hide" },
-  { key: "emit", href: "emit.html", label: "Site emitter" },
-  { key: "ideal", href: "ideal.html", label: "Ideal site" },
+  { key: "emit", href: "emit.html", label: "Site emitter", expertOnly: true },
+  { key: "ideal", href: "ideal.html", label: "Ideal site", expertOnly: true },
 ];
 
 function bootExposurePage(cfg) {
@@ -38,7 +38,7 @@ function bootExposurePage(cfg) {
 
 function navHtml(active) {
   const links = PAGES.map((p) =>
-    `<a href="${p.href}" class="${p.key === active ? "on" : ""}">${p.label}</a>`).join("");
+    `<a href="${p.href}" class="${p.key === active ? "on " : ""}${p.expertOnly ? "expert-only" : ""}">${p.label}</a>`).join("");
   return `<nav class="page-nav"><a href="index.html" class="home">⌂</a>${links}</nav>`;
 }
 

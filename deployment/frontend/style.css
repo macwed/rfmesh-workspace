@@ -21,6 +21,13 @@ body {
   background: var(--bg); color: var(--text);
 }
 
+/* Add .expert-only or .simple-only to opt a UI element into URL mode control.
+   Simple is the default; ui-mode.js enables expert content for ?expert=1. */
+html:not(.expert-mode) .expert-only,
+html.expert-mode .simple-only {
+  display: none !important;
+}
+
 #app { display: flex; height: 100vh; }
 #sidebar {
   width: 320px; min-width: 320px; max-width: 320px; flex: 0 0 320px; height: 100%;

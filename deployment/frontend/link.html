@@ -27,8 +27,9 @@
   <title>both3 — Connect nodes</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <link rel="stylesheet" href="style.css?v=20260523b" />
+  <link rel="stylesheet" href="style.css?v=20260524e" />
   <link rel="stylesheet" href="link.css?v=20260523" />
+  <script src="ui-mode.js?v=20260524b"></script>
 </head>
 <body data-page="link">
   <div id="app">
@@ -44,10 +45,10 @@
         <a href="index.html" class="home">&#x2302;</a>
         <a href="link.html" class="on">Connect nodes</a>
         <a href="locate.html">Locate jammer</a>
-        <a href="jam.html">Avoid jam</a>
+        <a href="jam.html" class="expert-only">Avoid jam</a>
         <a href="hide.html">Hide</a>
-        <a href="emit.html">Site emitter</a>
-        <a href="ideal.html">Ideal site</a>
+        <a href="emit.html" class="expert-only">Site emitter</a>
+        <a href="ideal.html" class="expert-only">Ideal site</a>
       </nav>
 
       <!-- ALL-STOP: panic button, always present, two-tap confirm. -->
