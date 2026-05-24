@@ -29,8 +29,9 @@ other workstream's mypy gate (ADR-012 tripwire).
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from rfmesh_contracts import GeodeticPosition, NodeConfig
+from rfmesh_contracts import CommsConfig, GeodeticPosition, NodeConfig
 
+from .comms import CommsLinkConfig, PeerEntry
 from .l1_sweep import L1SweepConfig
 from .rendezvous import RendezvousConfig
 from .servo_motion import MotionConfig
@@ -228,6 +229,105 @@ class MotionOverrideConfig(BaseModel):
         )
 
 
+class CommsOverrideConfig(BaseModel):
+    """YAML stanza enabling DSSS directional-comms mode (ADR-025 Iter 4).
+
+    Wraps two distinct things into one operator-facing block:
+
+    * Physical-layer parameters (``carrier``, ``chip_rate``,
+      ``spreading_factor``, LFSR, TDD timings, max payload) -- these
+      materialise into the frozen ``rfmesh_contracts.CommsConfig``.
+    * Per-link policy (``peer``, ``link_role``, settle, hold,
+      initial message) -- these materialise into the node-layer
+      ``CommsLinkConfig``.
+
+    Presence of a ``comms:`` block enables COMMS mode. Mutually
+    exclusive with ``rendezvous:`` (mutex enforced by
+    ``NodeRuntimeConfig._coherence``) -- one Yagi + one SDR cannot
+    run both DF rendezvous and DSSS comms simultaneously in v1.3.0
+    (ADR-025 Decision B).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    # Physical layer (mirrors CommsConfig defaults; YAML can override any).
+    carrier_freq_hz: float = Field(gt=0.0)
+    chip_rate_hz: float = Field(gt=0.0)
+    spreading_factor: int = Field(default=1023, ge=3)
+    lfsr_taps: tuple[int, ...] = (10, 3)
+    lfsr_seed: int = Field(default=1, gt=0)
+    tdd_slot_ms: float = Field(default=200.0, gt=0.0)
+    tdd_guard_ms: float = Field(default=30.0, ge=0.0)
+    frame_payload_max_bytes: int = Field(default=64, gt=0)
+
+    # Per-link policy (mirrors CommsLinkConfig defaults).
+    peer_node_id: str = Field(min_length=1)
+    peer: _PeerPosition
+    peer_boresight_heading_deg: float | None = None
+    link_role: str = Field(default="tx_first")
+    refine_half_arc_deg: float = Field(default=20.0, gt=0.0)
+    settle_s: float = Field(default=0.20, ge=0.0)
+    min_servo_deg: float = Field(default=-90.0)
+    max_servo_deg: float = Field(default=90.0)
+    link_hold_s: float = Field(default=30.0, gt=0.0)
+    initial_outbox_message_text: str | None = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> CommsOverrideConfig:
+        if self.link_role not in ("tx_first", "rx_first"):
+            msg = f"link_role must be 'tx_first' or 'rx_first' (got {self.link_role!r})."
+            raise ValueError(msg)
+        if self.min_servo_deg >= self.max_servo_deg:
+            msg = (
+                f"CommsOverrideConfig: min_servo_deg ({self.min_servo_deg}) "
+                f"must be < max_servo_deg ({self.max_servo_deg})."
+            )
+            raise ValueError(msg)
+        if not self.lfsr_taps:
+            msg = "lfsr_taps must be non-empty."
+            raise ValueError(msg)
+        return self
+
+    def to_comms_config(self) -> CommsConfig:
+        """Materialise the frozen-contract physical-layer config."""
+        return CommsConfig(
+            carrier_freq_hz=self.carrier_freq_hz,
+            chip_rate_hz=self.chip_rate_hz,
+            spreading_factor=self.spreading_factor,
+            lfsr_taps=tuple(self.lfsr_taps),
+            lfsr_seed=self.lfsr_seed,
+            tdd_slot_ms=self.tdd_slot_ms,
+            tdd_guard_ms=self.tdd_guard_ms,
+            frame_payload_max_bytes=self.frame_payload_max_bytes,
+        )
+
+    def to_link_config(self) -> CommsLinkConfig:
+        """Materialise the node-layer link policy dataclass."""
+        peer_entry = PeerEntry(
+            node_id=self.peer_node_id,
+            position=self.peer.to_contract(),
+            boresight_heading_deg=self.peer_boresight_heading_deg,
+        )
+        initial = (
+            self.initial_outbox_message_text.encode("utf-8")
+            if self.initial_outbox_message_text is not None
+            else None
+        )
+        # link_role is validated above to be one of the two literals.
+        role: str = self.link_role  # narrowed at validator
+        link_role_lit: object = role
+        return CommsLinkConfig(
+            peer=peer_entry,
+            link_role=link_role_lit,  # type: ignore[arg-type]
+            refine_half_arc_deg=self.refine_half_arc_deg,
+            settle_s=self.settle_s,
+            min_servo_deg=self.min_servo_deg,
+            max_servo_deg=self.max_servo_deg,
+            link_hold_s=self.link_hold_s,
+            initial_outbox_message=initial,
+        )
+
+
 class NodeRuntimeConfig(BaseModel):
     """Single-YAML root for one running node (ADR-022).
 
@@ -264,11 +364,26 @@ class NodeRuntimeConfig(BaseModel):
     servo_port: str | None = None
     sweep: SweepOverrideConfig = Field(default_factory=SweepOverrideConfig)
     rendezvous: RendezvousOverrideConfig | None = None
+    comms: CommsOverrideConfig | None = None
     command_endpoint: CommandEndpointConfig = Field(default_factory=CommandEndpointConfig)
     motion: MotionOverrideConfig = Field(default_factory=MotionOverrideConfig)
 
     @model_validator(mode="after")
     def _coherence(self) -> NodeRuntimeConfig:
+        # ADR-025 Decision B: COMMS mode and DF rendezvous share the
+        # one Yagi + one SDR; running both concurrently on the same
+        # node is undefined. The two YAML blocks are mutually
+        # exclusive at config-load time (B3 -- loud at startup,
+        # not silently arbitrated at runtime).
+        if self.comms is not None and self.rendezvous is not None:
+            msg = (
+                "NodeRuntimeConfig: 'comms' and 'rendezvous' are mutually "
+                "exclusive in v1.3.0 (ADR-025 Decision B). One Yagi + one "
+                "SDR cannot run both directional DSSS comms and DF "
+                "rendezvous concurrently; pick one block and remove the "
+                "other."
+            )
+            raise ValueError(msg)
         # A rendezvous block needs a servo to drive; refuse the combination
         # at load time rather than during ``Node.run`` (B3, loud-not-silent).
         if self.rendezvous is not None and self.servo_port is None:
@@ -276,6 +391,15 @@ class NodeRuntimeConfig(BaseModel):
                 "NodeRuntimeConfig: rendezvous requires servo_port to be set "
                 "(rendezvous drives the servo). Either set servo_port or drop "
                 "the rendezvous block."
+            )
+            raise ValueError(msg)
+        # Same constraint for comms: the directional link needs a
+        # servo to point the Yagi at the peer (Iter 4 acquire step).
+        if self.comms is not None and self.servo_port is None:
+            msg = (
+                "NodeRuntimeConfig: comms requires servo_port to be set "
+                "(comms loop points the Yagi at the peer). Either set "
+                "servo_port or drop the comms block."
             )
             raise ValueError(msg)
         # Rendezvous + L1 sweep must agree on the servo arc -- L1SweepLoop and
@@ -310,9 +434,22 @@ class NodeRuntimeConfig(BaseModel):
         """Build the frozen ``MotionConfig`` for the trapezoidal ramp."""
         return self.motion.to_dataclass()
 
+    def comms_link_dataclass(self) -> CommsLinkConfig | None:
+        """Build the node-layer ``CommsLinkConfig``, or ``None`` if comms disabled."""
+        if self.comms is None:
+            return None
+        return self.comms.to_link_config()
+
+    def comms_contract(self) -> CommsConfig | None:
+        """Build the frozen-contract ``CommsConfig``, or ``None`` if comms disabled."""
+        if self.comms is None:
+            return None
+        return self.comms.to_comms_config()
+
 
 __all__ = [
     "CommandEndpointConfig",
+    "CommsOverrideConfig",
     "MotionOverrideConfig",
     "NodeRuntimeConfig",
     "RendezvousOverrideConfig",

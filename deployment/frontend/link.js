@@ -167,6 +167,15 @@
     "detail-clear-fault-cancel-btn",
   );
   const detailCloseBtn = document.getElementById("detail-close");
+  // ADR-025 Iter 4: comms panel (soldier message send / receive).
+  const detailCommsBlock = document.getElementById("detail-comms-block");
+  const detailCommsLink = document.getElementById("detail-comms-link");
+  const detailCommsSent = document.getElementById("detail-comms-sent");
+  const detailCommsRx = document.getElementById("detail-comms-rx");
+  const detailCommsDrop = document.getElementById("detail-comms-drop");
+  const detailCommsInput = document.getElementById("detail-comms-input");
+  const detailCommsSendBtn = document.getElementById("detail-comms-send");
+  const detailCommsLog = document.getElementById("detail-comms-log");
 
   function selectNode(nodeId) {
     state.selectedNodeId = nodeId;
@@ -332,6 +341,32 @@
       detailClearFaultConfirm.hidden = true;
       detailClearFaultBtn.disabled = false;
     }
+
+    // ADR-025 Iter 4: comms panel visible iff the node has reported
+    // any comms_status frame (signals the loop is wired). Soldier
+    // sees link state + message log + send box.
+    if (n.comms) {
+      detailCommsBlock.hidden = false;
+      detailCommsLink.textContent = n.comms.link_up ? "UP" : "DOWN";
+      detailCommsLink.style.color = n.comms.link_up ? "var(--high)" : "var(--low)";
+      detailCommsSent.textContent = n.comms.frames_sent;
+      detailCommsRx.textContent = n.comms.frames_received;
+      detailCommsDrop.textContent = n.comms.frames_dropped;
+      // Send button disabled until link is up and a peer is known.
+      const canSend = n.comms.link_up && !!((n.peer && n.peer.node_id) || n.peer_id);
+      detailCommsSendBtn.disabled = !canSend;
+      detailCommsInput.disabled = !canSend;
+      // Render newest 50 messages.
+      detailCommsLog.innerHTML = "";
+      const inbox = n.comms_inbox || [];
+      for (const m of inbox) {
+        const li = document.createElement("li");
+        li.textContent = `[${m.peer}] ${m.text}`;
+        detailCommsLog.appendChild(li);
+      }
+    } else {
+      detailCommsBlock.hidden = true;
+    }
   }
 
   detailSliderEl.addEventListener("input", () => {
@@ -378,6 +413,63 @@
     if (!state.selectedNodeId) return;
     detailMsgEl.textContent = "STOP this-node not yet implemented; use ALL STOP.";
     detailMsgEl.style.color = "var(--medium)";
+  });
+
+  // ADR-025 Iter 4: comms-message send. POSTs send_comms_message via
+  // the existing /command/{node_id} plumbing; backend forwards to the
+  // node WS where CommsLoop.queue_outbound picks it up on the next TX
+  // slot. Soldier UX: type, press Enter or click Send, see result.
+  async function sendCommsMessage() {
+    const id = state.selectedNodeId;
+    if (!id) return;
+    const n = state.nodes.get(id);
+    if (!n || !n.comms || !n.comms.link_up) {
+      detailMsgEl.textContent = "Link is DOWN — message not sent.";
+      detailMsgEl.style.color = "var(--low)";
+      return;
+    }
+    const text = (detailCommsInput.value || "").trim();
+    if (!text) return;
+    const peerId = (n.peer && n.peer.node_id) || n.peer_id;
+    if (!peerId) {
+      detailMsgEl.textContent = "No peer known on this node.";
+      detailMsgEl.style.color = "var(--low)";
+      return;
+    }
+    detailCommsSendBtn.disabled = true;
+    detailMsgEl.textContent = "Sending message…";
+    detailMsgEl.style.color = "var(--muted)";
+    try {
+      const resp = await fetch(`/command/${encodeURIComponent(id)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "send_comms_message",
+          peer_node_id: peerId,
+          payload_text: text,
+          requestor_id: "ui-link",
+        }),
+      });
+      const body = await resp.json().catch(() => ({}));
+      if (resp.ok) {
+        detailMsgEl.textContent = `Sent → ${peerId}`;
+        detailMsgEl.style.color = "var(--high)";
+        detailCommsInput.value = "";
+      } else {
+        const reason = body.detail || resp.statusText;
+        detailMsgEl.textContent = `Refused: ${reason}`;
+        detailMsgEl.style.color = "var(--low)";
+      }
+    } catch (e) {
+      detailMsgEl.textContent = `Network error: ${e.message}`;
+      detailMsgEl.style.color = "var(--low)";
+    } finally {
+      detailCommsSendBtn.disabled = false;
+    }
+  }
+  detailCommsSendBtn.addEventListener("click", sendCommsMessage);
+  detailCommsInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") sendCommsMessage();
   });
 
   // ADR-024 §8 two-tap confirm (symmetric with ALL-STOP).
@@ -532,8 +624,48 @@
     } else if (payload.kind === "command_refused") {
       // Node-side refusal (B3). Surface red toast on the detail panel.
       showRefusal(payload.node_id, payload.data || {});
+    } else if (payload.kind === "comms_status") {
+      // ADR-025 Iter 4: CommsLoop pushed a stats snapshot (link
+      // up/down, frames sent/received/dropped, last tx/rx
+      // timestamps). Latched into the node record so renderDetail
+      // can show it without polling.
+      mergeCommsStatus(payload.node_id, payload.data || {});
+    } else if (payload.kind === "comms_rx") {
+      // ADR-025 Iter 4: a decoded inbound DSSS frame arrived from
+      // the linked peer. Append to the log, newest-first.
+      appendCommsRx(payload.node_id, payload.data || {});
     }
     // Future kinds. Schema additive; unknown kinds ignored honestly.
+  }
+
+  function mergeCommsStatus(nodeId, snap) {
+    if (!nodeId) return;
+    const n = state.nodes.get(nodeId) || { node_id: nodeId };
+    n.comms = {
+      link_up: !!snap.link_up,
+      frames_sent: snap.frames_sent | 0,
+      frames_received: snap.frames_received | 0,
+      frames_dropped: snap.frames_dropped | 0,
+      last_rx_t_unix_ns: snap.last_rx_t_unix_ns || null,
+      last_tx_t_unix_ns: snap.last_tx_t_unix_ns || null,
+    };
+    state.nodes.set(nodeId, n);
+    if (state.selectedNodeId === nodeId) renderDetail();
+  }
+
+  function appendCommsRx(nodeId, msg) {
+    if (!nodeId) return;
+    const n = state.nodes.get(nodeId) || { node_id: nodeId };
+    if (!Array.isArray(n.comms_inbox)) n.comms_inbox = [];
+    // Newest-first; cap at 50 to keep DOM small.
+    n.comms_inbox.unshift({
+      peer: msg.peer || msg.src_node_id || "?",
+      text: msg.text || msg.payload_text || "",
+      t_unix_ns: msg.t_unix_ns || Date.now() * 1e6,
+    });
+    if (n.comms_inbox.length > 50) n.comms_inbox.length = 50;
+    state.nodes.set(nodeId, n);
+    if (state.selectedNodeId === nodeId) renderDetail();
   }
 
   function mergeNodeStatus(nodeId, status) {

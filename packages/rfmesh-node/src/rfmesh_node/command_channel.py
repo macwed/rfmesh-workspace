@@ -41,15 +41,25 @@ from typing import Any
 
 import aiohttp
 
-from .commands import AllStopCommand, ClearFaultCommand, ManualSteerCommand, parse_command
+from .commands import (
+    AllStopCommand,
+    ClearFaultCommand,
+    ManualSteerCommand,
+    SendCommsMessageCommand,
+    parse_command,
+)
 
 _LOG = logging.getLogger(__name__)
 
 CommandHandler = Callable[
-    [ManualSteerCommand | AllStopCommand | ClearFaultCommand], Awaitable[None]
+    [ManualSteerCommand | AllStopCommand | ClearFaultCommand | SendCommsMessageCommand],
+    Awaitable[None],
 ]
 """Async callable consuming one command. Implemented by NodeController
-(or a test fake)."""
+(or a test fake). ``SendCommsMessageCommand`` was added in ADR-025 Iter 4 --
+the controller routes it to ``CommsLoop.queue_outbound`` when comms
+mode is active; in DF mode the controller refuses (B3 -- loud no-op
+rather than silent drop)."""
 
 HelloPayloadFn = Callable[[], dict[str, Any]]
 """Returns the ``node_hello`` payload sent once per WS connect (ADR-022).

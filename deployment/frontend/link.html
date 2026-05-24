@@ -157,6 +157,35 @@
           </div>
         </div>
         <p id="detail-msg" class="caveat">&nbsp;</p>
+
+        <!-- ADR-025 Iter 4: DSSS comms panel. Visible only when the
+             selected node runs comms mode (kind: comms_status frame
+             with link_up != null). Soldier-grade UX: big buttons, no
+             jargon. Send is a single text input + Send button; received
+             messages append below newest-first. -->
+        <div id="detail-comms-block" hidden>
+          <hr />
+          <h3>Messages</h3>
+          <p class="caveat">
+            Link: <span id="detail-comms-link">unknown</span>
+            &middot; Sent: <span id="detail-comms-sent">0</span>
+            &middot; Received: <span id="detail-comms-rx">0</span>
+            &middot; Dropped: <span id="detail-comms-drop">0</span>
+          </p>
+          <div class="row">
+            <input
+              type="text"
+              id="detail-comms-input"
+              maxlength="256"
+              placeholder="Type message and press Send"
+            />
+            <button id="detail-comms-send" class="primary">Send</button>
+          </div>
+          <p class="caveat">
+            Plain text, max 256 chars. Goes to the linked partner only.
+          </p>
+          <ul id="detail-comms-log" class="comms-log"></ul>
+        </div>
       </section>
     </aside>
 

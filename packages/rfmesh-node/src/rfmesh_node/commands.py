@@ -67,20 +67,48 @@ class ClearFaultCommand(BaseModel):
     requestor_id: str = Field(default="unknown", max_length=64)
 
 
+class SendCommsMessageCommand(BaseModel):
+    """Operator typed a message into the comms panel; queue it on the TX outbox (ADR-025 Iter 4).
+
+    The frame size is bounded by ``CommsConfig.frame_payload_max_bytes``
+    enforced by the comms loop at queue-time. The backend forwards
+    this command verbatim through the existing ``/command/{node_id}``
+    plumbing (same path as ``ManualSteerCommand`` -- no new endpoint
+    needed). Node-side handler calls
+    ``CommsLoop.queue_outbound(payload_bytes())``.
+
+    Soldier surface (link.html): a text input + send button. Bytes
+    in ``payload_text`` are encoded as UTF-8 on the node side. A
+    future "binary upload" surface (file attachments) would add a
+    sibling command kind rather than overloading this one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["send_comms_message"] = "send_comms_message"
+    peer_node_id: str = Field(min_length=1, max_length=64)
+    payload_text: str = Field(min_length=1, max_length=256)
+    requestor_id: str = Field(default="unknown", max_length=64)
+
+    def payload_bytes(self) -> bytes:
+        """UTF-8 encoding of ``payload_text``; what goes on the wire."""
+        return self.payload_text.encode("utf-8")
+
+
 Command = Annotated[
-    ManualSteerCommand | AllStopCommand | ClearFaultCommand,
+    ManualSteerCommand | AllStopCommand | ClearFaultCommand | SendCommsMessageCommand,
     Field(discriminator="kind"),
 ]
 
 
-_COMMAND_ADAPTER: TypeAdapter[ManualSteerCommand | AllStopCommand | ClearFaultCommand] = (
-    TypeAdapter(Command)
-)
+_COMMAND_ADAPTER: TypeAdapter[
+    ManualSteerCommand | AllStopCommand | ClearFaultCommand | SendCommsMessageCommand
+] = TypeAdapter(Command)
 
 
 def parse_command(
     frame: str,
-) -> ManualSteerCommand | AllStopCommand | ClearFaultCommand:
+) -> ManualSteerCommand | AllStopCommand | ClearFaultCommand | SendCommsMessageCommand:
     """Decode a JSON text frame into a typed Command.
 
     Raises:
@@ -105,5 +133,6 @@ __all__ = [
     "ClearFaultCommand",
     "Command",
     "ManualSteerCommand",
+    "SendCommsMessageCommand",
     "parse_command",
 ]

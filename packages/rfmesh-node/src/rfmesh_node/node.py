@@ -47,7 +47,12 @@ from rfmesh_contracts import (
 
 from .capabilities import build_estimators, detect_active_capabilities
 from .command_channel import CommandChannel
-from .commands import AllStopCommand, ClearFaultCommand, ManualSteerCommand
+from .commands import (
+    AllStopCommand,
+    ClearFaultCommand,
+    ManualSteerCommand,
+    SendCommsMessageCommand,
+)
 from .controller import NodeController
 
 if TYPE_CHECKING:
@@ -463,7 +468,12 @@ class Node:
 
     async def _handle_command(
         self,
-        command: ManualSteerCommand | AllStopCommand | ClearFaultCommand,
+        command: (
+            ManualSteerCommand
+            | AllStopCommand
+            | ClearFaultCommand
+            | SendCommsMessageCommand
+        ),
     ) -> None:
         """Dispatch operator commands.
 

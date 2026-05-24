@@ -116,6 +116,25 @@ class ClearFaultCommand(BaseModel):
     requestor_id: str = Field(default="unknown", max_length=64)
 
 
+class SendCommsMessageCommand(BaseModel):
+    """Operator typed a DSSS comms message in the link panel (ADR-025 Iter 4).
+
+    Backend forwards through the same ``/command/{node_id}`` plumbing
+    as ``ManualSteerCommand``; node-side handler parses + queues onto
+    the ``CommsLoop`` outbox. Schema mirrors
+    ``rfmesh_node.commands.SendCommsMessageCommand`` (duplication is
+    deliberate -- backend / node validate independently; both raise
+    422 on schema-invalid payloads).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str = Field(default="send_comms_message", pattern="^send_comms_message$")
+    peer_node_id: str = Field(min_length=1, max_length=64)
+    payload_text: str = Field(min_length=1, max_length=256)
+    requestor_id: str = Field(default="unknown", max_length=64)
+
+
 # ---------------------------------------------------------------------------
 # Per-node WS registry
 # ---------------------------------------------------------------------------
@@ -366,11 +385,16 @@ async def post_command(
     kind = payload.get("kind", "manual_steer")
     try:
         if kind == "manual_steer":
-            command = ManualSteerCommand.model_validate(payload)
+            command: ManualSteerCommand | SendCommsMessageCommand = (
+                ManualSteerCommand.model_validate(payload)
+            )
+        elif kind == "send_comms_message":
+            command = SendCommsMessageCommand.model_validate(payload)
         else:
             msg = (
                 f"unknown command kind {kind!r}. Use POST /command/{{node_id}} "
-                "for manual_steer; POST /command_broadcast for all_stop."
+                "for manual_steer / send_comms_message; "
+                "POST /command_broadcast for all_stop."
             )
             raise HTTPException(status_code=422, detail=msg)
     except ValidationError as exc:
