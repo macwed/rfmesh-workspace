@@ -1,16 +1,90 @@
 # rfmesh servo controller firmware
 
-ESP32-S2 firmware implementing the device side of `servo_uart v1`
-(`../docs/wire-protocols/servo_uart_v1.md`). Drives one MG996 hobby
-servo (axis 0 = pan) over LEDC PWM, takes binary protocol frames over
-USB-OTG (TinyUSB CDC), and falls back to a `linenoise` shell for
-human emergency debugging.
+> **2026-05-24 (ADR-027 / ADR-015):** Actual build target is **ESP32-C6**
+> (per `firmware/sdkconfig.defaults` line 6 and ADR-015), not the S2 the
+> body of this README still describes. The transport is **WiFi-station +
+> TCP server on port 5555** (per ADR-027), not USB-CDC; USB-CDC stays
+> wired only as the `ESP_LOG` console path so the operator can read the
+> DHCP-assigned IP off the boot log. See "WiFi bring-up" immediately
+> below; the rest of the README is stale and pending a sweep.
 
-Ported from the original ESP32-C3 build per `INHERITED_CONTEXT.md`
-§1.1. The wire protocol is unchanged — only the USB transport layer
-underneath moved from C3's `usb_serial_jtag_*` peripheral to S2's
-USB-OTG with TinyUSB CDC. The 29 host-buildable C tests pass without
-modification; see "Host-side unit tests" below.
+ESP32-C6 firmware implementing the device side of `servo_uart v1`
+(`../docs/wire-protocols/servo_uart_v1.md`). Drives one MG996 hobby
+servo (axis 0 = pan) over LEDC PWM and takes binary protocol frames
+over **TCP socket** (laptop side: `TcpTransport` in
+`packages/rfmesh-servo/src/rfmesh_servo/transport.py`). The wire
+protocol (COBS+TLV+CRC-16/CCITT-FALSE) is byte-identical to the
+historical USB-CDC build — only the transport differs.
+
+## WiFi bring-up (ADR-027)
+
+The bench AP credentials are **hardcoded in `firmware/main/wifi_sta.c`**:
+
+```c
+#define WIFI_SSID  "rfmesh"
+#define WIFI_PSK   "karasie01"
+```
+
+Change there + reflash if the bench AP credentials ever change.
+
+**First-boot sequence (one-time per node):**
+
+1. Start a WiFi hotspot on the laptop with SSID `"rfmesh"` /
+   PSK `"karasie01"`. On Linux + NetworkManager:
+   ```bash
+   nmcli connection add type wifi ifname '*' con-name rfmesh-ap \
+       autoconnect no ssid rfmesh mode ap
+   nmcli connection modify rfmesh-ap 802-11-wireless.band bg \
+       ipv4.method shared
+   nmcli connection modify rfmesh-ap wifi-sec.key-mgmt wpa-psk \
+       wifi-sec.psk karasie01
+   nmcli connection up rfmesh-ap
+   ```
+2. Flash the ESP32-C6 (USB plugged in, see "Flash" below).
+3. Watch the boot log:
+   ```bash
+   idf.py -p /dev/ttyACM0 monitor   # Ctrl+] to exit
+   ```
+   After ~3-5 s of association you will see:
+   ```
+   I (4523) wifi_sta: got IP: 192.168.4.11 (write into laptop YAML as
+   servo_port: "tcp://192.168.4.11:5555")
+   ```
+4. Copy the IP into your node YAML:
+   ```yaml
+   # configs/node-laptop-01.yaml
+   servo_port: "tcp://192.168.4.11:5555"
+   ```
+5. Unplug USB — the C6 keeps the WiFi link up. (You may keep USB
+   plugged for the console log if you prefer; it does not interfere.)
+
+**Reconnect behaviour.** Disconnect events (AP down, wrong PSK,
+range) are logged loud per B3 and trigger an `esp_wifi_connect`
+retry after 500 ms. The node will reassociate without reboot as
+soon as the AP is back. If the laptop AP IP pool gives out a
+different lease, you must update the YAML — set a static DHCP lease
+on the AP (keyed on the C6 MAC) if you want stable IPs across
+reboots.
+
+**Flash.** ESP-IDF on `$PATH`, then:
+
+```bash
+cd firmware/
+idf.py set-target esp32c6        # only on a fresh checkout
+idf.py build
+idf.py -p /dev/ttyACM0 flash monitor
+```
+
+The C6's native USB-Serial-JTAG auto-triggers download mode on
+reset, so no BOOT/RESET button dance is needed.
+
+---
+
+*The body of the README below describes the prior ESP32-S2 build and
+is preserved for now; the salvaged 29 host-buildable C tests for the
+framing layer still apply (the wire codec is unchanged).*
+
+---
 
 ## Hardware
 

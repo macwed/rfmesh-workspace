@@ -163,6 +163,55 @@ flags.
 
 ---
 
+## 2c. WiFi servo path (ADR-027 — no USB-CDC servo cable)
+
+If the USB-CDC servo link between the laptop and the 2x ESP32-C6
+is unstable (enumeration glitch, autosuspend, hub contention), the
+firmware ships an alternative transport: the ESP32-C6 joins a
+laptop-hosted WiFi AP and hosts a TCP server on port 5555 for the
+servo control protocol. Wire format unchanged; only the byte pipe
+differs.
+
+**One-time setup:**
+
+1. Start the bench AP on the laptop:
+   ```bash
+   nmcli connection add type wifi ifname '*' con-name rfmesh-ap \
+       autoconnect no ssid rfmesh mode ap
+   nmcli connection modify rfmesh-ap 802-11-wireless.band bg \
+       ipv4.method shared
+   nmcli connection modify rfmesh-ap wifi-sec.key-mgmt wpa-psk \
+       wifi-sec.psk karasie01
+   nmcli connection up rfmesh-ap
+   ```
+2. Flash the WiFi firmware on both ESP32-C6 (see
+   `firmware/README.md` → "WiFi bring-up"). On first boot each node
+   logs its DHCP-assigned IP to the USB console — read it via
+   `idf.py -p /dev/ttyACM0 monitor`.
+3. Edit the two YAMLs:
+   ```yaml
+   # configs/node-laptop-01.yaml
+   servo_port: "tcp://192.168.4.11:5555"   # IP from boot log
+   # configs/node-laptop-02.yaml
+   servo_port: "tcp://192.168.4.12:5555"
+   ```
+4. Unplug the USB cables (optional — they stay safe as console
+   loggers, don't interfere with TCP). Run §3 unchanged — the
+   bring-up script doesn't care about the transport.
+
+For a **static-IP-per-node** setup (stable across reboots), bind
+each C6 MAC to a fixed lease on the AP:
+```bash
+# nmcli does not expose static leases directly; edit
+# /etc/NetworkManager/system-connections/rfmesh-ap.nmconnection
+# and add under [ipv4]:
+#   dhcp-leases=AA:BB:CC:DD:EE:11,192.168.4.11
+#   dhcp-leases=AA:BB:CC:DD:EE:12,192.168.4.12
+# Then: nmcli connection reload && nmcli connection up rfmesh-ap
+```
+
+---
+
 ## 3. Bring up the demo (3 terminals)
 
 Run the preflight check once first; it loudly refuses if anything is

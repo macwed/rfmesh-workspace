@@ -14,15 +14,31 @@ CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
 # in firmware/main/main.c (USB_RX_BUF_BYTES / USB_TX_BUF_BYTES). No Kconfig
 # knob exists for the driver-installed buffers in IDF v5.4.
 
-# --- Radios off (saves flash, removes coexistence headaches) --------------
-# The C6 has Wi-Fi 6 / BLE 5 / 802.15.4 (Thread/Zigbee). For the servo node
-# we use none of them — disable everything to keep the binary small and
-# remove the coexistence layer entirely.
+# --- Radios (ADR-027: WiFi station for servo TCP transport) ---------------
+# The C6 has Wi-Fi 6 / BLE 5 / 802.15.4 (Thread/Zigbee). The servo node
+# uses WiFi station mode only -- BLE / OpenThread / 802.15.4 stay off
+# (no coexistence layer needed when only one radio is active).
 CONFIG_BT_ENABLED=n
-CONFIG_ESP_WIFI_ENABLED=n
+CONFIG_ESP_WIFI_ENABLED=y
 CONFIG_ESP_COEX_SW_COEXIST_ENABLE=n
 CONFIG_OPENTHREAD_ENABLED=n
 CONFIG_IEEE802154_ENABLED=n
+
+# --- WiFi station tunables ------------------------------------------------
+# Static-RX-buffer count drives RAM use; the default 10 is fine for our
+# single-TCP-client servo workload. WPA2-PSK auth + PMF-capable (not
+# required) covers the bench AP (SSID "rfmesh", PSK "karasie01" --
+# hardcoded in wifi_sta.c).
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+
+# --- LWIP (TCP server on :5555) -------------------------------------------
+# One listening socket + one accepted client at a time, plus the DHCP
+# client socket. The IDF default of 10 sockets covers this with margin.
+CONFIG_LWIP_MAX_SOCKETS=10
+CONFIG_LWIP_TCP_KEEPIDLE_DEFAULT=30
+CONFIG_LWIP_TCP_KEEPINTVL_DEFAULT=5
+CONFIG_LWIP_TCP_KEEPCNT_DEFAULT=3
 
 # --- Scheduler / NVS ------------------------------------------------------
 CONFIG_FREERTOS_HZ=1000
