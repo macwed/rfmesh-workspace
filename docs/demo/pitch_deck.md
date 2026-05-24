@@ -176,6 +176,8 @@ The geolocation pipeline is **shipped** (not roadmap):
 
 20 m at 5 km is a *target*. We hit it with L2 phase-coherent nodes + density, not with L1 alone. Demo shows the ellipse shrinking as nodes join + the L1/L2 σ split honestly on the dashboard. **No per-sensor magic.**
 
+> *Peer bearings carry an honest Bayesian prior; jammer bearings don't. Same estimator path, two epistemic statuses, no double-counting (ADR-026).* The fusion pipeline filters peer-acquired bearings out of emitter geolocation per-peak: a secondary peak caught off-axis during a peer-refine sweep still contributes to the jammer fix. Density preserved.
+
 ---
 
 ## Team & ask
