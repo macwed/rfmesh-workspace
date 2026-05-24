@@ -28,6 +28,21 @@ dependencies = [
     "scipy>=1.14",
 ]
 
+# Test-only dependency on rfmesh-sdr (ADR-025 Iter 3): the DSSS
+# end-to-end loopback test (``test_dsss_loopback_e2e.py``) wires
+# ``SyntheticTransmitter`` + ``LoopbackChannel`` + ``LoopbackReceiver``
+# from rfmesh-sdr into a closed comms loop. Package source code
+# must NEVER import rfmesh-sdr (B5 purity + WD-1 cross-sibling
+# rule); the dependency lives here so the requirement is captured
+# in metadata even though tests are outside the importable
+# package and pick rfmesh-sdr up transitively from the workspace
+# venv at the moment. Mirror of the rfmesh-dsp + rfmesh-sdr
+# test-group pattern.
+[dependency-groups]
+test = [
+    "rfmesh-sdr",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
