@@ -147,7 +147,15 @@
   const detailSendBtn = document.getElementById("detail-send-steer");
   const detailStopBtn = document.getElementById("detail-stop");
   const detailMsgEl = document.getElementById("detail-msg");
+  const detailClearFaultBlock = document.getElementById("detail-clear-fault-block");
   const detailClearFaultBtn = document.getElementById("detail-clear-fault");
+  const detailClearFaultConfirm = document.getElementById("detail-clear-fault-confirm");
+  const detailClearFaultConfirmBtn = document.getElementById(
+    "detail-clear-fault-confirm-btn",
+  );
+  const detailClearFaultCancelBtn = document.getElementById(
+    "detail-clear-fault-cancel-btn",
+  );
   const detailCloseBtn = document.getElementById("detail-close");
 
   function selectNode(nodeId) {
@@ -267,8 +275,13 @@
     } else {
       detailMsgEl.textContent = "";
     }
-    // ADR-024 §8: Clear FAULT button visible only in FAULT state.
-    detailClearFaultBtn.hidden = n.state !== "fault";
+    // ADR-024 §8: Clear FAULT block visible only in FAULT state.
+    // Two-tap symmetric with ALL-STOP (demo-integrity follow-up).
+    detailClearFaultBlock.hidden = n.state !== "fault";
+    if (n.state !== "fault") {
+      detailClearFaultConfirm.hidden = true;
+      detailClearFaultBtn.disabled = false;
+    }
   }
 
   detailSliderEl.addEventListener("input", () => {
@@ -317,7 +330,16 @@
     detailMsgEl.style.color = "var(--medium)";
   });
 
-  detailClearFaultBtn.addEventListener("click", async () => {
+  // ADR-024 §8 two-tap confirm (symmetric with ALL-STOP).
+  detailClearFaultBtn.addEventListener("click", () => {
+    detailClearFaultConfirm.hidden = false;
+    detailClearFaultBtn.disabled = true;
+  });
+  detailClearFaultCancelBtn.addEventListener("click", () => {
+    detailClearFaultConfirm.hidden = true;
+    detailClearFaultBtn.disabled = false;
+  });
+  detailClearFaultConfirmBtn.addEventListener("click", async () => {
     const id = state.selectedNodeId;
     if (!id) return;
     detailMsgEl.textContent = "Clearing FAULT…";
@@ -339,6 +361,9 @@
     } catch (e) {
       detailMsgEl.textContent = `Network error: ${e.message}`;
       detailMsgEl.style.color = "var(--low)";
+    } finally {
+      detailClearFaultConfirm.hidden = true;
+      detailClearFaultBtn.disabled = false;
     }
   });
 

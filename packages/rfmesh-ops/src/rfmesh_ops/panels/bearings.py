@@ -187,12 +187,24 @@ class BearingsPanel(Panel):
             markersize=8,
             markeredgewidth=2,
         )
+        # demo-integrity rec on 53140df: 7pt is unreadable in field sun;
+        # use a "REFUSED" badge (bold, 10pt) + the reason at a legible
+        # 9pt below it so the jury reads the failure at 2 seconds.
         reason = report.refusal_reason or "L1 refused"
         self.ax.annotate(
-            f"{node_id}: {reason}",
+            f"REFUSED  {node_id}",
             (east_m, north_m),
-            xytext=(6, 6),
+            xytext=(6, 8),
             textcoords="offset points",
-            fontsize=7,
+            fontsize=10,
+            color="red",
+            fontweight="bold",
+        )
+        self.ax.annotate(
+            reason,
+            (east_m, north_m),
+            xytext=(6, -8),
+            textcoords="offset points",
+            fontsize=9,
             color="red",
         )

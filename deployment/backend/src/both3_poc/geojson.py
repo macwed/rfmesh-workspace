@@ -68,6 +68,9 @@ def fix_to_features(
         "orientation_deg": fix.confidence_ellipse_95.orientation_deg,
         "area_m2": fix.confidence_ellipse_95.area_m2,
         "gdop": fix.gdop,
+        # ADR-013 §G3: surface the uncomputable reason so locate.html
+        # renders "uncomputable (<reason>)" instead of the sentinel float.
+        "gdop_uncomputable_reason": getattr(fix, "gdop_uncomputable_reason", None),
         "confidence_level": fix.confidence_level.value,
         "method": fix.method,
         "emitter_class": fix.emitter_class.value if fix.emitter_class else None,

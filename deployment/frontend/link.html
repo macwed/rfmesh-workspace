@@ -142,9 +142,14 @@
           <button id="detail-stop" class="warning">STOP this node</button>
         </div>
         <!-- Visible only when node.state === "fault" (ADR-024 §8). -->
-        <button id="detail-clear-fault" class="warning" hidden>
-          Clear FAULT
-        </button>
+        <div id="detail-clear-fault-block" hidden>
+          <button id="detail-clear-fault" class="warning">Clear FAULT</button>
+          <p class="caveat">Two-tap. Operator ack only after underlying condition is fixed.</p>
+          <div id="detail-clear-fault-confirm" class="confirm" hidden>
+            <button id="detail-clear-fault-confirm-btn" class="warning">CONFIRM CLEAR</button>
+            <button id="detail-clear-fault-cancel-btn" class="ghost">Cancel</button>
+          </div>
+        </div>
         <p id="detail-msg" class="caveat">&nbsp;</p>
       </section>
     </aside>

@@ -59,6 +59,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import numpy as np
+from rfmesh_contracts.enums import (  # type: ignore[import-untyped, unused-ignore]
+    Capability,
+)
 from rfmesh_contracts.messages import (  # type: ignore[import-untyped, unused-ignore]
     BearingReport,
 )
@@ -168,6 +171,22 @@ def stansfield_seed(
             f"len(node_positions_enu)={len(node_positions_enu)}."
         )
         raise DegenerateGeometryError(msg)
+    # ADR-013 §G4 defense-in-depth (rf-dsp council NOTE on 53140df):
+    # Fuser.fuse() filters L1_REFUSED_PROMINENCE reports out before
+    # calling stansfield_seed. If a future caller bypasses fuse() and
+    # passes a refusal report directly, the sentinel
+    # azimuth_sigma_deg=180.0 would still produce a (very low-weight)
+    # contribution rather than the correct loud refusal. Catch the
+    # bypass here.
+    for i, bearing in enumerate(bearings):
+        if bearing.method is Capability.L1_REFUSED_PROMINENCE:
+            msg = (
+                f"stansfield_seed: bearings[{i}] is a L1_REFUSED_PROMINENCE "
+                "refusal event; the caller (typically Fuser.fuse) must filter "
+                "these out before invoking the solver. Including a sentinel "
+                "report poisons the inverse-variance weight."
+            )
+            raise DegenerateGeometryError(msg)
 
     # Geometric pre-check: at least one pair of nodes must have some
     # baseline. If every node is at (essentially) the same point, the
