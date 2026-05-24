@@ -35,7 +35,9 @@ _PKG_SRC = _HERE.parent / "src"
 if str(_PKG_SRC) not in sys.path:
     sys.path.insert(0, str(_PKG_SRC))
 
-from rfmesh_dsss.link_budget import (  # noqa: E402  (sys.path hop above)
+from rfmesh_dsss.correlation import matched_filter  # noqa: E402  (sys.path hop above)
+from rfmesh_dsss.framing import _preamble_bits, encode_frame  # noqa: E402
+from rfmesh_dsss.link_budget import (  # noqa: E402
     ber_theoretical_bpsk,
     processing_gain_db,
 )
@@ -45,6 +47,7 @@ from rfmesh_dsss.pn_sequence import (  # noqa: E402
     generate_m_sequence,
 )
 from rfmesh_dsss.spreading import despread, spread  # noqa: E402
+from rfmesh_dsss.timing import correct_carrier_phase  # noqa: E402
 
 _GOLDEN_DIR: Final[Path] = _HERE / "golden"
 
@@ -162,12 +165,108 @@ def _link_budget_ref() -> Path:
     )
 
 
+def _frame_roundtrip() -> Path:
+    """Encode a known frame, no channel; pin the bit-stream + CRC."""
+    src_node_id = 7
+    dst_node_id = 42
+    sequence_no = 13
+    payload = b"BoTH3-DSSS"
+    payload_max_bytes = 64
+    bits = encode_frame(
+        src_node_id=src_node_id,
+        dst_node_id=dst_node_id,
+        sequence_no=sequence_no,
+        payload=payload,
+        payload_max_bytes=payload_max_bytes,
+    )
+    description = np.array(
+        "Frame round-trip: 10-byte payload 'BoTH3-DSSS' from src=7 to "
+        "dst=42, seq=13. Pins exact bit layout (preamble + sync 0x1ACFFC1D "
+        "+ header + payload + CRC-16/CCITT-FALSE) and the resulting "
+        "bit-stream length = FIXED_OVERHEAD_BITS (144) + 8 * len(payload)."
+    )
+    return _write(
+        "frame_roundtrip.npz",
+        bits=bits,
+        payload=np.frombuffer(payload, dtype=np.uint8),
+        src_node_id=np.int64(src_node_id),
+        dst_node_id=np.int64(dst_node_id),
+        sequence_no=np.int64(sequence_no),
+        payload_max_bytes=np.int64(payload_max_bytes),
+        description=description,
+    )
+
+
+def _correlation_peak() -> Path:
+    """Matched filter against a known preamble + PN replica.
+
+    Pins the correlation-magnitude array shape and the chip-index
+    location of the peak for a clean (no-noise, no-offset) input.
+    """
+    pn = generate_m_sequence(10, (10, 3), seed=1)
+    # Preamble = framing._preamble_bits (length-63 m-sequence + pad)
+    # -> 64 BPSK symbols -> spread by 1023-chip PN = 65472 chips.
+    preamble_bits = _preamble_bits()
+    preamble_symbols = bpsk_modulate(preamble_bits)
+    preamble_chips = spread(preamble_symbols, pn)
+    # Embed the preamble at chip offset 4096 in a longer zero buffer
+    # (pure-signal input -- not a realistic channel; the test pins the
+    # peak index for the noiseless case as a regression anchor).
+    buffer_size = preamble_chips.size + 8192
+    received = np.zeros(buffer_size, dtype=np.complex64)
+    embed_offset = 4096
+    received[embed_offset : embed_offset + preamble_chips.size] = preamble_chips
+    corr_mag = matched_filter(received, preamble_chips)
+    peak_index = int(np.argmax(corr_mag))
+    peak_value = float(corr_mag[peak_index])
+    description = np.array(
+        "Matched-filter peak: 64-bit preamble * 1023-chip PN embedded at "
+        "chip offset 4096 in zero-padded buffer; pins peak index and peak "
+        "magnitude for noiseless input. Iter 2 acquisition regression anchor."
+    )
+    return _write(
+        "correlation_peak.npz",
+        peak_index=np.int64(peak_index),
+        peak_value=np.float64(peak_value),
+        embed_offset=np.int64(embed_offset),
+        preamble_chip_count=np.int64(preamble_chips.size),
+        description=description,
+    )
+
+
+def _carrier_phase_recovery() -> Path:
+    """Apply a known carrier rotation; pin that the recovered phase de-rotates it."""
+    bits = np.tile(np.array([0, 1], dtype=np.int8), 16)
+    symbols = bpsk_modulate(bits)
+    rotation_rad = np.float64(np.pi / 6)  # 30 degrees
+    rotated = (symbols * np.exp(np.complex64(1j * rotation_rad))).astype(np.complex64)
+    derotated = correct_carrier_phase(rotated)
+    description = np.array(
+        "Carrier-phase recovery: 32 BPSK symbols rotated +30 deg, then "
+        "block-mode Costas-like estimator de-rotates them. Pins the input, "
+        "rotated, and de-rotated arrays so an Iter-3 change to the estimator "
+        "fails this test loudly."
+    )
+    return _write(
+        "carrier_phase_recovery.npz",
+        bits=bits,
+        symbols=symbols,
+        rotation_rad=np.float64(rotation_rad),
+        rotated=rotated,
+        derotated=derotated,
+        description=description,
+    )
+
+
 def main() -> int:
     paths = [
         _pn_len10_seed1_taps10_3(),
         _bpsk_roundtrip(),
         _spread_despread_clean(),
         _link_budget_ref(),
+        _frame_roundtrip(),
+        _correlation_peak(),
+        _carrier_phase_recovery(),
     ]
     for path in paths:
         print(f"wrote {path.relative_to(_HERE.parent.parent.parent)}")
