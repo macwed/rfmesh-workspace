@@ -42,7 +42,12 @@ node:
     heartbeat_interval_s: 2.0
   fusion_endpoint: "http://127.0.0.1:8000/bearings"
 
-# CHANGE: ESP32-C6 servo serial port. /dev/ttyACM0 typical for first device.
+# CHANGE: ESP32-C6 servo endpoint. Two URL shapes accepted:
+#   "/dev/ttyACM0"             - USB-CDC via pyserial (legacy bench path).
+#   "tcp://node-01.local:5555" - WiFi station + TCP server on the ESP32-C6
+#                                (use when 2x USB-CDC on the same laptop is
+#                                unstable; firmware ships TCP server on
+#                                port 5555 by default).
 servo_port: "/dev/ttyACM0"
 
 sweep:

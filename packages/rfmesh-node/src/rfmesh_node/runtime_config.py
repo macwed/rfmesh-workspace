@@ -355,7 +355,11 @@ class NodeRuntimeConfig(BaseModel):
       capabilities: [l1_rssi]
       bearer: {kind: wifi, heartbeat_interval_s: 2.0}
       fusion_endpoint: "http://10.0.0.1:8000/bearings"
-    servo_port: /dev/ttyACM0       # null disables the servo (heartbeat-only node)
+    servo_port: /dev/ttyACM0       # null disables the servo (heartbeat-only node).
+                                   # Also accepts "tcp://host:port" (e.g.
+                                   # "tcp://node-01.local:5555") to talk to an
+                                   # ESP32-C6 WiFi-station servo controller
+                                   # instead of USB-CDC.
     sweep:                         # L1SweepConfig overrides; empty = defaults
       step_deg: 2.0
     rendezvous:                    # null disables rendezvous; present = ADR-019 enabled

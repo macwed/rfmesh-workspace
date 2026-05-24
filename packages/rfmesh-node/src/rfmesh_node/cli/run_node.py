@@ -148,6 +148,15 @@ def _build_servo(runtime: NodeRuntimeConfig) -> ServoDriver | None:
 
     Returns ``None`` unless ``servo_port`` is set AND ``L1_RSSI`` is
     declared. ``Node`` owns the connect/close lifecycle (ADR-019).
+
+    ``servo_port`` accepts two URL shapes:
+      * ``"/dev/ttyACM0"`` (legacy) — opened via
+        :class:`SerialTransport` (pyserial / USB-CDC).
+      * ``"tcp://host:port"`` — opened via :class:`TcpTransport`
+        (ESP32-C6 in WiFi-station mode, hosts a TCP server on
+        port 5555 by default; bench-grade alternative to USB-CDC
+        when USB enumeration / autosuspend / hub contention
+        destabilises the link).
     """
     if runtime.servo_port is None:
         return None
@@ -155,9 +164,25 @@ def _build_servo(runtime: NodeRuntimeConfig) -> ServoDriver | None:
         return None
 
     from rfmesh_servo.driver import ServoDriver  # noqa: PLC0415
-    from rfmesh_servo.transport import SerialTransport  # noqa: PLC0415
+    from rfmesh_servo.transport import SerialTransport, TcpTransport  # noqa: PLC0415
 
-    return ServoDriver(SerialTransport(runtime.servo_port), own_transport=True)
+    port_str = runtime.servo_port
+    if port_str.startswith("tcp://"):
+        from urllib.parse import urlparse  # noqa: PLC0415
+
+        parsed = urlparse(port_str)
+        host = parsed.hostname
+        if not host:
+            msg = (
+                f"_build_servo: servo_port={port_str!r} is missing a hostname; "
+                "expected 'tcp://host:port' (e.g. 'tcp://node-01.local:5555')."
+            )
+            raise ValueError(msg)
+        tcp_port = parsed.port if parsed.port is not None else 5555
+        transport = TcpTransport(host=host, port=tcp_port)
+    else:
+        transport = SerialTransport(port_str)
+    return ServoDriver(transport, own_transport=True)
 
 
 def _build_sweep_loop(

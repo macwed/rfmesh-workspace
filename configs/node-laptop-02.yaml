@@ -26,7 +26,9 @@ node:
     heartbeat_interval_s: 2.0
   fusion_endpoint: "http://127.0.0.1:8000/bearings"
 
-servo_port: "/dev/ttyACM1"     # second ESP32-C6
+# Second ESP32-C6. See node-laptop-01.yaml for the two URL shapes.
+# WiFi-station alternative: "tcp://node-02.local:5555".
+servo_port: "/dev/ttyACM1"
 
 sweep:
   axis: 0
