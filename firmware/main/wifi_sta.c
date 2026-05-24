@@ -23,11 +23,12 @@
 static const char *TAG = "wifi_sta";
 
 // Hardcoded bench credentials. The whole point of the 2-node MVP is
-// that the operator runs one AP on the laptop ("rfmesh", "karasie01")
-// and every node joins it. No NVS provisioning; no per-node secrets.
-// Change here + reflash if the bench AP credentials ever change.
-#define WIFI_SSID  "rfmesh"
-#define WIFI_PSK   "karasie01"
+// that the operator runs one AP on the laptop ("macwed-hotspot",
+// "D7A39F23C909575A31848A0D53") and every node joins it. No NVS
+// provisioning; no per-node secrets. Change here + reflash if the
+// bench AP credentials ever change.
+#define WIFI_SSID  "macwed-hotspot"
+#define WIFI_PSK   "D7A39F23C909575A31848A0D53"
 
 #define WIFI_CONNECTED_BIT BIT0
 

@@ -27,8 +27,8 @@ CONFIG_IEEE802154_ENABLED=n
 # --- WiFi station tunables ------------------------------------------------
 # Static-RX-buffer count drives RAM use; the default 10 is fine for our
 # single-TCP-client servo workload. WPA2-PSK auth + PMF-capable (not
-# required) covers the bench AP (SSID "rfmesh", PSK "karasie01" --
-# hardcoded in wifi_sta.c).
+# required) covers the bench AP (SSID "macwed-hotspot", PSK
+# "D7A39F23C909575A31848A0D53" -- hardcoded in wifi_sta.c).
 CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
 CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
 

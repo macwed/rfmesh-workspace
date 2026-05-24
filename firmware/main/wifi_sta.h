@@ -1,6 +1,7 @@
 // WiFi station setup for the rfmesh servo controller.
 //
-// Hardcoded for the bench AP (SSID "rfmesh", PSK "karasie01"); the
+// Hardcoded for the bench AP (SSID "macwed-hotspot", PSK
+// "D7A39F23C909575A31848A0D53"); the
 // node has no provisioning UX -- it joins the same AP every boot, gets
 // a DHCP lease, and exposes the servo wire protocol over TCP (see
 // tcp_server.h). Loud-fail-and-retry on every disconnect (B3 -- the

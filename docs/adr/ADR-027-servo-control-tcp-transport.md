@@ -15,7 +15,7 @@ Diagnostic options (autosuspend tweaks, separate USB controllers, powered hubs) 
 
 The C6 has WiFi 6 / BLE 5 / 802.15.4 built in. WiFi station mode is the lowest-friction option:
 
-- The C6 joins a laptop-hosted hotspot (SSID `"rfmesh"`, PSK `"karasie01"` — bench-grade hardcoded credentials, see Operational below).
+- The C6 joins a laptop-hosted hotspot (SSID `"macwed-hotspot"`, PSK `"D7A39F23C909575A31848A0D53"` — bench-grade hardcoded credentials, see Operational below).
 - The C6 hosts a TCP server on port 5555.
 - The laptop talks via `socket()` — no `pyserial`, no `udev`, no `/dev/ttyACM*`.
 - The wire format is unchanged. Only the byte pipe differs.
@@ -67,7 +67,7 @@ Single-client-at-a-time is correct per ADR-024 (NodeController single-writer ser
 
 ## Operational
 
-**SSID / PSK.** Hardcoded as `"rfmesh"` / `"karasie01"` in `firmware/main/wifi_sta.c`. Changing requires a re-flash. This is bench-grade: the laptop AP is operator-controlled and the credentials live in a comment one paragraph above the `#define`, so the failure mode of "I changed the AP and forgot to rebuild firmware" is loud (no association) and fast (rebuild + flash takes < 60 s on the C6 build).
+**SSID / PSK.** Hardcoded as `"macwed-hotspot"` / `"D7A39F23C909575A31848A0D53"` in `firmware/main/wifi_sta.c`. Changing requires a re-flash. This is bench-grade: the laptop AP is operator-controlled and the credentials live in a comment one paragraph above the `#define`, so the failure mode of "I changed the AP and forgot to rebuild firmware" is loud (no association) and fast (rebuild + flash takes < 60 s on the C6 build).
 
 **Per-node addressing.** DHCP. Each node logs its assigned IP on the USB-Serial-JTAG console at first boot:
 

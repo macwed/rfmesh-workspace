@@ -21,24 +21,24 @@ historical USB-CDC build — only the transport differs.
 The bench AP credentials are **hardcoded in `firmware/main/wifi_sta.c`**:
 
 ```c
-#define WIFI_SSID  "rfmesh"
-#define WIFI_PSK   "karasie01"
+#define WIFI_SSID  "macwed-hotspot"
+#define WIFI_PSK   "D7A39F23C909575A31848A0D53"
 ```
 
 Change there + reflash if the bench AP credentials ever change.
 
 **First-boot sequence (one-time per node):**
 
-1. Start a WiFi hotspot on the laptop with SSID `"rfmesh"` /
-   PSK `"karasie01"`. On Linux + NetworkManager:
+1. Start a WiFi hotspot on the laptop with SSID `"macwed-hotspot"` /
+   PSK `"D7A39F23C909575A31848A0D53"`. On Linux + NetworkManager:
    ```bash
-   nmcli connection add type wifi ifname '*' con-name rfmesh-ap \
-       autoconnect no ssid rfmesh mode ap
-   nmcli connection modify rfmesh-ap 802-11-wireless.band bg \
+   nmcli connection add type wifi ifname '*' con-name macwed-hotspot \
+       autoconnect no ssid macwed-hotspot mode ap
+   nmcli connection modify macwed-hotspot 802-11-wireless.band bg \
        ipv4.method shared
-   nmcli connection modify rfmesh-ap wifi-sec.key-mgmt wpa-psk \
-       wifi-sec.psk karasie01
-   nmcli connection up rfmesh-ap
+   nmcli connection modify macwed-hotspot wifi-sec.key-mgmt wpa-psk \
+       wifi-sec.psk D7A39F23C909575A31848A0D53
+   nmcli connection up macwed-hotspot
    ```
 2. Flash the ESP32-C6 (USB plugged in, see "Flash" below).
 3. Watch the boot log:

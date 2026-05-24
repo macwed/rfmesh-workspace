@@ -11,7 +11,7 @@
 //
 // Wire protocol (servo_uart_v1) is UNCHANGED. The transport pivot
 // from USB-Serial-JTAG to WiFi+TCP is documented in ADR-027; the
-// SSID/PSK ("rfmesh" / "karasie01") are hardcoded in wifi_sta.c
+// SSID/PSK ("macwed-hotspot" / "D7A39F23C909575A31848A0D53") are hardcoded in wifi_sta.c
 // for the bench AP -- change there + reflash if the bench AP
 // credentials change.
 

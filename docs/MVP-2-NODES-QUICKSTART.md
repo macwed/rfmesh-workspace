@@ -176,13 +176,13 @@ differs.
 
 1. Start the bench AP on the laptop:
    ```bash
-   nmcli connection add type wifi ifname '*' con-name rfmesh-ap \
-       autoconnect no ssid rfmesh mode ap
-   nmcli connection modify rfmesh-ap 802-11-wireless.band bg \
+   nmcli connection add type wifi ifname '*' con-name macwed-hotspot \
+       autoconnect no ssid macwed-hotspot mode ap
+   nmcli connection modify macwed-hotspot 802-11-wireless.band bg \
        ipv4.method shared
-   nmcli connection modify rfmesh-ap wifi-sec.key-mgmt wpa-psk \
-       wifi-sec.psk karasie01
-   nmcli connection up rfmesh-ap
+   nmcli connection modify macwed-hotspot wifi-sec.key-mgmt wpa-psk \
+       wifi-sec.psk D7A39F23C909575A31848A0D53
+   nmcli connection up macwed-hotspot
    ```
 2. Flash the WiFi firmware on both ESP32-C6 (see
    `firmware/README.md` → "WiFi bring-up"). On first boot each node
@@ -203,11 +203,11 @@ For a **static-IP-per-node** setup (stable across reboots), bind
 each C6 MAC to a fixed lease on the AP:
 ```bash
 # nmcli does not expose static leases directly; edit
-# /etc/NetworkManager/system-connections/rfmesh-ap.nmconnection
+# /etc/NetworkManager/system-connections/macwed-hotspot.nmconnection
 # and add under [ipv4]:
 #   dhcp-leases=AA:BB:CC:DD:EE:11,192.168.4.11
 #   dhcp-leases=AA:BB:CC:DD:EE:12,192.168.4.12
-# Then: nmcli connection reload && nmcli connection up rfmesh-ap
+# Then: nmcli connection reload && nmcli connection up macwed-hotspot
 ```
 
 ---
