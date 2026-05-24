@@ -328,6 +328,27 @@ async def node_socket(ws: WebSocket, node_id: str) -> None:
                 await push_to_ui_subscribers(
                     app, {"kind": "command_refused", "node_id": node_id, "data": payload}
                 )
+            elif kind == "node_state":
+                # ADR-024: NodeController emitted a state transition
+                # (SWEEPING / ACQUIRED_PEER / MANUAL_HOLD / PARKED /
+                # FAULT). Backend relays to UI so the badge + countdown
+                # flip within ~200 ms of the firmware event (per the
+                # demo-integrity event-driven-link-state rec).
+                await push_to_ui_subscribers(
+                    app, {"kind": "node_state", "node_id": node_id, "data": payload}
+                )
+            elif kind == "comms_rx":
+                # ADR-025 Iter 4.6: decoded inbound DSSS frame from a
+                # linked peer. The node already stripped padding +
+                # UTF-8-decoded the payload; relay verbatim. link.js
+                # appends to the message log newest-first.
+                await push_to_ui_subscribers(app, payload)
+            elif kind == "comms_status":
+                # ADR-025 Iter 4.6: CommsLoopStats snapshot (link
+                # up/down, frames sent/received/dropped, last tx/rx
+                # timestamps). Relay verbatim; link.js latches per-node
+                # and renders the comms panel state line.
+                await push_to_ui_subscribers(app, payload)
             # Other frames (future ack / status / heartbeat) ignored for now.
     except WebSocketDisconnect:
         pass

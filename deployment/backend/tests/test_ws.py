@@ -363,3 +363,116 @@ def test_push_to_ui_subscribers_no_subscribers_is_noop(app: FastAPI) -> None:
     client = TestClient(app)
     resp = client.post("/_test_push_empty")
     assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# ADR-025 Iter 4.6: comms WS fan-out (node -> backend -> UI)
+# ---------------------------------------------------------------------------
+
+
+def test_comms_rx_frame_fanned_out_to_ui(client: TestClient, app: FastAPI) -> None:
+    """A node-side ``comms_rx`` frame reaches every UI subscriber verbatim.
+
+    Soldier-loop demo gate: node decodes a DSSS frame, pushes
+    ``{kind: comms_rx, node_id, data: {peer, text, t_unix_ns}}`` on
+    its ``/ws/node/{id}`` socket; backend relays to ``/ws/ui``
+    subscribers; ``link.js`` appends to the message log.
+    """
+    frame = {
+        "kind": "comms_rx",
+        "node_id": "node-a",
+        "data": {
+            "peer": "node-b",
+            "text": "hello soldier",
+            "t_unix_ns": 1_800_000_000_000_000_000,
+        },
+    }
+    with (
+        client.websocket_connect("/ws/ui") as ui_ws,
+        client.websocket_connect("/ws/node/node-a") as node_ws,
+    ):
+        node_ws.send_text(json.dumps(frame))
+        received = json.loads(ui_ws.receive_text())
+        assert received["kind"] == "comms_rx"
+        assert received["node_id"] == "node-a"
+        assert received["data"]["peer"] == "node-b"
+        assert received["data"]["text"] == "hello soldier"
+
+
+def test_comms_status_frame_fanned_out_to_ui(client: TestClient, app: FastAPI) -> None:
+    """A node-side ``comms_status`` snapshot reaches UI subscribers verbatim."""
+    snap = {
+        "kind": "comms_status",
+        "node_id": "node-a",
+        "data": {
+            "link_up": True,
+            "frames_sent": 3,
+            "frames_received": 5,
+            "frames_dropped": 1,
+            "last_rx_t_unix_ns": 1_800_000_000_000_000_000,
+            "last_tx_t_unix_ns": 1_800_000_000_000_000_001,
+        },
+    }
+    with (
+        client.websocket_connect("/ws/ui") as ui_ws,
+        client.websocket_connect("/ws/node/node-a") as node_ws,
+    ):
+        node_ws.send_text(json.dumps(snap))
+        received = json.loads(ui_ws.receive_text())
+        assert received["kind"] == "comms_status"
+        assert received["node_id"] == "node-a"
+        assert received["data"]["link_up"] is True
+        assert received["data"]["frames_sent"] == 3
+        assert received["data"]["frames_received"] == 5
+        assert received["data"]["frames_dropped"] == 1
+
+
+def test_node_state_frame_fanned_out_to_ui(client: TestClient, app: FastAPI) -> None:
+    """A node-side ``node_state`` frame (ADR-024) reaches UI subscribers.
+
+    Closes a pre-existing gap surfaced during the Iter 4.6 review:
+    NodeController pushes ``node_state`` via CommandChannel but the
+    backend was silently dropping the frame. The dashboard's
+    state-badge flip therefore depended on the 2-second heartbeat
+    cadence rather than the event-driven ~200 ms path the
+    demo-integrity rec called for. Fixed alongside comms fan-out.
+    """
+    state = {
+        "kind": "node_state",
+        "node_id": "node-a",
+        "state": "sweeping",
+        "status_detail": "",
+        "manual_hold_expires_at": None,
+        "controller_ready": True,
+    }
+    with (
+        client.websocket_connect("/ws/ui") as ui_ws,
+        client.websocket_connect("/ws/node/node-a") as node_ws,
+    ):
+        node_ws.send_text(json.dumps(state))
+        received = json.loads(ui_ws.receive_text())
+        assert received["kind"] == "node_state"
+        assert received["node_id"] == "node-a"
+        assert received["data"]["state"] == "sweeping"
+
+
+def test_unknown_node_frame_kind_is_ignored(client: TestClient, app: FastAPI) -> None:
+    """Future / unknown frame kinds are silently dropped (additive schema)."""
+    junk = {"kind": "self_destruct", "node_id": "node-a", "payload": "boom"}
+    with (
+        client.websocket_connect("/ws/ui") as ui_ws,
+        client.websocket_connect("/ws/node/node-a") as node_ws,
+    ):
+        node_ws.send_text(json.dumps(junk))
+        # No frame should arrive at the UI subscriber. Confirm by
+        # sending a known-good frame after and checking it is the
+        # FIRST thing the UI receives.
+        known = {
+            "kind": "comms_rx",
+            "node_id": "node-a",
+            "data": {"peer": "node-b", "text": "ping", "t_unix_ns": 1},
+        }
+        node_ws.send_text(json.dumps(known))
+        received = json.loads(ui_ws.receive_text())
+        assert received["kind"] == "comms_rx"
+        assert received["data"]["text"] == "ping"
