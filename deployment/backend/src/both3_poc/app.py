@@ -39,7 +39,7 @@ from .enhance import (
     finest_band_surface,
     surface_res_for_band,
 )
-from .geofence import outline_to_geofence_markers
+from .geofence import geofence_remarks, outline_to_geofence_markers
 from .geojson import bearings_feature_collection, fixes_feature_collection
 from .inference import investigate, load_catalog
 from .posterior import LENS_CONFIG, PosteriorEngine, _Red, nodes_for_fix
@@ -66,6 +66,10 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
     app.state.sender = sender
     # Monotonic Jx label counter for outline→geofence sends (J1, J2, …).
     app.state.geofence_seq = 0
+    # Geofence orders the ops UI has pushed, for the ATAK plugin to pull + draw
+    # on-device (FreeTAKServer strips drawing shapes, so the device renders them
+    # itself). uid -> {uid,label,geometry,remarks,cutoff,t_unix_ns}.
+    app.state.geofences = {}
     engine = PosteriorEngine(settings.dem_file)
     app.state.posterior = engine
     app.state.enhance = EnhanceManager(
@@ -337,12 +341,55 @@ async def send_geofence(fix_id: UUID, payload: Any = Body(...)) -> dict[str, Any
     note = "burnthrough: shadow may not hold (high-ERP jammer)" if (
         source_props and source_props.get("burnthrough")
     ) else None
+    # Store the order so the ATAK plugin can pull + draw it on-device. This is
+    # the path that actually reaches the tablet (the CoT/FTS send above can't —
+    # FTS strips drawing shapes). Keyed by fix so re-sends replace, not pile up.
+    order_uid = f"jx-{str(fix_id)[:8]}"
+    app.state.geofences[order_uid] = {
+        "uid": order_uid,
+        "label": label,
+        "geometry": geometry,
+        "remarks": geofence_remarks(coverage_label, source_props),
+        "cutoff": cutoff if cutoff is not None else p_band,
+        "t_unix_ns": time.time_ns(),
+    }
     return {
         "label": label,
         "sent": len(markers),
         "uids": [m.uid for m in markers],
+        "stored_for_plugin": order_uid,
         "note": note,
     }
+
+
+@app.get("/geofences")
+async def list_geofences() -> JSONResponse:
+    """Geofence orders the ops UI pushed, as a GeoJSON FeatureCollection for the
+    ATAK plugin to pull and draw on-device (bypassing FreeTAKServer, which strips
+    drawing shapes). Each feature carries uid + label + honest remarks."""
+    feats = [
+        {
+            "type": "Feature",
+            "geometry": o["geometry"],
+            "properties": {
+                "uid": o["uid"],
+                "label": o["label"],
+                "remarks": o["remarks"],
+                "cutoff": o.get("cutoff"),
+                "feature_kind": "geofence_order",
+                "t_unix_ns": o.get("t_unix_ns"),
+            },
+        }
+        for o in app.state.geofences.values()
+    ]
+    return JSONResponse({"type": "FeatureCollection", "features": feats})
+
+
+@app.delete("/geofences")
+async def clear_geofences() -> dict[str, Any]:
+    n = len(app.state.geofences)
+    app.state.geofences = {}
+    return {"cleared": n}
 
 
 @app.get("/fixes/{fix_id}/posterior")
