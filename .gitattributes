@@ -1,0 +1,12 @@
+# Shell scripts must stay LF: a CRLF shebang makes the kernel exec the
+# interpreter path with a trailing \r -> "no such file or directory" inside
+# Linux containers (bit us on deployment/fts199/start-fts.sh).
+*.sh text eol=lf
+
+# Other Linux-bound executables / container assets that must not get CRLF.
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Let git handle normal text normalization for the rest.
+* text=auto

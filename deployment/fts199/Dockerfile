@@ -58,6 +58,9 @@ WORKDIR /opt/fts
 EXPOSE 8087 8089 19023
 
 COPY start-fts.sh /start-fts.sh
-RUN chmod +x /start-fts.sh
+# Strip any CR a Windows checkout (CRLF) introduced: a trailing \r on the
+# shebang makes the kernel exec "/bin/bash\r" -> ENOENT ("no such file or
+# directory"). Belt-and-suspenders with the repo .gitattributes (eol=lf).
+RUN sed -i 's/\r$//' /start-fts.sh && chmod +x /start-fts.sh
 
 ENTRYPOINT ["/start-fts.sh"]
