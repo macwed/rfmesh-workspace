@@ -148,9 +148,14 @@ are read in full when their topic comes up.
 | ADR-019 | **Antenna rendezvous (directional link)** | GPS-prior pointing + scan-and-stare. |
 | ADR-020 | Frequency dimension + band-aware fusion | Multi-band fusion split. |
 | ADR-021 | **Directional comms primary (the pivot)** | Comms-first product framing. The other 20 ADRs read against this one. |
+| ADR-022 | Single-YAML node runtime config + capability handshake | `NodeRuntimeConfig` wrapper; soldier-vs-admin CLI split; `node_hello` frame. |
+| ADR-024 | **NodeController state machine + cancel-drained handoff** | 5-state machine, single-writer servo invariant, DRAIN_TIMEOUT_S→FAULT, ALL-STOP vs FAULT. |
+| ADR-025 | **DSSS directional mesh comms** | New `rfmesh-dsss` package; BPSK 10 Mchip/s + length-1023; SCHEMA_VERSION 1.3.0 bump. |
+| ADR-026 | **Peer-bearing prior axis (`BearingPriorKind`)** | `prior_kind` orthogonal to `method`; likelihood-σ on wire; per-peak fusion filter; SCHEMA_VERSION 1.4.0. |
 
-**Critical read-first for any new agent: ADR-021, ADR-019, ADR-015, ADR-014,
-ADR-008.** Everything else is on-demand by topic.
+**Critical read-first for any new agent: ADR-021, ADR-019, ADR-024,
+ADR-015, ADR-014, ADR-008, ADR-026.** Everything else is on-demand by
+topic.
 
 ---
 

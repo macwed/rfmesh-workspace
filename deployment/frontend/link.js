@@ -197,6 +197,7 @@
         const n = state.nodes.get(nodeId);
         if (n) {
           n.peer_bearing_text = null;
+          n.peer_bearing_tooltip = null;
           state.nodes.set(nodeId, n);
           if (state.selectedNodeId === nodeId) renderDetail();
         }
@@ -207,6 +208,16 @@
       n.peer_bearing_text =
         `${body.posterior_mean_deg.toFixed(1)}° ± ` +
         `${body.posterior_sigma_deg.toFixed(2)}° (posterior)`;
+      // ADR-026 demo-integrity REC 1: tooltip exposing all three μ/σ
+      // triplets so a jury asking "how much did the prior tighten this?"
+      // can read likelihood vs prior vs posterior without leaving the UI.
+      n.peer_bearing_tooltip =
+        `likelihood: ${body.likelihood_mean_deg.toFixed(1)}° ± ` +
+        `${body.likelihood_sigma_deg.toFixed(2)}°\n` +
+        `prior:      ${body.prior_mean_deg.toFixed(1)}° ± ` +
+        `${body.prior_sigma_deg.toFixed(2)}°\n` +
+        `posterior:  ${body.posterior_mean_deg.toFixed(1)}° ± ` +
+        `${body.posterior_sigma_deg.toFixed(2)}°`;
       state.nodes.set(nodeId, n);
       if (state.selectedNodeId === nodeId) renderDetail();
     } catch (e) {
@@ -254,6 +265,7 @@
       detailMarginEl.textContent = "—";
     }
     detailPeerBearingEl.textContent = n.peer_bearing_text || "—";
+    detailPeerBearingEl.title = n.peer_bearing_tooltip || "";
     detailLastEl.textContent = n.last_acquired_age || "never";
 
     // ADR-022 manual-steer slider clamp: if the node has reported a
