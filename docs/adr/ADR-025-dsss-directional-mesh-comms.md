@@ -1,8 +1,9 @@
 # ADR-025 — DSSS directional mesh comms (SCHEMA_VERSION 1.3.0)
 
-**Status:** PROPOSED (2026-05-24)
+**Status:** ACCEPTED (2026-05-24)
 **Date:** 2026-05-24
-**Author:** lead-Opus (drafting per the DSSS implementation plan in `docs/dsss/potrzebujplanuimplementacjirozszerzenidempotentplum.md`; ACCEPTED-pending Maciej sign-off).
+**Author:** lead-Opus (drafting per the DSSS implementation plan in `docs/dsss/potrzebujplanuimplementacjirozszerzenidempotentplum.md`).
+**Accepted by:** Maciej (@macwed), 2026-05-24.
 **SCHEMA_VERSION change:** 1.2.0 → **1.3.0** (MINOR, additive, backward-compatible).
 **Depends on:** ADR-021 (comms-first reframing), ADR-019 (antenna rendezvous), ADR-013 (1.2.0 honesty extensions — must land first to free 1.3.0).
 

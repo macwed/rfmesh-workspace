@@ -1,18 +1,12 @@
-"""Smoke tests proving the Iter 0 skeleton imports cleanly.
+"""Cross-module wiring tests for ``rfmesh-dsss``.
 
-These are the only tests that exist at Iter 0. They guarantee:
-
-* The package and every module imports without raising (mypy /
-  import-linter / ruff pre-flight check).
-* ``CommsConfig`` accepts the canonical length-10 m-sequence
-  configuration that ``constants.DEFAULT_*`` describe (catches
-  drift between ``constants.py`` and the frozen ``CommsConfig``
-  validator the moment a future edit breaks one without the
-  other).
-
-Iter 1+ replace this file with real golden / Monte-Carlo suites:
-``test_pn_sequence.py``, ``test_spreading.py``,
-``test_correlation.py``, ``test_framing.py``, ``test_ber_honesty.py``.
+These tests outlived Iter 0: even with real implementations behind
+``pn_sequence`` / ``modulation`` / ``spreading`` / ``link_budget``,
+the import-cleanliness check + the
+``constants <-> CommsConfig`` drift guard keep working as cheap
+canaries for cross-package regressions. Module-specific behaviour
+lives in ``test_pn_sequence.py``, ``test_modulation.py``,
+``test_spreading.py``, ``test_link_budget.py``.
 """
 
 from __future__ import annotations
@@ -50,7 +44,7 @@ from rfmesh_dsss.exceptions import (
     ],
 )
 def test_module_imports_cleanly(module_name: str) -> None:
-    """Every module in the skeleton imports without raising."""
+    """Every module in the package imports without raising."""
     module = importlib.import_module(module_name)
     assert module is not None
 
