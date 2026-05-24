@@ -6,7 +6,7 @@
   <title>both3 — Locate emitter</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <link rel="stylesheet" href="style.css?v=20260523j" />
+  <link rel="stylesheet" href="style.css?v=20260524c" />
 </head>
 <body data-page="locate">
   <div id="app">
@@ -62,6 +62,24 @@
         <p class="muted small" style="margin:2px 0 0">Soft cue (knife-edge diffraction) — red = likely emitter ground, green = your sensors. Not a target point.</p>
       </section>
 
+      <section class="panel" id="marks">
+        <h2>Place mark</h2>
+        <div class="row">
+          <input id="mark-name" type="text" placeholder="name e.g. JAM-1" />
+        </div>
+        <div class="row">
+          <select id="mark-kind">
+            <option value="jammer">Jammer</option>
+            <option value="hostile">Hostile</option>
+            <option value="friendly">Friendly</option>
+            <option value="neutral">Neutral</option>
+            <option value="waypoint">Waypoint</option>
+          </select>
+          <button id="mark-place" type="button">＋ place on map</button>
+        </div>
+        <div class="muted small" id="mark-hint">name it, hit place, then click the map (click again to stop)</div>
+      </section>
+
       <section class="panel grow" id="list-panel">
         <h2>Fixes <span id="fix-count" class="count">0</span></h2>
         <ul id="fix-list"></ul>
@@ -84,6 +102,29 @@
             <button id="confirm-send">Confirm send</button>
           </div>
         </div>
+
+        <div id="geofence-tools" hidden>
+          <div class="gf-row">
+            <label for="gf-band">Cutoff</label>
+            <input id="gf-band" type="range" min="1" max="100" step="1" value="10" />
+            <span id="gf-band-val" class="gf-band-val">≥10% of peak</span>
+          </div>
+          <p class="confirm-note small" style="margin:0 0 6px">Fences where plausibility ≥ cutoff
+            (% of peak). Lower = wider; raise to drop the faint fringe. Magenta dashes preview it.</p>
+          <button id="geofence-btn">Send jamming geofence (Jx) →</button>
+          <p class="confirm-note small" id="geofence-hint" hidden>Enable RF-plausibility and pick a fix;
+            if there's no magenta area, lower the cutoff.</p>
+          <div id="geofence-confirm" hidden role="group" aria-label="Confirm geofence send">
+            <p class="confirm-note">Publishes a CoT/TAK <b>geofence</b> (Jx) from the
+              displayed RF-plausibility outline — a cue, not a target. Deliberate
+              action — Esc to defer.</p>
+            <p class="confirm-note small" id="gf-confirm-target"></p>
+            <div class="confirm-actions">
+              <button id="gf-cancel" class="ghost">Cancel</button>
+              <button id="gf-confirm-send">Confirm send</button>
+            </div>
+          </div>
+        </div>
       </section>
       </div>
     </aside>
@@ -95,6 +136,6 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="app.js?v=20260523i"></script>
+  <script src="app.js?v=20260524c"></script>
 </body>
 </html>

@@ -8,6 +8,10 @@ const OUTLIER_SIGMA = 3.0;
 const DEFAULT_VIEW = [50.356, 5.0];
 const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
+// Jamming-geofence coverage threshold: a free (non-snapping) 50–95 % slider.
+// The Jx geofence sent is the tightest drawn RF-plausibility outline covering
+// at least the chosen mass, so raising it drops the inner low-percentage cores.
+
 // ---- state ----
 const state = {
   fixes: new Map(),     // fix_id -> properties (from ellipse feature)
@@ -17,6 +21,9 @@ const state = {
   bearingByNode: new Map(), // node_id -> latest node feature props
   selected: null,
   armed: false,   // send-confirm shown inline for the selected fix
+  gfArmed: false, // geofence-confirm shown inline for the selected fix
+  gfPreview: null, // GeoJSON geometry of the current cutoff contour (Jx preview)
+  marking: false,  // armed to drop operator point marks on map click
   posterior: null, // { fixId, fc } RF-plausibility for the selected fix
   investigation: null, // { fixId, data } ranked candidates for the selected fix
   firstFit: false,
@@ -166,6 +173,8 @@ const posteriorLayer = L.layerGroup().addTo(map);  // under the ellipse (added f
 const ellipseLayer = L.layerGroup().addTo(map);
 const centerLayer = L.layerGroup().addTo(map);
 const bearingLayer = L.layerGroup().addTo(map);
+const geofencePreviewLayer = L.layerGroup().addTo(map);  // Jx cutoff contour preview (on top)
+const marksLayer = L.layerGroup().addTo(map);            // operator-placed point marks
 
 // RF-plausibility heat: the emitter is RED TEAM, so likelihood reads RED
 // (inner/higher mass = more opaque). Friendly sensors are drawn green elsewhere.
@@ -887,6 +896,7 @@ function renderInvestigation() {
       if (h && state.selected) {
         state.emitterH = parseFloat(h);
         fetchPosterior(state.selected, h);
+        gfFetchPreview();
       }
     };
   }
@@ -1146,11 +1156,15 @@ function renderDetail() {
   const btn = $("#send-btn");
   const confirm = $("#send-confirm");
   const wall = $("#engage-wall");
+  const gfTools = $("#geofence-tools");
   const p = state.selected ? state.fixes.get(state.selected) : null;
   if (!p) {
     dl.hidden = true; btn.hidden = true; confirm.hidden = true; empty.hidden = false;
     if (wall) wall.hidden = true;
+    if (gfTools) gfTools.hidden = true;
     state.armed = false;
+    state.gfArmed = false;
+    gfClearPreview();
     return;
   }
   empty.hidden = true; dl.hidden = false;
@@ -1162,6 +1176,25 @@ function renderDetail() {
     $("#confirm-target").textContent =
       `${p.confidence_level.toUpperCase()} · ${p.mgrs || (p.lat.toFixed(4) + "," + p.lon.toFixed(4))} · ` +
       `${Math.round(p.semi_major_m)}×${Math.round(p.semi_minor_m)} m`;
+  }
+
+  // Jamming geofence (Jx): enabled once a cutoff contour exists for this fix
+  // (the magenta preview). Disabled-with-hint otherwise; same arm→confirm.
+  if (gfTools) {
+    const ready = gfReady();
+    if (!ready) state.gfArmed = false;
+    gfTools.hidden = false;
+    const gfBtn = $("#geofence-btn");
+    const gfConfirm = $("#geofence-confirm");
+    const gfHint = $("#geofence-hint");
+    if (gfBtn) { gfBtn.disabled = !ready; gfBtn.hidden = state.gfArmed; }
+    if (gfHint) gfHint.hidden = ready;
+    if (gfConfirm) gfConfirm.hidden = !state.gfArmed;
+    gfUpdateLabel();
+    if (state.gfArmed) {
+      $("#gf-confirm-target").textContent =
+        `≥${gfCutoff()}% of peak · Jx geofence · ${p.mgrs || (p.lat.toFixed(4) + "," + p.lon.toFixed(4))}`;
+    }
   }
 
   const outliers = outlierNodes(p);
@@ -1193,6 +1226,7 @@ function renderDetail() {
 function selectFix(id) {
   if (id === state.selected) {
     state.armed = false;
+    state.gfArmed = false;
     state.selected = null;
     state.posterior = null;
     state.investigation = null;
@@ -1200,12 +1234,15 @@ function selectFix(id) {
     if (state.enhance) cancelEnhance("aborted");
     state.enhanced = null;
     state.panelOpen = false;
+    gfClearPreview();
     renderPosterior();
     render();
     return;
   }
   if (id !== state.selected) {
     state.armed = false; // picking another fix defers any pending send
+    state.gfArmed = false; // …and any pending geofence send
+    gfClearPreview();      // drop the old fix's geofence preview
     state.posterior = null; // drop stale heat until the new one loads
     state.investigation = null;
     state.emitterH = null;  // reset tracked emitter height for the new fix
@@ -1219,6 +1256,7 @@ function selectFix(id) {
   const c = state.centers.get(id);
   if (c) map.panTo(c, { animate: true });
   render();
+  gfFetchPreview(); // load the Jx cutoff preview for the newly selected fix
 }
 
 // ---- send flow: inline arm -> confirm. Defer = do nothing / pan / pick another / Esc ----
@@ -1250,23 +1288,171 @@ async function doSend() {
   }
 }
 
+// ---- jamming geofence (Jx): push the RF-plausibility level-set to ATAK as a
+// monitored geofence. The slider IS the cutoff (a fraction of peak likelihood,
+// no mass binning): "fence everywhere ≥ this bright, drop everything below".
+// A magenta dashed PREVIEW of the cut is fetched from the backend and drawn
+// live, so the operator sees exactly where the cutoff is before sending. ----
+function gfCutoff() {
+  // percent-of-peak, 1–100, free + persisted. Default 10% (broad caution zone).
+  const v = parseInt(localStorage.getItem("geofence.cutoff") || "10", 10);
+  return Number.isFinite(v) ? Math.max(1, Math.min(100, v)) : 10;
+}
+function gfUpdateLabel() {
+  const el = $("#gf-band-val"); if (!el) return;
+  el.textContent = state.gfPreview ? `≥${gfCutoff()}% of peak` : `≥${gfCutoff()}% · no area`;
+}
+function gfReady() {
+  return $("#show-posterior").checked && !!state.selected && !!state.gfPreview;
+}
+
+// Fetch the cutoff contour for the selected fix and draw it as a live preview.
+// Debounced; token-guarded against fix-switch / rapid slider drags.
+let _gfPreviewTimer = null;
+let _gfPreviewTok = 0;
+function gfFetchPreview() {
+  const id = state.selected;
+  const tok = ++_gfPreviewTok;
+  clearTimeout(_gfPreviewTimer);
+  if (!id || !$("#show-posterior").checked) {
+    state.gfPreview = null; geofencePreviewLayer.clearLayers(); gfUpdateLabel(); render(); return;
+  }
+  const cutoff = gfCutoff() / 100;
+  const hq = state.emitterH != null ? `&emitter_h=${state.emitterH}` : "";
+  _gfPreviewTimer = setTimeout(async () => {
+    try {
+      const r = await fetch(`fixes/${id}/posterior/contour?cutoff=${cutoff}${hq}`);
+      if (!r.ok) return;
+      const fc = await r.json();
+      if (tok !== _gfPreviewTok || state.selected !== id) return; // stale
+      const feat = (fc.features || [])[0] || null;
+      state.gfPreview = feat ? feat.geometry : null;
+      geofencePreviewLayer.clearLayers();
+      if (feat) {
+        L.geoJSON(feat, { style: { color: "#ff2bd6", weight: 2, dashArray: "6 4", fill: false } })
+          .bindTooltip(`Jx geofence preview · ≥${gfCutoff()}% of peak`, { sticky: true })
+          .addTo(geofencePreviewLayer);
+      }
+      gfUpdateLabel();
+      render(); // refresh button enabled/disabled now we know if an area exists
+    } catch (e) { /* transient */ }
+  }, 200);
+}
+function gfClearPreview() {
+  _gfPreviewTok++;
+  clearTimeout(_gfPreviewTimer);
+  state.gfPreview = null;
+  geofencePreviewLayer.clearLayers();
+}
+function gfArm() {
+  if (!gfReady()) return;
+  state.gfArmed = true;
+  render();
+  $("#gf-confirm-send").focus();
+}
+function gfDisarm() {
+  if (!state.gfArmed) return;
+  state.gfArmed = false;
+  render();
+}
+async function doSendGeofence() {
+  const id = state.selected;
+  state.gfArmed = false;
+  render();
+  if (!id) return;
+  const geometry = state.gfPreview;
+  if (!geometry) { toast("No area at this cutoff — lower the slider", "err"); return; }
+  const fcp = renderedFcProps || {};
+  const source_props = {};
+  if (fcp.dem_source) source_props.dem_source = fcp.dem_source;
+  const cutoff = gfCutoff() / 100;
+  try {
+    const res = await fetch(`fixes/${id}/geofence`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cutoff, geometry, source_props }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.detail || ("HTTP " + res.status));
+    const n = body.sent || 0;
+    toast(`Geofence ${body.label} sent ✓ (${n} shape${n === 1 ? "" : "s"})`
+      + (body.note ? " · ⚠ " + body.note : ""), "ok");
+  } catch (e) {
+    toast("Geofence send failed: " + e.message, "err");
+  }
+}
+function gfSyncSlider() {
+  const s = $("#gf-band"); if (s) s.value = String(gfCutoff());
+  gfUpdateLabel();
+}
+
+// ---- operator point marks: denote a jammer / mark any point -> CoT to ATAK ----
+const MARK_COLOR = { jammer: "#ff2bd6", hostile: "#ff4d4f", friendly: "#2ecc71", neutral: "#f1c40f", waypoint: "#4aa8ff" };
+function reflectMarking() {
+  const b = $("#mark-place");
+  if (!b) return;
+  b.textContent = state.marking ? "● click map to drop (stop)" : "＋ place on map";
+  b.classList.toggle("armed", state.marking);
+  try { map.getContainer().style.cursor = state.marking ? "crosshair" : ""; } catch (e) { /* */ }
+  const h = $("#mark-hint");
+  if (h) {
+    h.textContent = state.marking
+      ? "PLACING — click anywhere on the map (Esc to cancel)"
+      : "name it, hit “place”, then click the map";
+  }
+}
+function toggleMarking() { state.marking = !state.marking; reflectMarking(); }
+async function placeMark(latlng) {
+  const name = ($("#mark-name").value || "").trim() || "Jammer";
+  const kind = $("#mark-kind").value || "jammer";
+  try {
+    const res = await fetch("marker", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat: latlng.lat, lon: latlng.lng, name, kind }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.detail || ("HTTP " + res.status));
+    const col = MARK_COLOR[kind] || "#ff2bd6";
+    L.circleMarker([latlng.lat, latlng.lng], {
+      radius: 6, color: "#0b0e12", weight: 1, fillColor: col, fillOpacity: 1,
+    }).bindTooltip(name + " · " + kind, { permanent: true, direction: "top", className: "node-label" })
+      .addTo(marksLayer);
+    toast("Mark sent ✓ " + name + " (" + kind + ")", "ok");
+  } catch (e) {
+    toast("Mark failed: " + e.message, "err");
+  }
+}
+
 // ---- wire up ----
 $("#send-btn").onclick = arm;
 $("#confirm-cancel").onclick = disarm;
 $("#confirm-send").onclick = doSend;
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") disarm(); });
+$("#geofence-btn").onclick = gfArm;
+$("#gf-cancel").onclick = gfDisarm;
+$("#gf-confirm-send").onclick = doSendGeofence;
+$("#gf-band").addEventListener("input", (e) => {
+  const c = Math.max(1, Math.min(100, parseInt(e.target.value, 10) || 10));
+  localStorage.setItem("geofence.cutoff", String(c));
+  const el = $("#gf-band-val"); if (el) el.textContent = `≥${c}% of peak`;  // instant
+  gfFetchPreview();  // debounced contour refresh
+});
+gfSyncSlider();
+$("#mark-place").onclick = toggleMarking;
+map.on("click", (e) => { if (state.marking) placeMark(e.latlng); });
+reflectMarking();
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { disarm(); gfDisarm(); state.marking = false; reflectMarking(); } });
 for (const el of document.querySelectorAll(
   "#conf-filter input, #class-filter, #min-nodes, #show-stale, #show-bearings, #show-posterior"
 )) {
-  el.addEventListener("change", () => { state.armed = false; render(); });
+  el.addEventListener("change", () => { state.armed = false; state.gfArmed = false; render(); });
 }
 $("#show-posterior").addEventListener("change", (e) => {
-  if (e.target.checked && state.selected) fetchPosterior(state.selected);
+  if (e.target.checked && state.selected) { fetchPosterior(state.selected); gfFetchPreview(); }
   else {
     // Toggling off aborts any in-flight enhance and clears the applied override.
     if (state.enhance) cancelEnhance("aborted");
     state.enhanced = null;
     state.panelOpen = false;
+    gfClearPreview();
     state.posterior = null; renderPosterior(); render();
   }
 });

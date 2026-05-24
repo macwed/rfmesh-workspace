@@ -17,7 +17,7 @@ import asyncio
 import time
 
 from rfmesh_contracts import FixEvent
-from rfmesh_cot import CotError, PyTAKCotPublisher
+from rfmesh_cot import CotError, OperatorMarker, PyTAKCotPublisher
 
 
 class CotSender:
@@ -40,6 +40,10 @@ class CotSender:
         pub = PyTAKCotPublisher(self._endpoint_url, node_callsign=self._callsign)
         await pub.__aenter__()  # opens transport + starts TX task in this loop
         self._pub = pub
+        # Markers are sent one event per call; the held connection persists.
+        # Presence/self-SA for relaying to remote ATAK tablets is handled by the
+        # dedicated operator-console / scripts (which space self-SA correctly) so
+        # this hot path stays a simple, reliable single-event send.
 
     async def _reopen(self) -> None:
         await self.aclose()
@@ -63,6 +67,28 @@ class CotSender:
                 self._pub.publish(fix)
             except CotError:
                 # Park is consumed; rebuild so the next send starts clean.
+                try:
+                    await self._reopen()
+                except CotError:
+                    self._pub = None
+                raise
+
+    async def send_marker(self, marker: OperatorMarker) -> None:
+        """Encode + enqueue an operator-authored marker (point or polygon).
+
+        The polygon/geofence sibling of :meth:`send`. Polygons cannot go over
+        the FTS REST API (points only), so they ride the same streaming
+        ``PyTAKCotPublisher`` path as fixes. Same lifecycle: lazy open, and on
+        any ``CotError`` we tear down + rebuild so the next send starts clean.
+        Re-sending a marker's ``uid`` moves / re-labels it in ATAK.
+        """
+        async with self._lock:
+            if self._pub is None:
+                await self._open()
+            assert self._pub is not None
+            try:
+                self._pub.publish_marker(marker)
+            except CotError:
                 try:
                     await self._reopen()
                 except CotError:

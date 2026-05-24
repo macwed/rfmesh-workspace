@@ -20,15 +20,15 @@ import time
 from contextlib import asynccontextmanager
 from functools import partial
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 from rfmesh_contracts import BearingReport
-from rfmesh_cot import CotError
+from rfmesh_cot import CotError, OperatorMarker
 
 from .config import Settings
 from .cot_send import CotSender
@@ -39,6 +39,7 @@ from .enhance import (
     finest_band_surface,
     surface_res_for_band,
 )
+from .geofence import outline_to_geofence_markers
 from .geojson import bearings_feature_collection, fixes_feature_collection
 from .inference import investigate, load_catalog
 from .posterior import LENS_CONFIG, PosteriorEngine, _Red, nodes_for_fix
@@ -63,6 +64,8 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
     app.state.settings = settings
     app.state.store = store
     app.state.sender = sender
+    # Monotonic Jx label counter for outline→geofence sends (J1, J2, …).
+    app.state.geofence_seq = 0
     engine = PosteriorEngine(settings.dem_file)
     app.state.posterior = engine
     app.state.enhance = EnhanceManager(
@@ -122,6 +125,74 @@ async def health() -> dict[str, Any]:
         "fix_count": fixes,
         "bearing_count": bearings,
         "cot_endpoint": _settings(app).cot_endpoint_url,
+    }
+
+
+@app.get("/downloads/{name}")
+async def download_apk(name: str) -> FileResponse:
+    """Serve a hosted ``.apk`` with the Android install MIME type — both the
+    RF Geofence plugin (``rfgeofence.apk``) and the SDK-signed ATAK-CIV
+    (``atak.apk``, which the plugin's signature matches). Files live in
+    ``<frontend_dir>/downloads/`` and are NOT in git. 404 until present."""
+    if "/" in name or "\\" in name or ".." in name or not name.endswith(".apk"):
+        raise HTTPException(status_code=404, detail="not found")
+    path = _settings(app).frontend_dir / "downloads" / name
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"{name} not uploaded yet")
+    return FileResponse(
+        path,
+        media_type="application/vnd.android.package-archive",
+        filename=name,
+    )
+
+
+_MARK_COT_TYPES = {
+    "jammer": "a-h-G-E-X-N-J",
+    "hostile": "a-h-G",
+    "friendly": "a-f-G",
+    "neutral": "a-n-G",
+    "waypoint": "b-m-p-w",
+}
+
+
+@app.post("/marker")
+async def place_marker(payload: Any = Body(...)) -> dict[str, Any]:
+    """Drop a named point marker at any map point (operator UI). Default kind is
+    ``jammer`` (hostile EW emitter ``a-h-G-E-X-N-J``). Sends a CoT point via the
+    operator path to the configured TAK endpoint — set ``COT_ENDPOINT_URL`` at
+    the tablets' server for it to reach them."""
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail="body must be a JSON object")
+    try:
+        lat = float(payload["lat"])
+        lon = float(payload["lon"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="numeric lat and lon required") from exc
+    name = str(payload.get("name") or "").strip() or "Jammer"
+    kind = str(payload.get("kind") or "jammer").lower()
+    cot_type = _MARK_COT_TYPES.get(kind, _MARK_COT_TYPES["jammer"])
+    sender: CotSender = app.state.sender
+    marker = OperatorMarker(
+        template_key="hostile",  # point base; cot_type_override sets the icon
+        uid=f"rfmesh.mark.{uuid4().hex[:12]}",
+        lat_deg=lat,
+        lon_deg=lon,
+        callsign=name,
+        cot_type_override=cot_type,
+        remarks=f"operator mark: {name}" + (" (jammer)" if kind == "jammer" else ""),
+    )
+    try:
+        await sender.send_marker(marker)
+    except CotError as exc:
+        raise HTTPException(
+            status_code=502, detail=f"CoT send failed via {sender.endpoint_url}: {exc}"
+        ) from exc
+    return {
+        "sent": True,
+        "uid": marker.uid,
+        "name": name,
+        "kind": kind,
+        "endpoint": sender.endpoint_url,
     }
 
 
@@ -208,6 +279,72 @@ async def send_fix(fix_id: UUID) -> dict[str, Any]:
     return {"sent": True, "detail": f"encoded and queued to {sender.endpoint_url}"}
 
 
+@app.post("/fixes/{fix_id}/geofence")
+async def send_geofence(fix_id: UUID, payload: Any = Body(...)) -> dict[str, Any]:
+    """Publish an RF-plausibility outline to ATAK as a monitored ``Jx`` geofence.
+
+    WYSIWYG: the body carries the exact GeoJSON ring the operator is looking at
+    (one probability-mass band of the posterior). The label, honest remarks, and
+    the ``<__geofence>`` detail are server-owned (geofences look authoritative —
+    the cue-not-target / no-dBm caveat must not be client-trusted). A
+    MultiPolygon yields one geofence shape per part.
+    """
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail="body must be a JSON object")
+    store = _store(app)
+    sender: CotSender = app.state.sender
+    fix = store.get_fix(fix_id)
+    if fix is None:
+        raise HTTPException(status_code=404, detail=f"no fix with id {fix_id}")
+    geometry = payload.get("geometry")
+    if not isinstance(geometry, dict):
+        raise HTTPException(
+            status_code=422, detail="geometry (GeoJSON Polygon/MultiPolygon) required"
+        )
+    # Coverage descriptor for the (server-owned) remarks. A cutoff contour says
+    # "≥X% of peak plausibility"; a legacy mass band says "X% probability mass".
+    cutoff = payload.get("cutoff")
+    p_band = payload.get("p_band")
+    if cutoff is not None:
+        coverage_label = f"≥{round(float(cutoff) * 100)}% of peak plausibility"
+    elif p_band is not None:
+        coverage_label = f"{round(float(p_band) * 100)}% probability mass"
+    else:
+        coverage_label = "operator-selected outline"
+    label = str(payload.get("label") or "").strip()
+    if not label:
+        app.state.geofence_seq = int(getattr(app.state, "geofence_seq", 0)) + 1
+        label = f"J{app.state.geofence_seq}"
+    raw_props = payload.get("source_props")
+    source_props = raw_props if isinstance(raw_props, dict) else None
+    try:
+        markers = outline_to_geofence_markers(
+            geometry,
+            label=label,
+            coverage_label=coverage_label,
+            uid_seed=str(fix_id)[:8],
+            source_props=source_props,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
+        for marker in markers:
+            await sender.send_marker(marker)
+    except CotError as exc:
+        raise HTTPException(
+            status_code=502, detail=f"CoT send failed via {sender.endpoint_url}: {exc}"
+        ) from exc
+    note = "burnthrough: shadow may not hold (high-ERP jammer)" if (
+        source_props and source_props.get("burnthrough")
+    ) else None
+    return {
+        "label": label,
+        "sent": len(markers),
+        "uids": [m.uid for m in markers],
+        "note": note,
+    }
+
+
 @app.get("/fixes/{fix_id}/posterior")
 async def get_posterior(fix_id: UUID, emitter_h: float | None = None) -> JSONResponse:
     """RF-plausibility posterior. Optional ``emitter_h`` (m) lets the UI re-weight
@@ -230,6 +367,39 @@ async def get_posterior(fix_id: UUID, emitter_h: float | None = None) -> JSONRes
         emitter_h=emitter_h if emitter_h is not None else settings.emitter_antenna_h_m,
         node_h=settings.node_antenna_h_m,
     )
+    return JSONResponse(fc)
+
+
+@app.get("/fixes/{fix_id}/posterior/contour")
+async def posterior_contour(
+    fix_id: UUID, cutoff: float = 0.1, emitter_h: float | None = None
+) -> JSONResponse:
+    """RF-plausibility level-set at an absolute ``cutoff`` (fraction of peak,
+    0-1): the region where plausibility >= cutoff. Backs the geofence slider's
+    live preview — the operator dials the cutoff, sees the outline on the map,
+    and sends exactly that as the ``Jx`` geofence (no probability-mass binning)."""
+    settings = _settings(app)
+    store = _store(app)
+    fix = store.get_fix(fix_id)
+    if fix is None:
+        raise HTTPException(status_code=404, detail=f"no fix with id {fix_id}")
+    engine: PosteriorEngine = app.state.posterior
+    nodes = nodes_for_fix(fix, store.list_bearings())
+    loop = asyncio.get_running_loop()
+    fn = partial(
+        engine.contour_geojson,
+        fix,
+        nodes,
+        store.freq_for(fix_id),
+        cutoff=_clamp(float(cutoff), 0.01, 1.0),
+        cell_m=settings.posterior_cell_m,
+        buffer_m=settings.posterior_buffer_m,
+        floor=settings.rf_shadow_floor,
+        scale_db=settings.diffraction_loss_scale_db,
+        emitter_h=emitter_h if emitter_h is not None else settings.emitter_antenna_h_m,
+        node_h=settings.node_antenna_h_m,
+    )
+    fc = await loop.run_in_executor(None, fn)
     return JSONResponse(fc)
 
 

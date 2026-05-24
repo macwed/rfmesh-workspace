@@ -1,0 +1,2 @@
+# Built/signed plugin APKs are artifacts — don't commit them.
+*.apk

@@ -685,6 +685,126 @@ class PosteriorEngine:
             },
         }
 
+    def contour_geojson(
+        self,
+        fix: Any,
+        nodes: list[_Node],
+        center_freq_hz: float | None,
+        *,
+        cutoff: float,
+        cell_m: float,
+        buffer_m: float,
+        floor: float,
+        scale_db: float,
+        emitter_h: float,
+        node_h: float,
+        raster: Raster | None = None,
+        n_path_samples: int = 24,
+    ) -> dict[str, Any]:
+        """Level-set of the RF-plausibility field at an absolute ``cutoff``.
+
+        Unlike :meth:`posterior_geojson` (HDR *probability-mass* bands at
+        50/80/95 %), this polygonizes the single region where the
+        peak-normalized plausibility >= ``cutoff`` (a fraction of peak, 0-1).
+        It is the direct level the operator dials with the geofence slider —
+        "fence everywhere at least this bright, drop the rest". Returns one
+        Feature (Polygon / MultiPolygon), or an empty FC when nothing clears
+        the cutoff. No probability-mass normalization is applied beyond the
+        peak scaling the displayed heat already uses.
+        """
+        active = raster if raster is not None else self._base
+        freq = center_freq_hz or _DEFAULT_FREQ_HZ
+        g = self._grid(
+            fix, nodes, freq, active,
+            cell_m=cell_m, buffer_m=buffer_m, floor=floor, scale_db=scale_db,
+            emitter_h=emitter_h, node_h=node_h, n_path_samples=n_path_samples,
+        )
+        north, west, dlat, dlon = g["north"], g["west"], g["dlat"], g["dlon"]
+        aoa, rf = g["aoa"], g["rf"]
+        terr_cell, loss_grid = g["terr_cell"], g["loss_grid"]
+        has_terrain = g["has_terrain"]
+        post = aoa * rf
+        if post.max() <= 0:
+            post = aoa.copy()
+        cut = max(1e-6, min(1.0, float(cutoff)))
+        props: dict[str, Any] = {
+            "fix_id": str(fix.fix_id),
+            "band_hz": freq,
+            "cutoff": round(cut, 4),
+            "rf_model": "knife-edge ITU-R P.526" if has_terrain else "none (no DEM)",
+            "dem_source": active.source if active is not None else "none",
+            "dem_res_m": active.res_m if active is not None else 0.0,
+            "note": "soft RF-plausibility cue; level-set at cutoff, not a target point",
+        }
+        pmax = float(post.max())
+        if pmax <= 0:
+            return {"type": "FeatureCollection", "features": [], "properties": props}
+        post = post / pmax
+        feat = self._contour_feature(
+            post, cut, terr_cell, loss_grid, north, west, dlat, dlon, freq
+        )
+        return {
+            "type": "FeatureCollection",
+            "features": [feat] if feat else [],
+            "properties": props,
+        }
+
+    def _contour_feature(
+        self,
+        post: np.ndarray,
+        cutoff: float,
+        terr_cell: np.ndarray,
+        loss_grid: np.ndarray,
+        north: float,
+        west: float,
+        dlat: float,
+        dlon: float,
+        freq: float,
+    ) -> dict[str, Any] | None:
+        """Polygonize ``post >= cutoff`` into one merged Feature, or None."""
+        try:
+            import rasterio.features  # noqa: PLC0415
+            import rasterio.transform  # noqa: PLC0415
+            from shapely.geometry import mapping, shape  # noqa: PLC0415
+            from shapely.ops import unary_union  # noqa: PLC0415
+        except Exception:  # noqa: BLE001
+            return None
+        transform = rasterio.transform.from_origin(west, north, dlon, dlat)
+        sel = post >= cutoff
+        mask = sel.astype(np.uint8)
+        if mask.sum() == 0:
+            return None
+        geoms = [
+            shape(g)
+            for g, val in rasterio.features.shapes(
+                mask, mask=mask.astype(bool), transform=transform
+            )
+            if val == 1
+        ]
+        if not geoms:
+            return None
+        merged = unary_union(geoms).simplify(dlon * 0.5)
+        terr_m = float(np.median(terr_cell[sel])) if terr_cell.any() else 0.0
+        loss_db = float(np.median(loss_grid[sel])) if loss_grid.any() else 0.0
+        if loss_db < 3.0:
+            loss_label = "low"
+        elif loss_db < 10.0:
+            loss_label = "moderate"
+        else:
+            loss_label = "high"
+        return {
+            "type": "Feature",
+            "geometry": mapping(merged),
+            "properties": {
+                "cutoff": round(float(cutoff), 4),
+                "band_hz": freq,
+                "feature_kind": "posterior_contour",
+                "terrain_m": round(terr_m, 1),
+                "loss_db": round(loss_db, 1),
+                "loss_label": loss_label,
+            },
+        }
+
     def _bands(
         self,
         post: np.ndarray,

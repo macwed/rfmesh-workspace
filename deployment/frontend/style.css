@@ -86,6 +86,19 @@ button.ghost { background: transparent; color: var(--text); border: 1px solid va
 #send-confirm .confirm-actions { display: flex; gap: 8px; }
 #send-confirm .confirm-actions button { flex: 1; }
 
+/* jamming geofence (Jx) tools — outline → ATAK geofence */
+#geofence-tools { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+#geofence-tools .gf-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+#geofence-tools .gf-row label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+#geofence-tools .gf-row input[type="range"] { flex: 1; }
+.gf-band-val { font-size: 11px; min-width: 120px; text-align: right; white-space: nowrap; }
+#geofence-btn { width: 100%; }
+#geofence-btn:disabled { opacity: .5; cursor: not-allowed; }
+#geofence-confirm { margin-top: 10px; }
+#geofence-confirm .confirm-note { font-size: 11px; color: var(--muted); margin: 0 0 8px; }
+#geofence-confirm .confirm-actions { display: flex; gap: 8px; }
+#geofence-confirm .confirm-actions button { flex: 1; }
+
 .muted { color: var(--muted); }
 .small { font-size: 11px; }
 
@@ -414,3 +427,8 @@ body[data-page="hub"] { overflow-y: auto; }
 .c-hide { border-left-color: #2ecc71; } .c-emit { border-left-color: #2ecc71; }
 .c-ideal { border-left-color: #7ad06b; }
 .hub-foot { margin-top: 24px; text-align: center; }
+
+.hub-install { margin-top: 20px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.install-link { display: inline-block; padding: 10px 16px; border-radius: 8px; background: var(--accent); color: #04121f; font-weight: 600; text-decoration: none; }
+.install-link:hover { filter: brightness(1.08); }
+.hub-install .muted { max-width: 560px; }
