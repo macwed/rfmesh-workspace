@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RF Geofence</string>
+    <string name="app_desc">Draw rfmesh RF-plausibility outlines as native ATAK geofences (Jx).</string>
+</resources>

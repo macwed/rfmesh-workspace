@@ -1,0 +1,23 @@
+# Copy to local.properties and fill in. NEVER commit local.properties.
+
+# Android SDK location
+sdk.dir=/path/to/Android/sdk
+
+# --- ATAK dev kit: pick ONE path ---
+# (A) Local takdev jar from the tak.gov SDK download:
+takdev.plugin=/path/to/atak-gradle-takdev.jar
+# (B) Or the Maven dev kit (leave takdev.plugin unset if using this):
+#takrepo.url=https://artifacts.tak.gov/artifactory/...
+#takrepo.user=YOUR_USER
+#takrepo.password=YOUR_TOKEN
+
+# --- Signing (the SDK ships a debug keystore) ---
+takDebugKeyFile=/path/to/debug.keystore
+takDebugKeyFilePassword=tak
+takDebugKeyAlias=androiddebugkey
+takDebugKeyPassword=tak
+
+takReleaseKeyFile=/path/to/release.keystore
+takReleaseKeyFilePassword=CHANGEME
+takReleaseKeyAlias=CHANGEME
+takReleaseKeyPassword=CHANGEME

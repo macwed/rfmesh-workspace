@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Backend URL"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/rf_url"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="textUri"
+        android:hint="http://10.0.0.1:8088" />
+
+    <Button
+        android:id="@+id/rf_load"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Load fixes" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Fix"
+        android:textStyle="bold" />
+
+    <Spinner
+        android:id="@+id/rf_fixes"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Cutoff (% of peak plausibility)"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/rf_cutoff"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="number"
+        android:text="10" />
+
+    <Button
+        android:id="@+id/rf_create"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Create geofence (Jx)" />
+
+    <TextView
+        android:id="@+id/rf_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textStyle="italic"
+        android:text="" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textSize="11sp"
+        android:text="Cue, not a target. Confirm PID + 2nd sensor. Power not measured (no dBm)." />
+
+</LinearLayout>

@@ -1,0 +1,17 @@
+# Android / Gradle build artifacts
+build/
+.gradle/
+local.properties
+*.apk
+*.ap_
+*.dex
+*.class
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Keystores (never commit signing material)
+*.keystore
+*.jks

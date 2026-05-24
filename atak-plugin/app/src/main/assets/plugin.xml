@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- if you change this file, tick the versionCode in AndroidManifest. -->
+<plugin>
+
+    <extension
+        type="transapps.maps.plugin.lifecycle.Lifecycle"
+        impl="com.atakmap.android.rfgeofence.plugin.RfGeofenceLifecycle"
+        singleton="true" />
+
+    <extension
+        type="transapps.maps.plugin.tool.ToolDescriptor"
+        impl="com.atakmap.android.rfgeofence.plugin.RfGeofenceTool"
+        singleton="true" />
+
+</plugin>

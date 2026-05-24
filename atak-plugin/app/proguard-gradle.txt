@@ -1,0 +1,10 @@
+# Keep the plugin entry points ATAK discovers by name (lifecycle + tool), and
+# anything referenced from assets/plugin.xml, so release (minified) builds load.
+-keep class com.atakmap.android.rfgeofence.plugin.** { *; }
+-keep class com.atakmap.android.rfgeofence.** { *; }
+
+# ATAK/transapps plugin SDK surfaces are provided by the host app at runtime.
+-dontwarn com.atak.**
+-dontwarn com.atakmap.**
+-dontwarn transapps.**
+-dontwarn gov.tak.**

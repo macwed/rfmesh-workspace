@@ -1,0 +1,25 @@
+// Root build.gradle — mirrors the ATAK plugin-examples/helloworld root.
+// NOTE: AGP version here matches the 4.6 helloworld template. For the ATAK-CIV
+// 5.x SDK, align this with the AGP/Gradle the SDK's bundled plugin template
+// ships with (see BUILDING.md). The plugin SOURCE under app/src is the real
+// deliverable; this build harness is a starting point you reconcile with the SDK.
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:4.2.2'
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

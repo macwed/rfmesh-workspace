@@ -1,0 +1,145 @@
+////////////////////////////////////////////////////////////////////////////////
+// rfgeofence ATAK plugin — app module.
+//
+// Derived from plugin-examples/helloworld/app/build.gradle. Set ATAK_VERSION to
+// the EXACT ATAK-CIV version installed on your tablet (Settings -> About). The
+// civ flavor must match the civ ATAK on the device, or ATAK refuses to load the
+// plugin. See ../BUILDING.md — for the 5.x SDK you may need to bump the AGP /
+// compileSdk / takdev versions to whatever the SDK's bundled template uses.
+////////////////////////////////////////////////////////////////////////////////
+
+buildscript {
+    ext.PLUGIN_VERSION = "1.0"
+    // TODO: set to your device's ATAK-CIV 5.x version, e.g. "5.4.0.0".
+    ext.ATAK_VERSION = "5.4.0.0"
+
+    def takdevVersion = '2.+'
+
+    def getValueFromPropertiesFile = { propFile, key ->
+        if (!propFile.isFile() || !propFile.canRead())
+            return null
+        def prop = new Properties()
+        def reader = propFile.newReader()
+        try { prop.load(reader) } finally { reader.close() }
+        return prop.get(key)
+    }
+    def getProperty = { name, defValue ->
+        def prop = project.properties[name] ?:
+                getValueFromPropertiesFile(project.rootProject.file('local.properties'), name)
+        return (null == prop) ? defValue : prop
+    }
+    def urlKey = 'takrepo.url'
+    ext.isDevKitEnabled = { -> return getProperty(urlKey, null) != null }
+    ext.takrepoUrl = getProperty(urlKey, 'http://localhost/')
+    ext.takrepoUser = getProperty('takrepo.user', 'invalid')
+    ext.takrepoPassword = getProperty('takrepo.password', 'invalid')
+    ext.takdevPlugin = getProperty('takdev.plugin', "${rootDir}/../atak-gradle-takdev.jar")
+
+    repositories {
+        mavenCentral()
+        google()
+        mavenLocal()
+        maven { url "https://jitpack.io" }
+        maven {
+            url = takrepoUrl
+            credentials { username = takrepoUser; password = takrepoPassword }
+        }
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:4.2.2'
+        if (isDevKitEnabled()) {
+            classpath "com.atakmap.gradle:atak-gradle-takdev:${takdevVersion}"
+        } else {
+            classpath files(takdevPlugin)
+        }
+    }
+}
+
+allprojects {
+    repositories {
+        mavenCentral()
+        google()
+        mavenLocal()
+        maven { url "https://jitpack.io" }
+    }
+}
+
+apply plugin: 'com.android.application'
+apply plugin: 'atak-takdev-plugin'
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: '*.jar')
+    // org.json is part of the Android platform — no extra dependency needed.
+}
+
+android {
+    compileSdkVersion 34
+
+    dexOptions { jumboMode = true }
+    lintOptions { checkReleaseBuilds true; abortOnError false }
+
+    signingConfigs {
+        debug {
+            def kf = getValueFromPropertiesFile(project.rootProject.file('local.properties'), 'takDebugKeyFile')
+            def kfp = getValueFromPropertiesFile(project.rootProject.file('local.properties'), 'takDebugKeyFilePassword')
+            def ka = getValueFromPropertiesFile(project.rootProject.file('local.properties'), 'takDebugKeyAlias')
+            def kp = getValueFromPropertiesFile(project.rootProject.file('local.properties'), 'takDebugKeyPassword')
+            if (kf == null) throw new GradleException("No debug signing key configured (see BUILDING.md / local.properties)")
+            storeFile file(kf)
+            if (kfp != null) storePassword kfp
+            if (ka != null) keyAlias ka
+            if (kp != null) keyPassword kp
+        }
+        release {
+            def kf = getValueFromPropertiesFile(project.rootProject.file('local.properties'), 'takReleaseKeyFile')
+            def kfp = getValueFromPropertiesFile(project.rootProject.file('local.properties'), 'takReleaseKeyFilePassword')
+            def ka = getValueFromPropertiesFile(project.rootProject.file('local.properties'), 'takReleaseKeyAlias')
+            def kp = getValueFromPropertiesFile(project.rootProject.file('local.properties'), 'takReleaseKeyPassword')
+            if (kf == null) throw new GradleException("No release signing key configured (see BUILDING.md / local.properties)")
+            storeFile file(kf)
+            if (kfp != null) storePassword kfp
+            if (ka != null) keyAlias ka
+            if (kp != null) keyPassword kp
+        }
+    }
+
+    buildTypes {
+        debug { debuggable true; matchingFallbacks = ['sdk'] }
+        release {
+            minifyEnabled true
+            proguardFile 'proguard-gradle.txt'
+            signingConfig signingConfigs.release
+            matchingFallbacks = ['odk']
+        }
+    }
+
+    packagingOptions { exclude 'META-INF/INDEX.LIST' }
+
+    sourceSets {
+        main {
+            setProperty("archivesBaseName", "ATAK-Plugin-" + rootProject.name + "-" + PLUGIN_VERSION + "-" + getVersionName() + "-" + ATAK_VERSION)
+            defaultConfig.versionCode = getVersionCode()
+            defaultConfig.versionName = PLUGIN_VERSION + " (" + getVersionName() + ") - [" + ATAK_VERSION + "]"
+        }
+        debug.setRoot('build-types/debug')
+        release.setRoot('build-types/release')
+    }
+
+    defaultConfig {
+        minSdkVersion 21
+        ndk { abiFilters "armeabi-v7a", "arm64-v8a", "x86" }
+    }
+
+    flavorDimensions "application"
+    productFlavors {
+        civ {
+            getIsDefault().set(true)
+            dimension "application"
+            manifestPlaceholders = [atakApiVersion: "com.atakmap.app@" + ATAK_VERSION + ".CIV"]
+            buildConfigField 'String', 'ATAK_PACKAGE_NAME', '"com.atakmap.app.civ"'
+        }
+        applicationVariants.all { variant ->
+            variant.resValue "string", "versionName", variant.versionName
+        }
+    }
+}
